@@ -55,6 +55,14 @@ Flight and aircraft are a possible related curiosity. Hubert can develop his own
 
 Body-language hints are derived from actual state: low energy or rest supports a settled posture; a listening tilt requires a verified encounter whose target remains currently visible. A proposed watch alone does not fabricate a sighting. These hints never create memories or claim that a tool succeeded. Both model adapters use matching creature and wildlife guidance.
 
+## Rest, dreaming and follow-through
+
+Hubert dreams after at least five simulated minutes and two real minutes of continuous rest, with three new verified episodes and at most one consolidation per rolling real day. The portable runtime keeps factual episodes, revisable retrieval annotations, private fictional dreams and optional waking impulses separate. Hubert's adapter supplies a bounded deterministic fallback, style and host-owned feasible actions; Ollama, compatible and routed reflection can enrich the imagery using the same daily model allowance as waking decisions. There are no additional keys to configure.
+
+Revisions require actual outcome evidence for the same action/target; unrelated good moods cannot explain away a rejection. Public snapshots expose coarse dreaming activity and later real actions, never dream text or private visitor notes. Short naps, restarts and resets cannot replenish the real-time/evidence fence. Source deletion prunes derived records. Waking impulses expire, can be deferred, and are rechecked against current targets, range, cooldowns and permissions before execution.
+
+Deterministic progress tracking recognizes verified attempts, stable projects, repeated deliberation and project switching. Repetition leads to a small permitted step or deliberate deferral without another model call. Quiet watching, rest and play remain valid. This is an attention aid, not a productivity score or a new source of mood rewards.
+
 ## Planned journal and home
 
 The current `journal` field is an automatic rolling activity/reflection log. A deliberately authored, readable notebook and a customizable home are specified in `docs/architecture/next-systems.md`, alongside bounded floor/shelf/wall space, drawings and whiteboards, meaningful object affordances and creation receipts. Hubert should choose what to keep or remove when the home fills up. These capabilities are planned; the present runtime does not yet let him write notebook pages, rearrange furniture or craft arbitrary possessions.

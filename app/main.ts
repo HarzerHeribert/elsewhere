@@ -13,6 +13,11 @@ import { ownerToken } from '../packages/security/src/index';
 import { CompatibleDecisionProvider } from '../packages/adapters/src/models/compatible';
 import { OllamaDecisionProvider } from '../packages/adapters/src/models/ollama';
 import { RoutedDecisionProvider } from '../packages/adapters/src/models/routed';
+import {
+  CompatibleReflectionProvider,
+  OllamaReflectionProvider,
+  RoutedReflectionProvider,
+} from '../packages/adapters/src/models/reflection';
 import { parseRoutingConfig } from '../packages/models/src/config';
 import { authOptionsFromEnvironment, createLocalAuth } from '../packages/auth/src/index';
 import { verificationSenderFromEnvironment } from '../packages/auth/src/verification-mail';
@@ -120,10 +125,39 @@ async function initialize() {
             onUsage,
           })
         : undefined;
+  const reflection = routing
+    ? routing.policies.reflection
+      ? new RoutedReflectionProvider(
+          routing,
+          {
+            reserve: (estimate) => budget().reserve(estimate),
+            settle: (id, usage, failed) => budget().settle(id, usage, failed),
+          },
+          process.env,
+          { production: config.production },
+        )
+      : undefined
+    : config.MODEL_PROVIDER === 'ollama'
+      ? new OllamaReflectionProvider({
+          baseUrl: process.env.OLLAMA_BASE_URL,
+          model: process.env.MODEL_NAME ?? 'qwen3:4b',
+          timeoutMs: Math.max(30000, config.MODEL_TIMEOUT_MS),
+          onUsage,
+        })
+      : config.MODEL_PROVIDER === 'compatible'
+        ? new CompatibleReflectionProvider({
+            baseUrl: process.env.MODEL_BASE_URL ?? '',
+            model: process.env.MODEL_NAME ?? '',
+            apiKey: process.env.MODEL_API_KEY ?? '',
+            timeoutMs: config.MODEL_TIMEOUT_MS,
+            onUsage,
+          })
+        : undefined;
   controller = await new ElsewhereController(store, {
     simulationStepMs: config.TICK_INTERVAL_MS * config.SIMULATION_RATE,
     simulationRate: config.SIMULATION_RATE,
     modelProvider: model,
+    reflectionProvider: reflection,
     modelMaximum: config.MODEL_MAX_CALLS_PER_DAY,
   }).init();
   ready = !lifetime.signal.aborted;
