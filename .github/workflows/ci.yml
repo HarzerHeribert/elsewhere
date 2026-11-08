@@ -1,0 +1,61 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: elsewhere
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: elsewhere_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      NODE_ENV: test
+      DOTENV_CONFIG_PATH: /dev/null
+      TEST_DATABASE_URL: postgres://elsewhere:isolated-ci-only@127.0.0.1:5432/elsewhere_test
+      TEST_AUTH_DATABASE_URL: postgres://elsewhere:isolated-ci-only@127.0.0.1:5432/elsewhere_test
+      DATABASE_URL: ''
+      AUTH_DATABASE_URL: ''
+      MODEL_PROVIDER: local
+      MODEL_API_KEY: ''
+      AUTH_EMAIL_API_KEY: ''
+      AUTH_EMAIL_FROM: ''
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - run: corepack enable && corepack prepare pnpm@11.1.2 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit:public
+      - run: pnpm audit --audit-level high
+      - run: pnpm check
+      - run: pnpm build:server
+      - run: pnpm smoke
+  container:
+    name: Backend container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: docker build -t elsewhere-runtime:ci .
+      - run: node scripts/deployment-smoke.mjs --image elsewhere-runtime:ci

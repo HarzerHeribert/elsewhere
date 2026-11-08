@@ -1,0 +1,69 @@
+{
+  "creator": "Poly Haven and contributing artists",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "retrievedAt": "2026-11-08",
+  "textures": [
+    {
+      "id": "leafy_grass",
+      "kind": "grass",
+      "author": "Charlotte Baglioni",
+      "url": "/assets/polyhaven/leafy_grass_diff_1k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/leafy_grass",
+      "metadataUrl": "https://api.polyhaven.com/files/leafy_grass",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/leafy_grass/leafy_grass_diff_1k.jpg",
+      "license": "CC0-1.0",
+      "map": "diffuse",
+      "colorSpace": "sRGB",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 1195394,
+      "upstreamMd5": "0dbc071e91d6905edfcfbe8eb785a1ab",
+      "sha256": "cfa40bc9d9417d1852db8753a8d5917f110c40101179f63543c382e39bc05e4a",
+      "authors": {
+        "Charlotte Baglioni": "All"
+      }
+    },
+    {
+      "id": "grass_path_2",
+      "kind": "path",
+      "author": "Rob Tuytel",
+      "url": "/assets/polyhaven/grass_path_2_diff_1k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/grass_path_2",
+      "metadataUrl": "https://api.polyhaven.com/files/grass_path_2",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/grass_path_2/grass_path_2_diff_1k.jpg",
+      "license": "CC0-1.0",
+      "map": "diffuse",
+      "colorSpace": "sRGB",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 716010,
+      "upstreamMd5": "48cebe95af233211c9469a9bfe2f42f2",
+      "sha256": "7f30b163739435c11f500f3818c7bb4922bab5f2734cc9ba6dd36817f0c9a8ab",
+      "authors": {
+        "Rob Tuytel": "All"
+      }
+    },
+    {
+      "id": "stone_wall",
+      "kind": "wall",
+      "author": "Dario Barresi, Charlotte Baglioni",
+      "url": "/assets/polyhaven/stone_wall_diff_1k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/stone_wall",
+      "metadataUrl": "https://api.polyhaven.com/files/stone_wall",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/stone_wall/stone_wall_diff_1k.jpg",
+      "license": "CC0-1.0",
+      "map": "diffuse",
+      "colorSpace": "sRGB",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 836975,
+      "upstreamMd5": "451e4c5e2309af341fcdc1f1d637b1d6",
+      "sha256": "390969aead48d9a10ac731a5e0af8761cc4ed89faa02ba775b913930b4398d87",
+      "authors": {
+        "Dario Barresi": "Processing",
+        "Charlotte Baglioni": "Photography"
+      }
+    }
+  ]
+}

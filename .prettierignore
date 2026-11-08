@@ -1,0 +1,11 @@
+node_modules/
+.data/
+**/dist/
+test-results/
+playwright-report/
+.playwright-mcp/
+elsewhere/web/public/assets/
+docs/preview/
+reports/
+research_notes/
+pnpm-lock.yaml

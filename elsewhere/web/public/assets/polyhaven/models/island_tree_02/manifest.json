@@ -1,0 +1,328 @@
+{
+  "id": "island_tree_02",
+  "source": "https://polyhaven.com/a/island_tree_02",
+  "license": "CC0-1.0",
+  "licenseURL": "https://polyhaven.com/license",
+  "files": [
+    {
+      "path": "source.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/island_tree_02/island_tree_02_1k.gltf",
+      "size": 8545,
+      "upstreamMD5": "825057164e987894cbfc6c462977fa71",
+      "sha256": "d8c5d9ead41cdbef91a648f40ff60470faa19eb3a7010e59e44cb1a01250f75d"
+    },
+    {
+      "path": "textures/island_tree_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_nor_gl_1k.jpg",
+      "size": 1157226,
+      "upstreamMD5": "d8b8bc86de9934a743fc9b0a5470e695",
+      "sha256": "1580d5a42d02f4ede51bfb03972ab0aef3d8acafbd3692276879171007bb70ec"
+    },
+    {
+      "path": "textures/island_tree_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_diff_1k.jpg",
+      "size": 738738,
+      "upstreamMD5": "b7435527d9628527ce47d89fc1468e9a",
+      "sha256": "8fc20397ab5d514c119d7a025868414d78e436138d3867a4b7ba12334a72ec3a"
+    },
+    {
+      "path": "textures/island_tree_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_arm_1k.jpg",
+      "size": 688305,
+      "upstreamMD5": "e487f91bcb37a2a1109ef6234f1db27e",
+      "sha256": "ada61dd4fad023e699b6314b8b76590017b301719bf74ffc9e20b95893ed62b6"
+    },
+    {
+      "path": "textures/island_tree_02_leaves_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_leaves_nor_gl_1k.jpg",
+      "size": 379443,
+      "upstreamMD5": "a08ffb98b5ffb7dfa682e05a1639c642",
+      "sha256": "07ba461c0c95da4e49a42981766bdb6191d4c3c4d815796c082266dcc3cecdb8"
+    },
+    {
+      "path": "textures/island_tree_02_leaves_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_leaves_diff_1k.jpg",
+      "size": 191886,
+      "upstreamMD5": "1356cbb5a5dd1318f9f2a01eddbf03e1",
+      "sha256": "f56d762a1507754752abf164cc12acbc1e87ce87fa609ac44b98a1b0037c89d8"
+    },
+    {
+      "path": "textures/island_tree_02_leaves_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_leaves_arm_1k.jpg",
+      "size": 489476,
+      "upstreamMD5": "27b06c4a53ff115ed7d51ee94e417257",
+      "sha256": "90da3a072dbcb052715b1313b9dbc69a4aa8a09a31a4b3868411a2bb51d72037"
+    },
+    {
+      "path": "textures/island_tree_02_branches_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_branches_nor_gl_1k.jpg",
+      "size": 819101,
+      "upstreamMD5": "789084affb01f4a22290a848558f5e12",
+      "sha256": "2d67393ba76a0f49cf965fa0c99d8c16268e71e87b1203d35539bfdb971a514e"
+    },
+    {
+      "path": "textures/island_tree_02_branches_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_branches_diff_1k.jpg",
+      "size": 528304,
+      "upstreamMD5": "7792907fe2b2b748c129a2384192a579",
+      "sha256": "bee5ec22196e9e31ad0c95a5a9b4636571cc0124d5bb27a92f1e307d289cc60d"
+    },
+    {
+      "path": "textures/island_tree_02_branches_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/island_tree_02/island_tree_02_branches_arm_1k.jpg",
+      "size": 484806,
+      "upstreamMD5": "5b6f5b3838f4a8f60fea14fa3a3fef9f",
+      "sha256": "9e3f82263247ce4f619692cea4c4f6fe9936ff465a86623481849062642c7d05"
+    },
+    {
+      "path": "island_tree_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/island_tree_02/island_tree_02.bin",
+      "size": 40686576,
+      "upstreamMD5": "7fa9d6ee752b670cabb65053a5c6395b",
+      "sha256": "427d69ccc1ea12d1fb9c6af89691563b4a097f39a6f34c15be6e45ef5e5fd4ce"
+    },
+    {
+      "path": "textures/original_alpha.png",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/island_tree_02/island_tree_02_leaves_alpha_1k.png",
+      "size": 57438,
+      "upstreamMD5": "5ad9fb9a06e70c069bd3d3ba23577375",
+      "sha256": "f4341f147988dbe6b58d9ca841a8f0e4bcff25bc40d05f9877da82006d489c39"
+    }
+  ],
+  "name": "Island Tree 02",
+  "authors": {
+    "Rob Tuytel": "scanning, processing",
+    "Rico Cilliers": "cleanup, processing"
+  },
+  "infoURL": "https://api.polyhaven.com/info/island_tree_02",
+  "importedAt": "2026-11-08",
+  "transformation": {
+    "tool": "@gltf-transform/core/functions/extensions 4.5.1 + meshoptimizer 1.3.0",
+    "script": "scripts/bake-environment-assets.mjs",
+    "operations": [
+      "select one native variant; remove preview translation; preserve authored XZ origin",
+      {
+        "operation": "restore-leaf-alpha",
+        "detail": "Original artist alpha PNG packed losslessly into native JPG RGB; no RGB repainting.",
+        "material": "island_tree_02_leaves",
+        "alphaMode": "BLEND",
+        "alphaRange": "(0, 255)"
+      },
+      "prune unused variants, dedup, weld, simplify within reported error bound"
+    ],
+    "sourceCache": "not shipped; files and hashes recorded below",
+    "texturePackaging": {
+      "method": "Byte-identical PNG/JPEG images shared by SHA-256 filename; relative local image URIs",
+      "script": "scripts/share-model-textures.mjs",
+      "preservation": "Every non-image bufferView byte, accessor, mesh, node, material, sampler and texture setting is retained; no image encoding or geometry transformation"
+    }
+  },
+  "variants": [
+    {
+      "file": "model-high.glb",
+      "selectedNode": "island_tree_02_LOD0",
+      "size": 13962620,
+      "sha256": "c407eec21066fda41ac2bc3f24b5ce438d405a3b1384ba7067fefb1fb0d81f49",
+      "inputTriangles": 1072213,
+      "targetRatio": 0.28,
+      "error": 0.001,
+      "triangles": 295043,
+      "primitives": 3,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -2.052337884902954,
+          -0.017011718824505806,
+          -1.1138885021209717
+        ],
+        "max": [
+          2.155407428741455,
+          3.3892130851745605,
+          2.956543207168579
+        ]
+      },
+      "nativeHeight": 3.4062248039990664,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "92d4a9c7ec1fc4a3d11a1baa406f253e21e128cdf43299f89e985162777aa656",
+      "externalDependencies": [
+        {
+          "uri": "../textures/1580d5a42d02f4ede51bfb03972ab0aef3d8acafbd3692276879171007bb70ec.jpg",
+          "size": 1157226,
+          "sha256": "1580d5a42d02f4ede51bfb03972ab0aef3d8acafbd3692276879171007bb70ec",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/8fc20397ab5d514c119d7a025868414d78e436138d3867a4b7ba12334a72ec3a.jpg",
+          "size": 738738,
+          "sha256": "8fc20397ab5d514c119d7a025868414d78e436138d3867a4b7ba12334a72ec3a",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/ada61dd4fad023e699b6314b8b76590017b301719bf74ffc9e20b95893ed62b6.jpg",
+          "size": 688305,
+          "sha256": "ada61dd4fad023e699b6314b8b76590017b301719bf74ffc9e20b95893ed62b6",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/07ba461c0c95da4e49a42981766bdb6191d4c3c4d815796c082266dcc3cecdb8.jpg",
+          "size": 379443,
+          "sha256": "07ba461c0c95da4e49a42981766bdb6191d4c3c4d815796c082266dcc3cecdb8",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/b94b8b087670dfa2dd9a15c4b092b5ad8e7d0328c55f2a5184667f351289346b.png",
+          "size": 426758,
+          "sha256": "b94b8b087670dfa2dd9a15c4b092b5ad8e7d0328c55f2a5184667f351289346b",
+          "mimeType": "image/png"
+        },
+        {
+          "uri": "../textures/90da3a072dbcb052715b1313b9dbc69a4aa8a09a31a4b3868411a2bb51d72037.jpg",
+          "size": 489476,
+          "sha256": "90da3a072dbcb052715b1313b9dbc69a4aa8a09a31a4b3868411a2bb51d72037",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/2d67393ba76a0f49cf965fa0c99d8c16268e71e87b1203d35539bfdb971a514e.jpg",
+          "size": 819101,
+          "sha256": "2d67393ba76a0f49cf965fa0c99d8c16268e71e87b1203d35539bfdb971a514e",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/bee5ec22196e9e31ad0c95a5a9b4636571cc0124d5bb27a92f1e307d289cc60d.jpg",
+          "size": 528304,
+          "sha256": "bee5ec22196e9e31ad0c95a5a9b4636571cc0124d5bb27a92f1e307d289cc60d",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/9e3f82263247ce4f619692cea4c4f6fe9936ff465a86623481849062642c7d05.jpg",
+          "size": 484806,
+          "sha256": "9e3f82263247ce4f619692cea4c4f6fe9936ff465a86623481849062642c7d05",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    },
+    {
+      "file": "model-low.glb",
+      "selectedNode": "island_tree_02_LOD0",
+      "size": 4082384,
+      "sha256": "8bab50512e4360f924f725489386b8a0dbba36139fc456756d192dbc951e3b3b",
+      "inputTriangles": 1072213,
+      "targetRatio": 0.055,
+      "error": 0.008,
+      "triangles": 56896,
+      "primitives": 3,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -2.052337884902954,
+          -0.01397637277841568,
+          -1.1138885021209717
+        ],
+        "max": [
+          2.155407428741455,
+          3.3892130851745605,
+          2.956543207168579
+        ]
+      },
+      "nativeHeight": 3.4031894579529762,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "314a00ccbf918b4e82ca7b21d6d6aa044709f6ec109ce7ead2700192ba0595e3",
+      "externalDependencies": [
+        {
+          "uri": "../textures/1580d5a42d02f4ede51bfb03972ab0aef3d8acafbd3692276879171007bb70ec.jpg",
+          "size": 1157226,
+          "sha256": "1580d5a42d02f4ede51bfb03972ab0aef3d8acafbd3692276879171007bb70ec",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/8fc20397ab5d514c119d7a025868414d78e436138d3867a4b7ba12334a72ec3a.jpg",
+          "size": 738738,
+          "sha256": "8fc20397ab5d514c119d7a025868414d78e436138d3867a4b7ba12334a72ec3a",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/ada61dd4fad023e699b6314b8b76590017b301719bf74ffc9e20b95893ed62b6.jpg",
+          "size": 688305,
+          "sha256": "ada61dd4fad023e699b6314b8b76590017b301719bf74ffc9e20b95893ed62b6",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/07ba461c0c95da4e49a42981766bdb6191d4c3c4d815796c082266dcc3cecdb8.jpg",
+          "size": 379443,
+          "sha256": "07ba461c0c95da4e49a42981766bdb6191d4c3c4d815796c082266dcc3cecdb8",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/b94b8b087670dfa2dd9a15c4b092b5ad8e7d0328c55f2a5184667f351289346b.png",
+          "size": 426758,
+          "sha256": "b94b8b087670dfa2dd9a15c4b092b5ad8e7d0328c55f2a5184667f351289346b",
+          "mimeType": "image/png"
+        },
+        {
+          "uri": "../textures/90da3a072dbcb052715b1313b9dbc69a4aa8a09a31a4b3868411a2bb51d72037.jpg",
+          "size": 489476,
+          "sha256": "90da3a072dbcb052715b1313b9dbc69a4aa8a09a31a4b3868411a2bb51d72037",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/2d67393ba76a0f49cf965fa0c99d8c16268e71e87b1203d35539bfdb971a514e.jpg",
+          "size": 819101,
+          "sha256": "2d67393ba76a0f49cf965fa0c99d8c16268e71e87b1203d35539bfdb971a514e",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/bee5ec22196e9e31ad0c95a5a9b4636571cc0124d5bb27a92f1e307d289cc60d.jpg",
+          "size": 528304,
+          "sha256": "bee5ec22196e9e31ad0c95a5a9b4636571cc0124d5bb27a92f1e307d289cc60d",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/9e3f82263247ce4f619692cea4c4f6fe9936ff465a86623481849062642c7d05.jpg",
+          "size": 484806,
+          "sha256": "9e3f82263247ce4f619692cea4c4f6fe9936ff465a86623481849062642c7d05",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    }
+  ],
+  "atlases": [
+    {
+      "file": "leaves-diffuse-alpha.png",
+      "size": 426758,
+      "sha256": "b94b8b087670dfa2dd9a15c4b092b5ad8e7d0328c55f2a5184667f351289346b"
+    },
+    {
+      "file": "leaves-alpha.png",
+      "size": 57438,
+      "sha256": "f4341f147988dbe6b58d9ca841a8f0e4bcff25bc40d05f9877da82006d489c39"
+    }
+  ],
+  "buildInputs": [
+    {
+      "file": "provenance.json",
+      "retainedPath": "source-inputs/provenance.json",
+      "size": 4304,
+      "sha256": "d29a6fbaeb130cc3875aed8c166dc0e5026734510bd1ced61e3b0ba3ab1c1719"
+    },
+    {
+      "file": "info.json",
+      "retainedPath": "source-inputs/info.json",
+      "size": 1175,
+      "sha256": "d8efdfda0301ce7a3d871be1aef707235aabd4558999596f4b56c16620c29179",
+      "url": "https://api.polyhaven.com/info/island_tree_02"
+    }
+  ],
+  "imageToolchain": {
+    "python": "3.14.7",
+    "pillow": "12.2.0",
+    "zlib": "1.2.12",
+    "jpeg": "6.2",
+    "libjpegTurbo": "3.1.4.1"
+  }
+}

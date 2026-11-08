@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'"
+    />
+    <title>Elsewhere — Hubert’s connections</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f5f1e8;
+        --card: #fcfaf5;
+        --ink: #243d34;
+        --muted: #656e63;
+        --line: #d6d8cb;
+        --green: #36664b;
+        --gold: #c9933b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 24px;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          16px/1.65 system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      a {
+        color: var(--green);
+        text-underline-offset: 4px;
+      }
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--gold);
+        outline-offset: 5px;
+      }
+      .skip {
+        position: absolute;
+        left: 20px;
+        top: -100px;
+        background: var(--card);
+        padding: 10px;
+      }
+      .skip:focus {
+        top: 10px;
+      }
+      .layout {
+        max-width: 1230px;
+        margin: auto;
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 72px;
+        padding: 42px 40px 80px;
+      }
+      aside {
+        position: sticky;
+        top: 36px;
+        align-self: start;
+      }
+      .wordmark {
+        font-family: Georgia, serif;
+        font-size: 34px;
+        letter-spacing: -1.4px;
+        font-weight: normal;
+        margin: 0;
+      }
+      .small,
+      .eyebrow {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1.6px;
+        font-weight: 650;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      nav {
+        display: grid;
+        gap: 4px;
+        margin: 46px 0 30px;
+      }
+      nav a {
+        display: flex;
+        gap: 14px;
+        text-decoration: none;
+        color: var(--muted);
+        padding: 10px 0;
+        font-size: 14px;
+      }
+      nav a:hover {
+        color: var(--green);
+      }
+      nav span {
+        font:
+          13px/1.8 ui-monospace,
+          monospace;
+        color: #8b9483;
+      }
+      .side-note {
+        border-top: 1px solid var(--line);
+        padding-top: 22px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .side-note strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      main {
+        min-width: 0;
+      }
+      header {
+        padding: 10px 0 26px;
+        border-bottom: 1px solid var(--line);
+      }
+      .eyebrow {
+        color: var(--green);
+        margin: 0 0 18px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-weight: normal;
+        line-height: 1.12;
+      }
+      h1 {
+        font-family: Georgia, serif;
+        font-size: clamp(40px, 5vw, 67px);
+        letter-spacing: -2px;
+        margin: 0 0 24px;
+        max-width: 690px;
+      }
+      h1 em {
+        color: var(--green);
+        font-weight: normal;
+      }
+      .intro {
+        font-size: 17px;
+        max-width: 650px;
+        color: var(--muted);
+      }
+      .route {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        align-items: center;
+        margin: 28px 0 4px;
+        font-size: 12px;
+      }
+      .route span {
+        border: 1px solid var(--line);
+        padding: 5px 10px;
+        border-radius: 4px;
+        background: var(--card);
+      }
+      .route b {
+        color: #8b9483;
+        font-weight: normal;
+      }
+      section {
+        padding: 36px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .section-heading {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      h2 {
+        font:
+          normal 32px/1.15 Georgia,
+          serif;
+        letter-spacing: -0.6px;
+        margin: 0;
+      }
+      h3 {
+        font:
+          normal 21px/1.3 Georgia,
+          serif;
+        margin: 0 0 9px;
+      }
+      p {
+        margin: 12px 0;
+      }
+      .tag {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        white-space: nowrap;
+        padding: 5px 8px;
+        border-radius: 3px;
+        color: var(--green);
+        background: #e3eadd;
+      }
+      .tag.later {
+        background: #ece4d4;
+        color: #795a2c;
+      }
+      .command {
+        background: var(--ink);
+        color: #f3f1e6;
+        border-radius: 6px;
+        padding: 15px 16px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin: 17px 0;
+      }
+      code {
+        font:
+          13px/1.6 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        overflow-wrap: anywhere;
+      }
+      p code,
+      li code,
+      dd code {
+        background: #e8e8dc;
+        padding: 2px 5px;
+        border-radius: 3px;
+        color: var(--ink);
+      }
+      .command button {
+        border: 1px solid #768879;
+        background: transparent;
+        color: #f3f1e6;
+        border-radius: 4px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font:
+          12px system-ui,
+          sans-serif;
+        flex-shrink: 0;
+      }
+      .command button:hover {
+        background: #3c5547;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin: 23px 0 0;
+      }
+      .note {
+        border-left: 3px solid var(--gold);
+        background: #eee8d8;
+        padding: 14px 18px;
+        font-size: 14px;
+        margin: 20px 0;
+      }
+      .note p {
+        margin: 0;
+      }
+      .step-list {
+        margin: 20px 0;
+        padding-left: 24px;
+      }
+      .step-list li {
+        padding-left: 7px;
+        margin: 11px 0;
+      }
+      .step-list li::marker {
+        color: var(--green);
+        font-weight: 650;
+      }
+      .hint {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: 135px minmax(0, 1fr);
+        gap: 8px 18px;
+        font-size: 14px;
+        margin: 22px 0;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      details {
+        background: var(--card);
+        border: 1px solid var(--line);
+        padding: 15px 18px;
+        border-radius: 5px;
+        margin-top: 18px;
+      }
+      summary {
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      details p {
+        font-size: 14px;
+      }
+      .future {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        padding: 17px 0;
+        gap: 20px;
+        border-top: 1px solid var(--line);
+        font-size: 14px;
+      }
+      .future:first-of-type {
+        margin-top: 24px;
+      }
+      .future p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .future strong {
+        font-weight: 600;
+      }
+      footer {
+        padding-top: 27px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      #notice {
+        position: fixed;
+        bottom: 22px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--ink);
+        color: var(--paper);
+        padding: 10px 17px;
+        border-radius: 5px;
+        font-size: 13px;
+        max-width: 90vw;
+        text-align: center;
+      }
+      #notice:empty {
+        display: none;
+      }
+      @media (max-width: 880px) {
+        .layout {
+          grid-template-columns: 170px minmax(0, 1fr);
+          gap: 30px;
+          padding: 30px 24px 60px;
+        }
+        h1 {
+          font-size: 46px;
+        }
+        .columns {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+      }
+      @media (max-width: 640px) {
+        .layout {
+          display: block;
+          padding: 25px 22px 50px;
+        }
+        aside {
+          position: static;
+        }
+        .wordmark {
+          font-size: 29px;
+        }
+        aside > .small,
+        .side-note {
+          display: none;
+        }
+        nav {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0 18px;
+          margin: 18px 0 28px;
+          border-bottom: 1px solid var(--line);
+          padding-bottom: 14px;
+        }
+        nav a {
+          padding: 5px 0;
+          font-size: 12px;
+        }
+        nav span {
+          display: none;
+        }
+        h1 {
+          font-size: 44px;
+          letter-spacing: -1.6px;
+        }
+        h2 {
+          font-size: 28px;
+        }
+        .section-heading {
+          align-items: flex-start;
+        }
+        .facts {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+        dd {
+          margin-bottom: 10px;
+        }
+        .future {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+      @media print {
+        aside,
+        .command button,
+        #notice {
+          display: none;
+        }
+        .layout {
+          display: block;
+          padding: 0;
+        }
+        body {
+          background: white;
+        }
+        section {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a href="#start" class="skip">Skip to setup</a>
+    <div class="layout">
+      <aside aria-label="Guide navigation">
+        <p class="wordmark">elsewhere.</p>
+        <p class="small muted">Operator’s notebook / 01</p>
+        <nav aria-label="Sections">
+          <a href="#start"><span>00</span> Before you begin</a>
+          <a href="#model"><span>01</span> A model connection</a>
+          <a href="#stripe"><span>02</span> A little shop</a>
+          <a href="#email"><span>03</span> A return address</a>
+          <a href="#later"><span>04</span> Connections for later</a>
+          <a href="#storage"><span>05</span> Where everything goes</a>
+        </nav>
+        <div class="side-note">
+          <strong>Keys stay in your terminal.</strong><br />This guide has no credential form,
+          analytics, external assets or network requests. Provider links open only when you choose
+          them.
+        </div>
+      </aside>
+      <main>
+        <header>
+          <p class="eyebrow">A few doors to the outside world</p>
+          <h1>Give Hubert a few<br /><em>good connections.</em></h1>
+          <p class="intro">
+            A model to think with. A shop for the things he makes. An address for letters. Connect
+            each one deliberately, with a small scope and a place of its own.
+          </p>
+          <div class="route" aria-label="Credential route">
+            <span>Your provider account</span><b>→</b><span>Hidden terminal prompt</span><b>→</b
+            ><span>Private host record</span>
+          </div>
+        </header>
+        <section id="start">
+          <div class="section-heading">
+            <h2>Start with nothing.</h2>
+            <span class="tag">Works today</span>
+          </div>
+          <p>
+            <strong>No keys are required</strong> for the local world or local Ollama. Run these
+            commands from the project folder in your own terminal.
+          </p>
+          <div class="columns">
+            <div>
+              <h3>Keep everything local</h3>
+              <div class="command">
+                <code>pnpm dev:ollama</code
+                ><button data-copy="pnpm dev:ollama" aria-label="Copy local Ollama command">
+                  Copy
+                </button>
+              </div>
+              <p class="hint">
+                Requires the local Ollama service and downloaded model. Use
+                <code>pnpm dev</code> for the deterministic planner.
+              </p>
+            </div>
+            <div>
+              <h3>Add a connection</h3>
+              <div class="command">
+                <code>pnpm run setup</code
+                ><button data-copy="pnpm run setup" aria-label="Copy setup command">Copy</button>
+              </div>
+              <p class="hint">
+                Choose model, Stripe or email. Secret entry is hidden; nothing is transmitted by
+                setup.
+              </p>
+            </div>
+          </div>
+          <div class="note">
+            <p>
+              <strong>Saved does not mean connected.</strong> The cloud model has an explicit launch
+              command. Stripe and email are staged for adapters that are still being built. Setup
+              grants no permissions and does not send mail, create webhooks or accept payments.
+            </p>
+          </div>
+        </section>
+        <section id="model">
+          <div class="section-heading">
+            <h2>01 / A model connection</h2>
+            <span class="tag">Explicit launch</span>
+          </div>
+          <p>
+            Optional. Choose a trusted provider with a chat-completions-compatible endpoint. Use a
+            dedicated project key and set a provider-side spending limit.
+          </p>
+          <ol class="step-list">
+            <li>
+              Copy the provider’s base URL and model identifier from its documentation. Include
+              <code>/v1</code> when that provider requires it.
+            </li>
+            <li>
+              Create an API key for this project. Keep the provider dashboard open while you
+              configure its allowance.
+            </li>
+            <li>
+              Run the command below. Paste the key into the <strong>hidden</strong> prompt and
+              choose a daily request limit; the suggested starting point is 20.
+            </li>
+          </ol>
+          <div class="command">
+            <code>pnpm run setup model</code
+            ><button data-copy="pnpm run setup model" aria-label="Copy model setup command">
+              Copy
+            </button>
+          </div>
+          <p>Start this model only when you want to use it:</p>
+          <div class="command">
+            <code>pnpm dev:configured</code
+            ><button
+              data-copy="pnpm dev:configured"
+              aria-label="Copy configured model launch command"
+            >
+              Copy
+            </button>
+          </div>
+          <p class="hint">
+            Only Hubert is instantiated today. This launcher reads his model profile and delivers
+            its key to the API process, not the Vite process. Saved connector keys remain unused.
+            Existing <code>.env</code> settings still apply to ordinary launches; setup does not
+            rewrite them.
+          </p>
+          <div class="note">
+            <p>
+              The selected provider can receive Hubert’s context, including recent private visitor
+              notes. A request-count limit is not a currency cap. Stopping the configured process
+              ends this profile’s use; restart with <code>pnpm dev:ollama</code> for local
+              inference.
+            </p>
+          </div>
+        </section>
+        <section id="stripe">
+          <div class="section-heading">
+            <h2>02 / A little shop</h2>
+            <span class="tag later">Staged only</span>
+          </div>
+          <p>
+            Prepare a <strong>dedicated Stripe sandbox</strong>. We do not need your live payment
+            account key, bank details or customer data for development.
+          </p>
+          <ol class="step-list">
+            <li>
+              Create or select a sandbox in the
+              <a href="https://dashboard.stripe.com/" target="_blank" rel="noopener noreferrer"
+                >Stripe Dashboard</a
+              >. Confirm the selected environment before creating a key.
+            </li>
+            <li>
+              Under API keys, create a <strong>restricted key</strong> named for Elsewhere/Hubert.
+              Start with permissions set to None; the adapter’s endpoint list will determine the
+              exact permissions when it is implemented. No broad key is necessary just to stage
+              credentials.
+            </li>
+            <li>
+              Run setup and paste the key beginning with <code>rk_test_</code>. Live keys and
+              unrestricted <code>sk_</code> keys are rejected.
+            </li>
+          </ol>
+          <div class="command">
+            <code>pnpm run setup stripe</code
+            ><button data-copy="pnpm run setup stripe" aria-label="Copy Stripe setup command">
+              Copy
+            </button>
+          </div>
+          <p>
+            Skip the optional webhook secret for now. Once a real sandbox endpoint exists, its
+            signing secret can be saved by running setup again. Replacing a profile asks for
+            confirmation and requires entering its settings again.
+          </p>
+          <p class="hint">
+            Key format checks do not verify validity or permissions. The future adapter must verify
+            the account/environment, grant only approved offers and reconcile signed payment events.
+            Your operator/business remains the merchant. Live activation, fulfillment and public
+            merchant details need a separate setup step.
+          </p>
+          <p class="hint">
+            Source:
+            <a href="https://docs.stripe.com/keys" target="_blank" rel="noopener noreferrer"
+              >Stripe keys and sandboxes</a
+            >
+            ·
+            <a
+              href="https://docs.stripe.com/keys/restricted-api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Restricted-key permissions</a
+            >
+          </p>
+        </section>
+        <section id="email">
+          <div class="section-heading">
+            <h2>03 / A return address</h2>
+            <span class="tag later">Staged only</span>
+          </div>
+          <p>
+            Choose a dedicated sender such as <code>hubert@your-domain.example</code>. The domain
+            and account belong to you; correspondence will use character-scoped permissions.
+          </p>
+          <ol class="step-list">
+            <li>
+              Add and verify your sending domain in
+              <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer"
+                >Resend</a
+              >, using the DNS records it gives you.
+            </li>
+            <li>
+              Create an API key with <strong>Sending access</strong> restricted to that domain. Do
+              not choose Full access.
+            </li>
+            <li>
+              Run setup. Paste the <code>re_</code> key privately and enter the sender’s plain email
+              address.
+            </li>
+          </ol>
+          <div class="command">
+            <code>pnpm run setup email</code
+            ><button data-copy="pnpm run setup email" aria-label="Copy email setup command">
+              Copy
+            </button>
+          </div>
+          <p class="hint">
+            This prepares outgoing mail credentials only. Sending, verification emails for Better
+            Auth, inbound mail, consent management and automatic replies are not connected by this
+            command. No test mail is sent.
+          </p>
+          <p class="hint">
+            Source:
+            <a
+              href="https://resend.com/changelog/new-api-key-permissions"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Sending access and domain restrictions</a
+            >
+          </p>
+        </section>
+        <section id="later">
+          <div class="section-heading">
+            <h2>04 / Keep these for later</h2>
+            <span class="tag later">No keys needed yet</span>
+          </div>
+          <p>
+            These need an adapter and a concrete target first. Account names, preferred domains and
+            repository names are useful planning information; access tokens can wait.
+          </p>
+          <div class="future">
+            <strong>GitHub</strong>
+            <p>
+              A dedicated repository or organization. Later, install a
+              <a
+                href="https://docs.github.com/en/apps/creating-github-apps"
+                target="_blank"
+                rel="noopener noreferrer"
+                >GitHub App</a
+              >
+              on selected repositories. We will need app/installation identifiers and protected
+              signing credentials then. No personal access token now.
+            </p>
+          </div>
+          <div class="future">
+            <strong>Private chat</strong>
+            <p>
+              Choose Telegram or another channel. A future Telegram adapter would use a dedicated
+              bot created through
+              <a
+                href="https://core.telegram.org/bots/tutorial"
+                target="_blank"
+                rel="noopener noreferrer"
+                >BotFather</a
+              >
+              and explicitly enrolled chats. Do not paste bot tokens into browser URLs.
+            </p>
+          </div>
+          <div class="future">
+            <strong>Vercel / Cloudflare</strong>
+            <p>
+              Choose the operator accounts and isolated projects that should receive the deployment
+              and credits. We will use project-specific access where supported, then install secrets
+              into the host’s secret store. No administrator token or account password now.
+            </p>
+          </div>
+          <div class="future">
+            <strong>Public presence</strong>
+            <p>
+              Choose a domain and Hubert’s public handle. Public posting begins with drafts and
+              review; a social account does not give the character authority over your other
+              accounts.
+            </p>
+          </div>
+        </section>
+        <section id="storage">
+          <div class="section-heading"><h2>05 / A place for each key</h2></div>
+          <dl class="facts">
+            <dt>Local location</dt>
+            <dd>
+              <code>.data/credentials/hubert/model.json</code><br /><code
+                >.data/credentials/hubert/stripe.json</code
+              ><br /><code>.data/credentials/hubert/email.json</code>
+            </dd>
+            <dt>File protection</dt>
+            <dd>
+              Owner-only plaintext: 700 directories, 600 files, ignored by Git. macOS/Linux only in
+              this version. This is local development storage, not an encrypted vault.
+            </dd>
+            <dt>Runtime access</dt>
+            <dd>
+              Only the explicit configured launcher reads the model. No automatic discovery of
+              staged connector secrets. Nothing enters the public world, frontend bundle or
+              character memories.
+            </dd>
+            <dt>Other characters</dt>
+            <dd>
+              <code>pnpm run setup stripe --character another-name</code> saves a separate profile.
+              It does not instantiate another resident or grant access.
+            </dd>
+            <dt>Hosted delivery</dt>
+            <dd>
+              Not implemented yet. Local paths are not deployment configuration; secrets must be
+              installed separately for each chosen hosting environment.
+            </dd>
+          </dl>
+          <div class="command">
+            <code>pnpm run setup status</code
+            ><button data-copy="pnpm run setup status" aria-label="Copy redacted status command">
+              Copy
+            </button>
+          </div>
+          <p class="hint">
+            Status reports only saved/missing/unsafe. It never displays keys or claims a provider
+            connection is verified. Existing <code>.env</code>, owner credentials and lived state
+            are preserved.
+          </p>
+          <details>
+            <summary>If setup refuses a storage directory</summary>
+            <p>
+              It rejects symbolic links, shared permissions, files owned by someone else and linked
+              credential files. For your own ordinary project <code>.data</code> directory, check
+              permissions with <code>ls -ld .data</code>; if appropriate, make it private with
+              <code>chmod 700 .data</code>. Do not change ownership or permissions of an unfamiliar
+              path just to bypass a refusal.
+            </p>
+          </details>
+          <details>
+            <summary>If you need to rotate or remove a key</summary>
+            <p>
+              Rotate or revoke it in the provider dashboard, then rerun the matching setup command
+              and explicitly replace the local record. Restart any configured model process to load
+              the new key. Deleting a local file does not revoke a provider credential. Keep private
+              files out of support uploads and shared backups.
+            </p>
+          </details>
+        </section>
+        <footer>
+          Elsewhere / local operator guide · Provider references checked 8 November 2026.<br />Never
+          paste keys into chat, source code, command arguments, <code>VITE_*</code> variables or
+          this page.
+        </footer>
+      </main>
+    </div>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <script>
+      let noticeTimer;
+      for (const button of document.querySelectorAll('[data-copy]')) {
+        button.addEventListener('click', async () => {
+          const notice = document.getElementById('notice');
+          clearTimeout(noticeTimer);
+          let clipboardTimeout;
+          try {
+            await Promise.race([
+              navigator.clipboard.writeText(button.dataset.copy),
+              new Promise((_, reject) => {
+                clipboardTimeout = setTimeout(
+                  () => reject(new Error('Clipboard unavailable')),
+                  800,
+                );
+              }),
+            ]);
+            notice.textContent = 'Command copied. Run it in your project terminal.';
+          } catch {
+            const range = document.createRange();
+            range.selectNodeContents(button.previousElementSibling);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            notice.textContent = 'Command selected. Press ⌘C or Ctrl+C to copy.';
+          } finally {
+            clearTimeout(clipboardTimeout);
+          }
+          noticeTimer = setTimeout(() => {
+            notice.textContent = '';
+          }, 5000);
+        });
+      }
+    </script>
+  </body>
+</html>

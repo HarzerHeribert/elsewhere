@@ -1,0 +1,202 @@
+{
+  "id": "fern_02",
+  "source": "https://polyhaven.com/a/fern_02",
+  "license": "CC0-1.0",
+  "licenseURL": "https://polyhaven.com/license",
+  "files": [
+    {
+      "path": "source.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fern_02/fern_02_1k.gltf",
+      "size": 6899,
+      "upstreamMD5": "cf276874d37bfb73c299504a6b355b77",
+      "sha256": "33974295ee19670af4877705fc7d91f33f42d6302f0d44a625e072271223031f"
+    },
+    {
+      "path": "textures/fern_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_arm_1k.jpg",
+      "size": 280359,
+      "upstreamMD5": "1bbb2b22951f450720d28e17d93a2987",
+      "sha256": "ebfb5d76ce9cbdaec20bcd22dce9b755f0b1b8650ef29ca13555e3e6961025d7"
+    },
+    {
+      "path": "textures/fern_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_diff_1k.jpg",
+      "size": 315705,
+      "upstreamMD5": "82c18a6cfd5ae91c37c0e078f591181c",
+      "sha256": "a828a6e7b4c01c826911e2eac4b3afc7457dab7b3b392a31c681ed88b7d50029"
+    },
+    {
+      "path": "textures/fern_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fern_02/fern_02_nor_gl_1k.jpg",
+      "size": 367222,
+      "upstreamMD5": "43aed63dff79554f6064627515afd9d7",
+      "sha256": "45bce132c6e96a0864bc89ab5da51361ab3f4afa83a6669ae499ab5ca811f621"
+    },
+    {
+      "path": "fern_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fern_02/fern_02.bin",
+      "size": 176176,
+      "upstreamMD5": "c061e9255f7d36ae9ce0e92ef3e100b2",
+      "sha256": "fe1abb762bcbbc7ad9e86925c8080437a62add257d9280e9142fdc85c226e64c"
+    },
+    {
+      "path": "textures/original_alpha.png",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/fern_02/fern_02_alpha_1k.png",
+      "size": 114589,
+      "upstreamMD5": "1421e5e36946c23a7ddcc907de89025c",
+      "sha256": "ea3c64284c7ebdeedf484d2d816eae92825ec526140c3bb83859ddc7a64001f9"
+    }
+  ],
+  "name": "Fern 02",
+  "authors": {
+    "Rob Tuytel": "scanning",
+    "Rico Cilliers": "modeling"
+  },
+  "infoURL": "https://api.polyhaven.com/info/fern_02",
+  "importedAt": "2026-11-08",
+  "transformation": {
+    "tool": "@gltf-transform/core/functions/extensions 4.5.1 + meshoptimizer 1.3.0",
+    "script": "scripts/bake-environment-assets.mjs",
+    "operations": [
+      "select one native variant; remove preview translation; preserve authored XZ origin",
+      {
+        "operation": "restore-leaf-alpha",
+        "detail": "Original artist alpha PNG packed losslessly into native JPG RGB; no RGB repainting.",
+        "material": "fern_02",
+        "alphaMode": "MASK",
+        "alphaRange": "(0, 255)"
+      },
+      "prune unused variants, dedup, weld, simplify within reported error bound"
+    ],
+    "sourceCache": "not shipped; files and hashes recorded below",
+    "texturePackaging": {
+      "method": "Byte-identical PNG/JPEG images shared by SHA-256 filename; relative local image URIs",
+      "script": "scripts/share-model-textures.mjs",
+      "preservation": "Every non-image bufferView byte, accessor, mesh, node, material, sampler and texture setting is retained; no image encoding or geometry transformation"
+    }
+  },
+  "variants": [
+    {
+      "file": "model-high.glb",
+      "selectedNode": "fern_02_b",
+      "size": 69244,
+      "sha256": "87d15d02e34ed9a30162563be7053a576a5c295a8cc35f757da8e2a30c8620d6",
+      "inputTriangles": 2384,
+      "targetRatio": 1,
+      "error": 0.001,
+      "triangles": 2384,
+      "primitives": 1,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -0.5281425714492798,
+          -0.030510280281305313,
+          -0.421874463558197
+        ],
+        "max": [
+          0.4616048336029053,
+          0.39718443155288696,
+          0.4718152582645416
+        ]
+      },
+      "nativeHeight": 0.4276947118341923,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "13044b57bf57e37fd266198c382b7e5a8f5af78f1116ca6c43d2f7b135073303",
+      "externalDependencies": [
+        {
+          "uri": "../textures/45bce132c6e96a0864bc89ab5da51361ab3f4afa83a6669ae499ab5ca811f621.jpg",
+          "size": 367222,
+          "sha256": "45bce132c6e96a0864bc89ab5da51361ab3f4afa83a6669ae499ab5ca811f621",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/c53438a086f4021e9ac4e95b71a93fada1e5c2632c9ce8e90fb2287b1d49e1cc.png",
+          "size": 838210,
+          "sha256": "c53438a086f4021e9ac4e95b71a93fada1e5c2632c9ce8e90fb2287b1d49e1cc",
+          "mimeType": "image/png"
+        },
+        {
+          "uri": "../textures/ebfb5d76ce9cbdaec20bcd22dce9b755f0b1b8650ef29ca13555e3e6961025d7.jpg",
+          "size": 280359,
+          "sha256": "ebfb5d76ce9cbdaec20bcd22dce9b755f0b1b8650ef29ca13555e3e6961025d7",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    },
+    {
+      "file": "model-low.glb",
+      "selectedNode": "fern_02_b",
+      "size": 38152,
+      "sha256": "891e5ca5e3e48cd120fbef2ae5b9cad68de9635651c722cba1509ebf3530eb34",
+      "inputTriangles": 2384,
+      "targetRatio": 0.5,
+      "error": 0.008,
+      "triangles": 1192,
+      "primitives": 1,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -0.5281425714492798,
+          -0.030510280281305313,
+          -0.421874463558197
+        ],
+        "max": [
+          0.4608733057975769,
+          0.39718443155288696,
+          0.4718152582645416
+        ]
+      },
+      "nativeHeight": 0.4276947118341923,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "695cb0fb453bc214128a378a44db44686bd188cf4ba889545a1b9052040dedb8",
+      "externalDependencies": [
+        {
+          "uri": "../textures/45bce132c6e96a0864bc89ab5da51361ab3f4afa83a6669ae499ab5ca811f621.jpg",
+          "size": 367222,
+          "sha256": "45bce132c6e96a0864bc89ab5da51361ab3f4afa83a6669ae499ab5ca811f621",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/c53438a086f4021e9ac4e95b71a93fada1e5c2632c9ce8e90fb2287b1d49e1cc.png",
+          "size": 838210,
+          "sha256": "c53438a086f4021e9ac4e95b71a93fada1e5c2632c9ce8e90fb2287b1d49e1cc",
+          "mimeType": "image/png"
+        },
+        {
+          "uri": "../textures/ebfb5d76ce9cbdaec20bcd22dce9b755f0b1b8650ef29ca13555e3e6961025d7.jpg",
+          "size": 280359,
+          "sha256": "ebfb5d76ce9cbdaec20bcd22dce9b755f0b1b8650ef29ca13555e3e6961025d7",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    }
+  ],
+  "buildInputs": [
+    {
+      "file": "provenance.json",
+      "retainedPath": "source-inputs/provenance.json",
+      "size": 2029,
+      "sha256": "07c1bd94067ed5aa112cb5b50ebc67afc89d2bd822de1170944c9870b6f9ff5e"
+    },
+    {
+      "file": "info.json",
+      "retainedPath": "source-inputs/info.json",
+      "size": 1077,
+      "sha256": "82e38ffcab20b829dbaafc643336370171b028a7f79c78520a3da35086997a23",
+      "url": "https://api.polyhaven.com/info/fern_02"
+    }
+  ],
+  "imageToolchain": {
+    "python": "3.14.7",
+    "pillow": "12.2.0",
+    "zlib": "1.2.12",
+    "jpeg": "6.2",
+    "libjpegTurbo": "3.1.4.1"
+  }
+}

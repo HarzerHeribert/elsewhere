@@ -1,0 +1,201 @@
+{
+  "id": "shrub_02",
+  "source": "https://polyhaven.com/a/shrub_02",
+  "license": "CC0-1.0",
+  "licenseURL": "https://polyhaven.com/license",
+  "files": [
+    {
+      "path": "source.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/shrub_02/shrub_02_1k.gltf",
+      "size": 8083,
+      "upstreamMD5": "8f7254d279c0c49c0b3edfe260aa5c86",
+      "sha256": "99de0a70fe88ad414615cc8d8e020617c8512e2abfe08b911b153a6fcc40d93e"
+    },
+    {
+      "path": "textures/shrub_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_02/shrub_02_arm_1k.jpg",
+      "size": 313715,
+      "upstreamMD5": "28c218aeb7cab930d99ee16578984241",
+      "sha256": "7186bf604d5c02f873aef6de2346cc06b6fa48f47d054edbef36d2c3772c0890"
+    },
+    {
+      "path": "textures/shrub_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_02/shrub_02_nor_gl_1k.jpg",
+      "size": 490815,
+      "upstreamMD5": "51a7f2db7e06a207171fd725585241d5",
+      "sha256": "54c24e433365d5410223b7ebd2b33042b80831f80976e10768114db5ef6911d7"
+    },
+    {
+      "path": "shrub_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/shrub_02/shrub_02.bin",
+      "size": 758692,
+      "upstreamMD5": "683b5475238310899eac1458520903e6",
+      "sha256": "5c1b79da1cfdbac90599542ccd1f75ba433a3a4d356b1ea03655adb39b0e2c96"
+    },
+    {
+      "path": "textures/shrub_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_02/shrub_02_diff_1k.jpg",
+      "size": 395120,
+      "upstreamMD5": "3f4ae281928de030c7d4e41ad5b88a8b",
+      "sha256": "9956eff294034d70516d867e9668428a23d782feb3d4c34061dce5e44bacd5a8"
+    },
+    {
+      "path": "textures/original_alpha.png",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/shrub_02/shrub_02_alpha_1k.png",
+      "size": 91741,
+      "upstreamMD5": "64a1f609d80ea076b43412498a3d2db5",
+      "sha256": "5c2c31bac311051db77443e1780078403c2df0a832c40fe6ed7bcd982695cdf0"
+    }
+  ],
+  "name": "Shrub 02",
+  "authors": {
+    "Rico Cilliers": "All"
+  },
+  "infoURL": "https://api.polyhaven.com/info/shrub_02",
+  "importedAt": "2026-11-08",
+  "transformation": {
+    "tool": "@gltf-transform/core/functions/extensions 4.5.1 + meshoptimizer 1.3.0",
+    "script": "scripts/bake-environment-assets.mjs",
+    "operations": [
+      "select one native variant; remove preview translation; preserve authored XZ origin",
+      {
+        "operation": "restore-leaf-alpha",
+        "detail": "Original artist alpha PNG packed losslessly into native JPG RGB; no RGB repainting.",
+        "material": "shrub_02",
+        "alphaMode": "MASK",
+        "alphaRange": "(0, 255)"
+      },
+      "prune unused variants, dedup, weld, simplify within reported error bound"
+    ],
+    "sourceCache": "not shipped; files and hashes recorded below",
+    "texturePackaging": {
+      "method": "Byte-identical PNG/JPEG images shared by SHA-256 filename; relative local image URIs",
+      "script": "scripts/share-model-textures.mjs",
+      "preservation": "Every non-image bufferView byte, accessor, mesh, node, material, sampler and texture setting is retained; no image encoding or geometry transformation"
+    }
+  },
+  "variants": [
+    {
+      "file": "model-high.glb",
+      "selectedNode": "shrub_02_a",
+      "size": 211444,
+      "sha256": "45ba51e1078a025f9c0e2f201418b00bec60d50ea91c46627ee8e34092da4cb1",
+      "inputTriangles": 7590,
+      "targetRatio": 1,
+      "error": 0.001,
+      "triangles": 7590,
+      "primitives": 1,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -0.5443559062501735,
+          -0.00637707326245121,
+          -0.8626699785871372
+        ],
+        "max": [
+          0.7676495245750795,
+          1.6826002000752445,
+          0.7783369716864494
+        ]
+      },
+      "nativeHeight": 1.6889772733376958,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "2e29f89e3959d1dda9e4ae88b507889b134b2e4fac74425907ac3552bd50d573",
+      "externalDependencies": [
+        {
+          "uri": "../textures/54c24e433365d5410223b7ebd2b33042b80831f80976e10768114db5ef6911d7.jpg",
+          "size": 490815,
+          "sha256": "54c24e433365d5410223b7ebd2b33042b80831f80976e10768114db5ef6911d7",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/d520975f6609a56bd68fa400a348e24f613aace1dfcefd21fcf7ad159906854e.png",
+          "size": 965078,
+          "sha256": "d520975f6609a56bd68fa400a348e24f613aace1dfcefd21fcf7ad159906854e",
+          "mimeType": "image/png"
+        },
+        {
+          "uri": "../textures/7186bf604d5c02f873aef6de2346cc06b6fa48f47d054edbef36d2c3772c0890.jpg",
+          "size": 313715,
+          "sha256": "7186bf604d5c02f873aef6de2346cc06b6fa48f47d054edbef36d2c3772c0890",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    },
+    {
+      "file": "model-low.glb",
+      "selectedNode": "shrub_02_a",
+      "size": 122160,
+      "sha256": "cd9cdc3f2efb7ce23b15269bb7e7776db8946f800ca074a5ff09ea43beecad7c",
+      "inputTriangles": 7590,
+      "targetRatio": 0.5,
+      "error": 0.008,
+      "triangles": 3792,
+      "primitives": 1,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -0.5443559062501735,
+          -0.00637707326245121,
+          -0.8626699785871372
+        ],
+        "max": [
+          0.7676495245750795,
+          1.6826002000752445,
+          0.7783369716864494
+        ]
+      },
+      "nativeHeight": 1.6889772733376958,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "bd1cddce7f340a02339962d3499e3f35ce9999be2499f04c37c526edb2bc2942",
+      "externalDependencies": [
+        {
+          "uri": "../textures/54c24e433365d5410223b7ebd2b33042b80831f80976e10768114db5ef6911d7.jpg",
+          "size": 490815,
+          "sha256": "54c24e433365d5410223b7ebd2b33042b80831f80976e10768114db5ef6911d7",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/d520975f6609a56bd68fa400a348e24f613aace1dfcefd21fcf7ad159906854e.png",
+          "size": 965078,
+          "sha256": "d520975f6609a56bd68fa400a348e24f613aace1dfcefd21fcf7ad159906854e",
+          "mimeType": "image/png"
+        },
+        {
+          "uri": "../textures/7186bf604d5c02f873aef6de2346cc06b6fa48f47d054edbef36d2c3772c0890.jpg",
+          "size": 313715,
+          "sha256": "7186bf604d5c02f873aef6de2346cc06b6fa48f47d054edbef36d2c3772c0890",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    }
+  ],
+  "buildInputs": [
+    {
+      "file": "provenance.json",
+      "retainedPath": "source-inputs/provenance.json",
+      "size": 2046,
+      "sha256": "d3b6d8272a81a6c5effc71b601c44e604bd1b1743ced20b9e09b629bb30ad412"
+    },
+    {
+      "file": "info.json",
+      "retainedPath": "source-inputs/info.json",
+      "size": 1124,
+      "sha256": "9f16564730d5a405a84f21e259c4a43c0aa80d31d30a88650e69ff39cfe331ab",
+      "url": "https://api.polyhaven.com/info/shrub_02"
+    }
+  ],
+  "imageToolchain": {
+    "python": "3.14.7",
+    "pillow": "12.2.0",
+    "zlib": "1.2.12",
+    "jpeg": "6.2",
+    "libjpegTurbo": "3.1.4.1"
+  }
+}

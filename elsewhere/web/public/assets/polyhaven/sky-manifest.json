@@ -1,0 +1,22 @@
+{
+  "id": "kloofendal_48d_partly_cloudy_puresky",
+  "kind": "daylight-environment",
+  "url": "/assets/polyhaven/kloofendal_48d_partly_cloudy_puresky_1k.hdr",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "sourceUrl": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
+  "metadataUrl": "https://api.polyhaven.com/files/kloofendal_48d_partly_cloudy_puresky",
+  "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr",
+  "authors": {
+    "Greg Zaal": "Original",
+    "Jarod Guest": "Sky edits"
+  },
+  "width": 1024,
+  "height": 512,
+  "bytes": 1435119,
+  "upstreamMd5": "c69498687e876bf68d2a8b8a62234eb9",
+  "sha256": "fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798",
+  "retrievedAt": "2026-11-08",
+  "colorSpace": "linear HDR",
+  "verification": "Officialsize+MD5 matched; ThreeRGBELoader decoded successfully"
+}

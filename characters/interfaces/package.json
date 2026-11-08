@@ -1,0 +1,15 @@
+{
+  "name": "@elsewhere/character-interfaces",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./commands": "./src/commands.ts",
+    "./connectors": "./src/connectors.ts",
+    "./spatial": "./src/spatial.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.6"
+  }
+}

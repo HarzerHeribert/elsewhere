@@ -1,0 +1,36 @@
+{
+  "creator": "AssetQuest",
+  "name": "Brown Bird",
+  "sourceUrl": "https://poly.pizza/m/aDrUGRtDcm",
+  "creatorUrl": "https://assetquest.itch.io/",
+  "downloadUrl": "https://static.poly.pizza/703148af-0b17-437f-b106-fcbd3436f70b.glb",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "retrievedAt": "2026-11-08",
+  "file": "brown-bird.glb",
+  "url": "/assets/assetquest/brown-bird.glb",
+  "bytes": 15596,
+  "sha256": "b3421a6c883bbf446b91cc99c53b1bd9603e975fe9f60b36fdf7f5b6c306fed9",
+  "modification": "Unmodified source GLB; runtime color/scale styling is separate.",
+  "externalDependencies": [],
+  "bounds": {
+    "min": [
+      -0.0669566616415977,
+      -0.0038133742785414195,
+      -0.05802038481784977
+    ],
+    "max": [
+      0.0669566541910172,
+      0.17052314746934724,
+      0.14060227601707997
+    ],
+    "size": [
+      0.1339133158326149,
+      0.17433652174788866,
+      0.19862266083492974
+    ]
+  },
+  "meshCount": 1,
+  "triangles": 194,
+  "verification": "GLTFLoader parsed geometry with a Node-only placeholder image hook for bounds. Embedded PNG signature verified separately; real image decoding is verified in browser."
+}

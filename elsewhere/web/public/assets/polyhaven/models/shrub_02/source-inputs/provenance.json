@@ -1,0 +1,50 @@
+{
+  "id": "shrub_02",
+  "source": "https://polyhaven.com/a/shrub_02",
+  "license": "CC0-1.0",
+  "licenseURL": "https://polyhaven.com/license",
+  "files": [
+    {
+      "path": "source.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/shrub_02/shrub_02_1k.gltf",
+      "size": 8083,
+      "upstreamMD5": "8f7254d279c0c49c0b3edfe260aa5c86",
+      "sha256": "99de0a70fe88ad414615cc8d8e020617c8512e2abfe08b911b153a6fcc40d93e"
+    },
+    {
+      "path": "textures/shrub_02_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_02/shrub_02_arm_1k.jpg",
+      "size": 313715,
+      "upstreamMD5": "28c218aeb7cab930d99ee16578984241",
+      "sha256": "7186bf604d5c02f873aef6de2346cc06b6fa48f47d054edbef36d2c3772c0890"
+    },
+    {
+      "path": "textures/shrub_02_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_02/shrub_02_nor_gl_1k.jpg",
+      "size": 490815,
+      "upstreamMD5": "51a7f2db7e06a207171fd725585241d5",
+      "sha256": "54c24e433365d5410223b7ebd2b33042b80831f80976e10768114db5ef6911d7"
+    },
+    {
+      "path": "shrub_02.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/shrub_02/shrub_02.bin",
+      "size": 758692,
+      "upstreamMD5": "683b5475238310899eac1458520903e6",
+      "sha256": "5c1b79da1cfdbac90599542ccd1f75ba433a3a4d356b1ea03655adb39b0e2c96"
+    },
+    {
+      "path": "textures/shrub_02_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/shrub_02/shrub_02_diff_1k.jpg",
+      "size": 395120,
+      "upstreamMD5": "3f4ae281928de030c7d4e41ad5b88a8b",
+      "sha256": "9956eff294034d70516d867e9668428a23d782feb3d4c34061dce5e44bacd5a8"
+    },
+    {
+      "path": "textures/original_alpha.png",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/shrub_02/shrub_02_alpha_1k.png",
+      "size": 91741,
+      "upstreamMD5": "64a1f609d80ea076b43412498a3d2db5",
+      "sha256": "5c2c31bac311051db77443e1780078403c2df0a832c40fe6ed7bcd982695cdf0"
+    }
+  ]
+}

@@ -1,0 +1,376 @@
+{
+  "creator": "Kenney",
+  "pack": "Furniture Pack 1.0 (creator OpenGameArt upload)",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "officialSource": "https://kenney.nl/assets/furniture-kit",
+  "creatorUpload": "https://opengameart.org/content/furniture-kit",
+  "downloadUrl": "https://opengameart.org/sites/default/files/kenney_furniturePack.zip",
+  "sourceArchiveSha256": "68afa4e6dc8a53942379fb47f1e84ec735d46b77bb1c1ceb968e245693dde067",
+  "retrievedAt": "2026-11-08",
+  "models": [
+    {
+      "id": "bench",
+      "url": "/assets/kenney/furniture/bench.glb",
+      "sourceArchiveEntries": [
+        "Models/bench.obj",
+        "Models/bench.mtl"
+      ],
+      "sourceObjSha256": "82a7509d4520f5c665a7862f46eb9f8b07569335e7df493012ae33f80c6d634b",
+      "sourceMtlSha256": "dc0e8eeb2fef684cc9ab72e9532312ef8796c5035d3c5f23ba768ef6dae17806",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 17276,
+      "sha256": "88e3c8be4a7abb4d296c350dae2daeeae1a8aa3a57fbd132a4b2b5039ac7dff4",
+      "bounds": {
+        "min": [
+          -4,
+          0,
+          0
+        ],
+        "max": [
+          0,
+          4.699999809265137,
+          2
+        ],
+        "size": [
+          4,
+          4.699999809265137,
+          2
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 168,
+      "externalDependencies": []
+    },
+    {
+      "id": "bookcaseClosed",
+      "url": "/assets/kenney/furniture/bookcaseClosed.glb",
+      "sourceArchiveEntries": [
+        "Models/bookcaseClosed.obj",
+        "Models/bookcaseClosed.mtl"
+      ],
+      "sourceObjSha256": "ed7b2ace7e701a9605f88966bb17108fa80b0a30686080d2916463d8734486b6",
+      "sourceMtlSha256": "dc0e8eeb2fef684cc9ab72e9532312ef8796c5035d3c5f23ba768ef6dae17806",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 36864,
+      "sha256": "d65744d711aa147b425fbcfdd899bfe9e38295a8d087fd4ae81ff915ee6b8d8c",
+      "bounds": {
+        "min": [
+          -4,
+          0,
+          0
+        ],
+        "max": [
+          0,
+          8.5,
+          2.5
+        ],
+        "size": [
+          4,
+          8.5,
+          2.5
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 372,
+      "externalDependencies": []
+    },
+    {
+      "id": "bookcaseOpen",
+      "url": "/assets/kenney/furniture/bookcaseOpen.glb",
+      "sourceArchiveEntries": [
+        "Models/bookcaseOpen.obj",
+        "Models/bookcaseOpen.mtl"
+      ],
+      "sourceObjSha256": "31beea66f34e64660c870e39c52ed2e81984939c88f4bd763c7dce56e9ef76a9",
+      "sourceMtlSha256": "dc0e8eeb2fef684cc9ab72e9532312ef8796c5035d3c5f23ba768ef6dae17806",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 31880,
+      "sha256": "49553b3e70dfb2261d35bf6ba5ed014e95b35b17bfea8626828a790699bd3389",
+      "bounds": {
+        "min": [
+          -4,
+          0,
+          0
+        ],
+        "max": [
+          0,
+          8.799999237060547,
+          2.5
+        ],
+        "size": [
+          4,
+          8.799999237060547,
+          2.5
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 320,
+      "externalDependencies": []
+    },
+    {
+      "id": "books",
+      "url": "/assets/kenney/furniture/books.glb",
+      "sourceArchiveEntries": [
+        "Models/books.obj",
+        "Models/books.mtl"
+      ],
+      "sourceObjSha256": "91fd64f5fd821b5046724ffa18974e8964b85bfbd4a0d89687d2283966394f5f",
+      "sourceMtlSha256": "90b35f0e9448c3a7bf4a16ccbb31a67f9dec1c6727276494fa6109b3d8883a8e",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 8860,
+      "sha256": "2887dc04e4c05cc64e3b77c10111a2da5efa8289898804394e8dc5e1812d6963",
+      "bounds": {
+        "min": [
+          -1.5044759511947632,
+          0,
+          0
+        ],
+        "max": [
+          0,
+          1.0390230417251587,
+          0.9449999928474426
+        ],
+        "size": [
+          1.5044759511947632,
+          1.0390230417251587,
+          0.9449999928474426
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 62,
+      "externalDependencies": []
+    },
+    {
+      "id": "chair",
+      "url": "/assets/kenney/furniture/chair.glb",
+      "sourceArchiveEntries": [
+        "Models/chair.obj",
+        "Models/chair.mtl"
+      ],
+      "sourceObjSha256": "395ba37182de517f58a2b0993ffcf4ae01a858285e269191509c6e2f1fd406f2",
+      "sourceMtlSha256": "dc0e8eeb2fef684cc9ab72e9532312ef8796c5035d3c5f23ba768ef6dae17806",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 17272,
+      "sha256": "a6e8760d289b537c433a1951f03f2257d733f2a9ffde7de299edd0dcffa20c55",
+      "bounds": {
+        "min": [
+          -2,
+          0,
+          0
+        ],
+        "max": [
+          0,
+          4.699999809265137,
+          2
+        ],
+        "size": [
+          2,
+          4.699999809265137,
+          2
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 168,
+      "externalDependencies": []
+    },
+    {
+      "id": "table",
+      "url": "/assets/kenney/furniture/table.glb",
+      "sourceArchiveEntries": [
+        "Models/table.obj",
+        "Models/table.mtl"
+      ],
+      "sourceObjSha256": "cf5dae65dbf6d2251f66776d1718e01ae3997996072d1e5860cb9059b9cd7ddf",
+      "sourceMtlSha256": "dc0e8eeb2fef684cc9ab72e9532312ef8796c5035d3c5f23ba768ef6dae17806",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 12696,
+      "sha256": "d8321ee3bcfdf8c48769ff0e17de05a42dbabbb038ef2662f42597598ec23917",
+      "bounds": {
+        "min": [
+          -8.41487979888916,
+          0,
+          0
+        ],
+        "max": [
+          0,
+          3.2673399448394775,
+          4.473732948303223
+        ],
+        "size": [
+          8.41487979888916,
+          3.2673399448394775,
+          4.473732948303223
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 120,
+      "externalDependencies": []
+    },
+    {
+      "id": "desk",
+      "url": "/assets/kenney/furniture/desk.glb",
+      "sourceArchiveEntries": [
+        "Models/desk.obj",
+        "Models/desk.mtl"
+      ],
+      "sourceObjSha256": "fff1cb3b8ad7460c17eb0106a61f0fc42c5cc95719f7fc9ea5edddff66e1ccd2",
+      "sourceMtlSha256": "879f1a0c7b9077151d66b370663c090217cf001722808860e7da01517060ffe6",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 22032,
+      "sha256": "fd1f57f0ab6f91368156f0642970edd531daf6c15fcd91a731a5ce583232ca0d",
+      "bounds": {
+        "min": [
+          -7.244753837585449,
+          0,
+          -0.12300000339746475
+        ],
+        "max": [
+          0.09999998658895493,
+          3.8440749645233154,
+          3.799999952316284
+        ],
+        "size": [
+          7.344753824174404,
+          3.8440749645233154,
+          3.922999955713749
+        ]
+      },
+      "meshCount": 2,
+      "triangles": 198,
+      "externalDependencies": []
+    },
+    {
+      "id": "pottedPlant",
+      "url": "/assets/kenney/furniture/pottedPlant.glb",
+      "sourceArchiveEntries": [
+        "Models/pottedPlant.obj",
+        "Models/pottedPlant.mtl"
+      ],
+      "sourceObjSha256": "cf66928b943e30ef5c1f06145419ca2cda534249bb4d77831ae723532c4f8de3",
+      "sourceMtlSha256": "bca73c565e3c81f5a546a0dd17167c7d59249e6a322ec5319f9fb21484fddaaf",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 8884,
+      "sha256": "891a07eb666ae16cf6b7a7916dca2f33adc18427c1a6ea145988974a136a5265",
+      "bounds": {
+        "min": [
+          -1.9181809425354004,
+          0,
+          -0.21670979261398315
+        ],
+        "max": [
+          0.20241160690784454,
+          6.540167808532715,
+          2.1979100704193115
+        ],
+        "size": [
+          2.120592549443245,
+          6.540167808532715,
+          2.4146198630332947
+        ]
+      },
+      "meshCount": 2,
+      "triangles": 60,
+      "externalDependencies": []
+    },
+    {
+      "id": "lampRoundFloor",
+      "url": "/assets/kenney/furniture/lampRoundFloor.glb",
+      "sourceArchiveEntries": [
+        "Models/lampRoundFloor.obj",
+        "Models/lampRoundFloor.mtl"
+      ],
+      "sourceObjSha256": "f2e46531dd98352951689c59b5f2a90b8b4b2a2b4482630a09c569423a7aabc4",
+      "sourceMtlSha256": "16cdc879bcaa53a3919423553d022313030a8be768833b0613e50fb987fc2048",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 9520,
+      "sha256": "6f3bac4bd91fe104ff52668822040feda6792231444680e71120b34e2b5d8f9f",
+      "bounds": {
+        "min": [
+          -1.3601969480514526,
+          0,
+          -0.2777999937534332
+        ],
+        "max": [
+          0.16019709408283234,
+          8.600000381469727,
+          1.4778000116348267
+        ],
+        "size": [
+          1.520394042134285,
+          8.600000381469727,
+          1.7556000053882599
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 76,
+      "externalDependencies": []
+    },
+    {
+      "id": "cardboardBoxClosed",
+      "url": "/assets/kenney/furniture/cardboardBoxClosed.glb",
+      "sourceArchiveEntries": [
+        "Models/cardboardBoxClosed.obj",
+        "Models/cardboardBoxClosed.mtl"
+      ],
+      "sourceObjSha256": "efeb76afdd71205526f7287735eb882341bec5c00925274e47c0e2f91c76ca4b",
+      "sourceMtlSha256": "5a67a55ae09b256ad5b6f6f5939e9af9f4b1ed0ea271e9462c441a970b7723f6",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 7872,
+      "sha256": "70973529c2703793a67c1e89e51e23cf36686e686df96916c01ae8b2e7a99501",
+      "bounds": {
+        "min": [
+          -2.125,
+          0,
+          -9.023893032144474e-16
+        ],
+        "max": [
+          0,
+          2.809999942779541,
+          2.125
+        ],
+        "size": [
+          2.125,
+          2.809999942779541,
+          2.125000000000001
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 60,
+      "externalDependencies": []
+    },
+    {
+      "id": "radio",
+      "url": "/assets/kenney/furniture/radio.glb",
+      "sourceArchiveEntries": [
+        "Models/radio.obj",
+        "Models/radio.mtl"
+      ],
+      "sourceObjSha256": "0606c95a247530477ad5372d279b48d64b0fe4c2e5b46a811d557c9e74487533",
+      "sourceMtlSha256": "16e5f5b7ea7e6f65955a9c26774cf6c1e4b327eca01e9c45d646ac3b741a1661",
+      "modification": "Converted original OBJ geometry and flat MTL colors to self-contained GLB; phong materials mapped to rough non-metallic standard materials.",
+      "bytes": 46240,
+      "sha256": "c6ccea93ef9123a43a095b0b9652add29d6ac1e0ff4a334add72585efbd5a705",
+      "bounds": {
+        "min": [
+          -3.1500000953674316,
+          0,
+          0
+        ],
+        "max": [
+          0,
+          2.2819108963012695,
+          0.9750000238418579
+        ],
+        "size": [
+          3.1500000953674316,
+          2.2819108963012695,
+          0.9750000238418579
+        ]
+      },
+      "meshCount": 1,
+      "triangles": 432,
+      "externalDependencies": []
+    }
+  ]
+}

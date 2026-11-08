@@ -1,0 +1,187 @@
+{
+  "id": "rock_07",
+  "source": "https://polyhaven.com/a/rock_07",
+  "license": "CC0-1.0",
+  "licenseURL": "https://polyhaven.com/license",
+  "files": [
+    {
+      "path": "source.gltf",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rock_07/rock_07_1k.gltf",
+      "size": 2979,
+      "upstreamMD5": "2bdb563c126a9d284e60e94951759e2f",
+      "sha256": "efcc2dcaa133ff8ad5c865dc2135772e8f5dbc83fa38db2ee2cf25382436b6e6"
+    },
+    {
+      "path": "rock_07.bin",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/rock_07/rock_07.bin",
+      "size": 468936,
+      "upstreamMD5": "817b2cfd1626cb06f18a825f87f58ec3",
+      "sha256": "e4a532a6d6cf4a08c288f501b790f32cba0528136a29959ce774c3cd39369e7e"
+    },
+    {
+      "path": "textures/rock_07_arm_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_07/rock_07_arm_1k.jpg",
+      "size": 309735,
+      "upstreamMD5": "530bfd2a510fe6f778bb1198a2395574",
+      "sha256": "1ed76e9a8542c76bdc6b7b018720ae1f52cd75d9f5ae719f613de3f5032cf4da"
+    },
+    {
+      "path": "textures/rock_07_diff_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_07/rock_07_diff_1k.jpg",
+      "size": 635452,
+      "upstreamMD5": "b68ac1824bb3bd3867641b830ad02099",
+      "sha256": "8ff1965aa1664cc4abcc0131c44ee2b97ab14d6e131d7a51429ff261eeb101c8"
+    },
+    {
+      "path": "textures/rock_07_nor_gl_1k.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rock_07/rock_07_nor_gl_1k.jpg",
+      "size": 766986,
+      "upstreamMD5": "d3a2a0df0db0177c4df8ef644b003652",
+      "sha256": "57cb2210951aeb376164fce5f7c65f03e5599def04873b56cad0f173c275d78d"
+    }
+  ],
+  "name": "Rock 07",
+  "authors": {
+    "Jenelle van Heerden": "All"
+  },
+  "infoURL": "https://api.polyhaven.com/info/rock_07",
+  "importedAt": "2026-11-08",
+  "transformation": {
+    "tool": "@gltf-transform/core/functions/extensions 4.5.1 + meshoptimizer 1.3.0",
+    "script": "scripts/bake-environment-assets.mjs",
+    "operations": [
+      "select one native variant; remove preview translation; preserve authored XZ origin",
+      "prune unused variants, dedup, weld, simplify within reported error bound"
+    ],
+    "sourceCache": "not shipped; files and hashes recorded below",
+    "texturePackaging": {
+      "method": "Byte-identical PNG/JPEG images shared by SHA-256 filename; relative local image URIs",
+      "script": "scripts/share-model-textures.mjs",
+      "preservation": "Every non-image bufferView byte, accessor, mesh, node, material, sampler and texture setting is retained; no image encoding or geometry transformation"
+    }
+  },
+  "variants": [
+    {
+      "file": "model-high.glb",
+      "selectedNode": "rock_07",
+      "size": 470808,
+      "sha256": "f53b7104e9809f81fc2b9ac065f2050517e3de88989a24a0e56cf498bd2ed839",
+      "inputTriangles": 14844,
+      "targetRatio": 1,
+      "error": 0.001,
+      "triangles": 14844,
+      "primitives": 1,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -0.0875801146030426,
+          -0.00190715491771698,
+          -0.17797498404979706
+        ],
+        "max": [
+          0.08130179345607758,
+          0.1418129950761795,
+          0.14230197668075562
+        ]
+      },
+      "nativeHeight": 0.14372014999389648,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "19597380035b82ea1c79deb756e43533d89ad07ba2396e482623adac5f5afcb0",
+      "externalDependencies": [
+        {
+          "uri": "../textures/57cb2210951aeb376164fce5f7c65f03e5599def04873b56cad0f173c275d78d.jpg",
+          "size": 766986,
+          "sha256": "57cb2210951aeb376164fce5f7c65f03e5599def04873b56cad0f173c275d78d",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/8ff1965aa1664cc4abcc0131c44ee2b97ab14d6e131d7a51429ff261eeb101c8.jpg",
+          "size": 635452,
+          "sha256": "8ff1965aa1664cc4abcc0131c44ee2b97ab14d6e131d7a51429ff261eeb101c8",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/1ed76e9a8542c76bdc6b7b018720ae1f52cd75d9f5ae719f613de3f5032cf4da.jpg",
+          "size": 309735,
+          "sha256": "1ed76e9a8542c76bdc6b7b018720ae1f52cd75d9f5ae719f613de3f5032cf4da",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    },
+    {
+      "file": "model-low.glb",
+      "selectedNode": "rock_07",
+      "size": 175504,
+      "sha256": "d2ccbb71aee6b4876fb2472e2ca23f57095f14e3f1a9f6d23114cb4bd5cc3f4b",
+      "inputTriangles": 14844,
+      "targetRatio": 0.35,
+      "error": 0.008,
+      "triangles": 5194,
+      "primitives": 1,
+      "meshes": 1,
+      "bounds": {
+        "min": [
+          -0.08726639300584793,
+          -0.0018844231963157654,
+          -0.17789262533187866
+        ],
+        "max": [
+          0.08130179345607758,
+          0.1418129950761795,
+          0.14198321104049683
+        ]
+      },
+      "nativeHeight": 0.14369741827249527,
+      "authoredRootXZ": [
+        0,
+        0
+      ],
+      "geometryBufferViewsSha256": "8d2d4e4d3b23d1f8332baa547c7537030c355a1bd4ffc9e02545dd1aa8128cb5",
+      "externalDependencies": [
+        {
+          "uri": "../textures/57cb2210951aeb376164fce5f7c65f03e5599def04873b56cad0f173c275d78d.jpg",
+          "size": 766986,
+          "sha256": "57cb2210951aeb376164fce5f7c65f03e5599def04873b56cad0f173c275d78d",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/8ff1965aa1664cc4abcc0131c44ee2b97ab14d6e131d7a51429ff261eeb101c8.jpg",
+          "size": 635452,
+          "sha256": "8ff1965aa1664cc4abcc0131c44ee2b97ab14d6e131d7a51429ff261eeb101c8",
+          "mimeType": "image/jpeg"
+        },
+        {
+          "uri": "../textures/1ed76e9a8542c76bdc6b7b018720ae1f52cd75d9f5ae719f613de3f5032cf4da.jpg",
+          "size": 309735,
+          "sha256": "1ed76e9a8542c76bdc6b7b018720ae1f52cd75d9f5ae719f613de3f5032cf4da",
+          "mimeType": "image/jpeg"
+        }
+      ]
+    }
+  ],
+  "buildInputs": [
+    {
+      "file": "provenance.json",
+      "retainedPath": "source-inputs/provenance.json",
+      "size": 1710,
+      "sha256": "f6ab6d2b28d60f3303bfe55eab43c6166a70188c0aeb2d4c48f9f951fde38e82"
+    },
+    {
+      "file": "info.json",
+      "retainedPath": "source-inputs/info.json",
+      "size": 1056,
+      "sha256": "20ba522f61bae344355ce3d6f86cb46f6d8d22415676ac4c341c369364e7503a",
+      "url": "https://api.polyhaven.com/info/rock_07"
+    }
+  ],
+  "imageToolchain": {
+    "python": "3.14.7",
+    "pillow": "12.2.0",
+    "zlib": "1.2.12",
+    "jpeg": "6.2",
+    "libjpegTurbo": "3.1.4.1"
+  }
+}

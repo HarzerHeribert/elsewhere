@@ -1,0 +1,8 @@
+Poly Haven assets are licensed under Creative Commons Zero 1.0 Universal (CC0-1.0).
+Official asset license: https://polyhaven.com/license
+CC0 legal terms: https://creativecommons.org/publicdomain/zero/1.0/
+
+The selected unmodified texture files are recorded in manifest.json, including original source and download URLs.
+Assets may be used for personal, educational and commercial projects. Attribution is optional under CC0; we retain credits in docs/asset-credits.md.
+
+Verified on November 8, 2026. This file records the source declaration; the linked CC0 terms are the license.

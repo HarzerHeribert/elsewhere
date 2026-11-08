@@ -1,0 +1,254 @@
+import { randomBytes } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import Database from 'better-sqlite3';
+import pg from 'pg';
+import { betterAuth } from 'better-auth';
+import { getMigrations } from 'better-auth/db/migration';
+import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
+import { admin } from 'better-auth/plugins';
+import type { AccountSummary } from '@elsewhere/character-interfaces';
+export type { AccountSummary } from '@elsewhere/character-interfaces';
+export { authOptionsFromEnvironment } from './environment';
+export interface LocalAuthOptions {
+  dataDirectory: string;
+  baseURL: string;
+  trustedOrigins: string[];
+  secret?: string;
+  databaseUrl?: string;
+  adminUserIds?: string[];
+  production?: boolean;
+  sendVerificationEmail?: (message: { email: string; name: string; url: string }) => Promise<void>;
+}
+
+/** Separate from the owner token. Neither credential is passed into Hubert or a public response. */
+function authSecret(directory: string, supplied?: string): string {
+  if (supplied !== undefined) {
+    if (supplied.length < 32) throw new Error('BETTER_AUTH_SECRET must be at least 32 characters.');
+    return supplied;
+  }
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const file = join(directory, 'auth-secret');
+  if (existsSync(file)) {
+    chmodSync(file, 0o600);
+    const secret = readFileSync(file, 'utf8').trim();
+    if (secret.length < 32)
+      throw new Error(
+        'The saved auth secret is invalid. Restore it before starting authentication.',
+      );
+    return secret;
+  }
+  const secret = randomBytes(48).toString('base64url');
+  try {
+    writeFileSync(file, secret, { mode: 0o600, flag: 'wx' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return authSecret(directory);
+    throw error;
+  }
+  return secret;
+}
+
+/** Real Better Auth with its own database and signed HTTP-only session cookies. */
+export async function createLocalAuth(options: LocalAuthOptions) {
+  const base = new URL(options.baseURL);
+  if (
+    !['http:', 'https:'].includes(base.protocol) ||
+    base.username ||
+    base.password ||
+    base.search ||
+    base.hash
+  )
+    throw new Error('Auth baseURL must be an HTTP(S) URL without credentials, query or fragment.');
+  const production = options.production ?? process.env.NODE_ENV === 'production';
+  if (production && base.protocol !== 'https:')
+    throw new Error('Production authentication requires an HTTPS baseURL.');
+  if (production && !options.secret)
+    throw new Error('Production authentication requires an explicit BETTER_AUTH_SECRET.');
+  const secret = authSecret(options.dataDirectory, options.secret);
+  mkdirSync(options.dataDirectory, { recursive: true, mode: 0o700 });
+  const sqlite = options.databaseUrl
+    ? undefined
+    : new Database(join(options.dataDirectory, 'auth.sqlite'));
+  sqlite?.pragma('journal_mode = WAL');
+  sqlite?.pragma('foreign_keys = ON');
+  if (sqlite) chmodSync(join(options.dataDirectory, 'auth.sqlite'), 0o600);
+  const pool = options.databaseUrl
+    ? new pg.Pool({ connectionString: options.databaseUrl, max: 3 })
+    : undefined;
+  const explicitAdmins = new Set(options.adminUserIds ?? []);
+  // Local development has no email sender. Public password auth remains off until delivery exists.
+  const passwordAuthEnabled = !production || Boolean(options.sendVerificationEmail);
+  const allowedOrigins = new Set([base.origin, ...options.trustedOrigins]);
+  const auth = betterAuth({
+    appName: 'Elsewhere',
+    baseURL: base.origin,
+    basePath: '/api/auth',
+    secret,
+    database: pool ?? sqlite!,
+    trustedOrigins: [...allowedOrigins],
+    logger: { disabled: true },
+    user: { modelName: 'elsewhere_auth_user' },
+    session: {
+      modelName: 'elsewhere_auth_session',
+      expiresIn: 7 * 24 * 60 * 60,
+      updateAge: 24 * 60 * 60,
+      cookieCache: { enabled: false },
+    },
+    account: { modelName: 'elsewhere_auth_account' },
+    verification: { modelName: 'elsewhere_auth_verification' },
+    emailAndPassword: {
+      enabled: passwordAuthEnabled,
+      requireEmailVerification: production,
+      minPasswordLength: 12,
+      maxPasswordLength: 128,
+    },
+    ...(options.sendVerificationEmail
+      ? {
+          emailVerification: {
+            sendOnSignUp: true,
+            sendVerificationEmail: async ({
+              user,
+              url,
+            }: {
+              user: { email: string; name: string };
+              url: string;
+            }) => {
+              await options.sendVerificationEmail!({ email: user.email, name: user.name, url });
+            },
+          },
+        }
+      : {}),
+    rateLimit: {
+      enabled: true,
+      window: 60,
+      max: 30,
+      storage: 'database',
+      modelName: 'elsewhere_auth_rate_limit',
+    },
+    advanced: {
+      useSecureCookies: production,
+      cookiePrefix: 'elsewhere',
+      defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', secure: production },
+    },
+    plugins: [
+      admin({ defaultRole: 'user', adminRoles: ['admin'], adminUserIds: [...explicitAdmins] }),
+    ],
+  });
+  try {
+    const migration = await getMigrations(auth.options);
+    await migration.runMigrations();
+    await auth.$context;
+  } catch (error) {
+    sqlite?.close();
+    await pool?.end();
+    throw error;
+  }
+  // World administration grants no authority over other people's accounts. Keep the admin
+  // plugin's role schema while deliberately withholding all of its public account-admin APIs.
+  const webHandler = async (request: Request): Promise<Response> => {
+    const failure = (status: number, message: string) => Response.json({ message }, { status });
+    let path: string;
+    try {
+      path = decodeURIComponent(new URL(request.url).pathname);
+    } catch {
+      return failure(400, 'Invalid authentication route.');
+    }
+    if (path.includes('%') || path.includes('\\') || !/^\/api\/auth\/[a-zA-Z0-9/_-]+$/.test(path))
+      return failure(400, 'Invalid authentication route.');
+    if (path === '/api/auth/admin' || path.startsWith('/api/auth/admin/'))
+      return failure(403, 'Account-administration endpoints are not enabled.');
+    const origin = request.headers.get('origin');
+    if (origin && !allowedOrigins.has(origin)) return failure(403, 'Origin is not permitted.');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !origin)
+      return failure(403, 'A trusted origin is required for authentication changes.');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+      if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))
+        return failure(415, 'Use application/json.');
+      if (Number(request.headers.get('content-length') ?? 0) > 65_536)
+        return failure(413, 'Authentication request exceeds 64 KB.');
+      const reader = request.body?.getReader();
+      const chunks: Uint8Array[] = [];
+      let length = 0;
+      try {
+        if (reader)
+          while (true) {
+            const item = await reader.read();
+            if (item.done) break;
+            length += item.value.byteLength;
+            if (length > 65_536) {
+              await reader.cancel();
+              return failure(413, 'Authentication request exceeds 64 KB.');
+            }
+            chunks.push(item.value);
+          }
+      } catch {
+        return failure(400, 'Authentication request was interrupted.');
+      }
+      return auth.handler(
+        new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+          body: Buffer.concat(chunks),
+        }),
+      );
+    }
+    return auth.handler(request);
+  };
+  const nodeHandler = toNodeHandler(webHandler);
+  async function getSession(req: IncomingMessage) {
+    return auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+      query: { disableCookieCache: true },
+    });
+  }
+  async function getAccount(req: IncomingMessage): Promise<AccountSummary | null> {
+    const session = await getSession(req);
+    if (!session?.user) return null;
+    const user = session.user;
+    if (user.banned) return null;
+    const allowed = user.role?.split(',').includes('admin') || explicitAdmins.has(user.id);
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      role: allowed ? 'admin' : 'user',
+      isWorldAdmin: Boolean(allowed),
+    };
+  }
+  async function isWorldAdmin(req: IncomingMessage) {
+    return (await getAccount(req))?.isWorldAdmin ?? false;
+  }
+  // Deliberately not mounted as an HTTP endpoint. Only a trusted out-of-band owner command may call it.
+  async function setWorldAdmin(userId: string, enabled = true): Promise<void> {
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(userId)) throw new Error('Invalid user identifier.');
+    if (pool) {
+      const result = await pool.query(
+        'UPDATE "elsewhere_auth_user" SET "role"=$1,"updatedAt"=$2 WHERE "id"=$3',
+        [enabled ? 'admin' : 'user', new Date(), userId],
+      );
+      if (result.rowCount !== 1) throw new Error('Account not found.');
+    } else {
+      const result = sqlite!
+        .prepare('UPDATE "elsewhere_auth_user" SET "role"=?,"updatedAt"=? WHERE "id"=?')
+        .run(enabled ? 'admin' : 'user', Date.now(), userId);
+      if (result.changes !== 1) throw new Error('Account not found.');
+    }
+  }
+  return {
+    handle: async (req: IncomingMessage, res: ServerResponse) => nodeHandler(req, res),
+    webHandler,
+    getSession,
+    getAccount,
+    isWorldAdmin,
+    setWorldAdmin,
+    passwordAuthEnabled,
+    requiresEmailVerification: production,
+    close: async () => {
+      sqlite?.close();
+      await pool?.end();
+    },
+  };
+}
+export type LocalAuth = Awaited<ReturnType<typeof createLocalAuth>>;

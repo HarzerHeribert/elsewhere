@@ -1,0 +1,184 @@
+{
+  "provider": "Poly Haven",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "legalTermsUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "downloadedAt": "2026-11-08",
+  "resolution": "2K",
+  "normalConvention": "OpenGL (+Y)",
+  "totalBytes": 19475849,
+  "assets": [
+    {
+      "id": "stone_wall",
+      "title": "Stone Wall",
+      "tileMetres": [
+        2,
+        2
+      ],
+      "authors": [
+        "Dario Barresi (processing)",
+        "Charlotte Baglioni (photography)"
+      ]
+    },
+    {
+      "id": "weathered_planks",
+      "title": "Weathered Planks",
+      "tileMetres": [
+        2,
+        2
+      ],
+      "authors": [
+        "Dario Barresi (processing)",
+        "Dimitrios Savva (photography)"
+      ]
+    },
+    {
+      "id": "roof_tiles_14",
+      "title": "Roof Tiles 14",
+      "tileMetres": [
+        1.5,
+        1.5
+      ],
+      "authors": [
+        "Rob Tuytel"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "id": "stone_wall",
+      "channel": "Diffuse",
+      "url": "/assets/polyhaven/materials/stone_wall_diff_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/stone_wall",
+      "metadataUrl": "https://api.polyhaven.com/files/stone_wall",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_wall/stone_wall_diff_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "sRGB",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 3180415,
+      "upstreamMd5": "df58e460d6662a67cdee60c9aacdd023",
+      "sha256": "131494c5be0531bb230d4e47c21750d94d44555a66396d2b21da962ef635c0c2"
+    },
+    {
+      "id": "stone_wall",
+      "channel": "nor_gl",
+      "url": "/assets/polyhaven/materials/stone_wall_nor_gl_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/stone_wall",
+      "metadataUrl": "https://api.polyhaven.com/files/stone_wall",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_wall/stone_wall_nor_gl_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "linear",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 4198819,
+      "upstreamMd5": "c67918d84b0c5da26b03f46c0016075b",
+      "sha256": "fd6f6c1a27c741fb2a2c680c76a32ba5812e4ca03c94132d163212efaeed9b60"
+    },
+    {
+      "id": "stone_wall",
+      "channel": "Rough",
+      "url": "/assets/polyhaven/materials/stone_wall_rough_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/stone_wall",
+      "metadataUrl": "https://api.polyhaven.com/files/stone_wall",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/stone_wall/stone_wall_rough_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "linear",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 1222030,
+      "upstreamMd5": "5e5647897908a5fb917439180689ecb6",
+      "sha256": "0e4512383fcdef01c0e4f85b7caaea09ec277aeb056f0723be88ef07785dd034"
+    },
+    {
+      "id": "weathered_planks",
+      "channel": "Diffuse",
+      "url": "/assets/polyhaven/materials/weathered_planks_diff_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/weathered_planks",
+      "metadataUrl": "https://api.polyhaven.com/files/weathered_planks",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/weathered_planks/weathered_planks_diff_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "sRGB",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 2385451,
+      "upstreamMd5": "dd5f91445812117d216ed962c2607b7d",
+      "sha256": "e763f1257acdfdbb31764c9ec9d480fd4efa5cc008f8b63d73a916d53d938942"
+    },
+    {
+      "id": "weathered_planks",
+      "channel": "nor_gl",
+      "url": "/assets/polyhaven/materials/weathered_planks_nor_gl_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/weathered_planks",
+      "metadataUrl": "https://api.polyhaven.com/files/weathered_planks",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/weathered_planks/weathered_planks_nor_gl_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "linear",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 3184832,
+      "upstreamMd5": "db8ad9ad21c8de018e009f9c27c2a63d",
+      "sha256": "d851c42bb0dbcf21012e9ca1ac308b04bc9071a4e87118ccd79eec762fd030dc"
+    },
+    {
+      "id": "weathered_planks",
+      "channel": "Rough",
+      "url": "/assets/polyhaven/materials/weathered_planks_rough_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/weathered_planks",
+      "metadataUrl": "https://api.polyhaven.com/files/weathered_planks",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/weathered_planks/weathered_planks_rough_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "linear",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 989704,
+      "upstreamMd5": "8aa6ccbfa605d3d91fae804a7a441db5",
+      "sha256": "964c154545e1ac4e1cb4b2ba60960a1effa2c56c31a2c300bf78fcc499b17c52"
+    },
+    {
+      "id": "roof_tiles_14",
+      "channel": "Diffuse",
+      "url": "/assets/polyhaven/materials/roof_tiles_14_diff_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/roof_tiles_14",
+      "metadataUrl": "https://api.polyhaven.com/files/roof_tiles_14",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/roof_tiles_14/roof_tiles_14_diff_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "sRGB",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 1389810,
+      "upstreamMd5": "4870e0f07b7b36c421fbf4879563e73d",
+      "sha256": "f96246aee8e86f5938734d7cdf8fbeb848fa56a1ce040106d8c02a21fbf833ae"
+    },
+    {
+      "id": "roof_tiles_14",
+      "channel": "nor_gl",
+      "url": "/assets/polyhaven/materials/roof_tiles_14_nor_gl_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/roof_tiles_14",
+      "metadataUrl": "https://api.polyhaven.com/files/roof_tiles_14",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/roof_tiles_14/roof_tiles_14_nor_gl_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "linear",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 1673189,
+      "upstreamMd5": "24110fa17984d61ff7a2e0a1b490be3a",
+      "sha256": "c1b91e1b1c799ec7ee490d3f28e408d4c0558f59e1cdadfd52312859c54fc529"
+    },
+    {
+      "id": "roof_tiles_14",
+      "channel": "Rough",
+      "url": "/assets/polyhaven/materials/roof_tiles_14_rough_2k.jpg",
+      "sourceUrl": "https://polyhaven.com/a/roof_tiles_14",
+      "metadataUrl": "https://api.polyhaven.com/files/roof_tiles_14",
+      "downloadUrl": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/roof_tiles_14/roof_tiles_14_rough_2k.jpg",
+      "license": "CC0-1.0",
+      "colorSpace": "linear",
+      "width": 2048,
+      "height": 2048,
+      "bytes": 1251599,
+      "upstreamMd5": "e56f7773d86315d3c382e1c182b3fec4",
+      "sha256": "96828b7ba4ca712b9fada671dfb884fc6951bcf56fded0a401c7a3de4afed361"
+    }
+  ]
+}

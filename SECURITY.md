@@ -1,0 +1,50 @@
+# Local security boundaries
+
+The default app binds to loopback and performs no paid model calls, shell execution, deployments or wallet operations. Those defaults are part of the prototype's safety boundary.
+
+## Enforced in this version
+
+- Owner actions require a generated bearer credential. Browser origins are checked; CORS is not wildcarded.
+- Owner secrets are generated in `.data/owner-token` with restrictive permissions, or provided explicitly through `ADMIN_TOKEN`. They are excluded from public snapshots and client bundles.
+- Public responses use explicit projections. Raw visitor messages, private character state, provider credentials and arbitrary extra fields are not serialized into public memory or world views.
+- Guestbook input is length-limited, schema-checked and rate-limited. It cannot assert verified tool outcomes or grant permissions.
+- Model output is parsed against a closed action schema and separately authorized. Arbitrary shell actions are invalid. External delegation and unreviewed public speech are disabled.
+- Simulation time, mood effects and resource allowances are controlled outside the model.
+- Rest gains energy through elapsed time. Repeated commands and memory recall cannot mint instant energy or happiness.
+- State writes are atomic and version-checked. A write failure halts mutation and restores the last committed view; it does not continue acting from unsaved state.
+- Model attempts are reserved durably before dispatch. Simulation reset preserves real usage counters. No provider request occurs when its reservation cannot be saved.
+- SVG artifacts are generated from trusted application data, served with an isolated content policy, and addressed through restricted identifiers.
+- Visitor avatars have separate short-lived credentials and an exploration-only action schema. A visitor token cannot authorize owner operations, affect Hubert or control another visitor. Tokens are excluded from public world snapshots.
+- Wishes use wall-clock request limits and a reset-safe ledger. Fulfillment requires an authenticated owner operation and evidence of the actual requested world feature. Wish text cannot execute updates or spend resources.
+- The native Ollama adapter connects only to loopback, sends no API credential, disables redirects and validates constrained actions. The installed local model does not receive personal files, browser sessions or cloud credentials.
+- Better Auth stores accounts separately, uses HttpOnly session cookies, validates trusted origins, bounds request bodies and does not grant administration on signup. Public account summaries are self-only. Signed-in guestbook identity comes from the server session, never a submitted user identifier.
+- World-admin database roles are granted through a trusted local operator helper. Better Auth account-administration endpoints, including impersonation, are blocked even for world admins. A world role gives no financial or model-tool capability.
+- Production authentication requires an explicit signing secret and HTTPS; password authentication is disabled until a verification delivery callback exists. Local signup leaves email unverified and sends no mail.
+- A shared connector contract and pure preflight validate character/operator/world binding, revision, resource grants, review mode and strict operation inputs. They are not wired into the planner or an execution broker, and perform no external I/O. An eligible preflight is not execution authorization. See [connector design](docs/architecture/next-systems.md#character-connectors-and-real-world-services) for the durable dispatch, budget, approval and isolation work required before live services.
+- `pnpm run setup` accepts keys only through an interactive terminal with hidden input and no readline history. It performs no provider requests and writes separate, schema-validated, owner-only local files. It refuses symlinked/shared directories and symlinked/hard-linked/shared credential files, bounds record size, serializes writers with a per-profile lock and atomically replaces confirmed records. Stripe staging accepts only restricted sandbox-key formats; format checks do not verify provider validity or scope.
+- `pnpm dev:configured` explicitly loads only Hubert's model profile into its API child. The web child has model and known host-secret variables removed; staged Stripe/email profiles are not loaded. Ordinary dev/test launchers do not discover these records.
+- The production profile refuses missing explicit owner/auth/ingress secrets, non-HTTPS browser origins and ephemeral SQLite. It checks a private ingress credential before trusting Vercel's client-address header; direct-origin requests are rejected except liveness. Production does not admit localhost browser origins.
+- Production PostgreSQL ownership is a session advisory lock. Fenced state operations use its same held connection, and a disconnected owner cannot reconnect and keep writing. Standby processes expose only liveness until ownership and initialization complete. Controller work drains before normal release.
+- Account verification can use a dedicated bounded Resend sender, with strict origin/path checks and idempotency keys. Production signup remains disabled when that sender is unconfigured. Test profiles clear account-mail settings and never inherit real email delivery.
+- The non-root backend image uses an allowlisted build context, a bundled entry point and production dependencies. The GitHub CI template uses read-only permissions, pinned actions, no persisted checkout credential and isolated fixture services. `pnpm audit:public` checks staged/tracked files as well as new candidates and withholds matched values.
+- Private world export/import includes an integrity hash, bounded/private-file checks and real-controller validation without ticking. Import rejects populated destinations and uses exclusive PostgreSQL ownership. It never overwrites an existing hosted life.
+
+## Important limits
+
+- Do not expose this development server to the internet unchanged. Development servers, owner session handling, input abuse controls and service credentials need a deployment review.
+- HTTP limits are process-local. Valid visitor requests use an authenticated session bucket; account-attributed messages and world-admin actions use the verified actor. Anonymous registration, guest notes and authentication attempts still depend on the socket address, so proxied clients can share those limits. Public deployments need a trusted proxy/client-identity policy and shared admission controls.
+- Visitor sessions expire after five minutes without authenticated activity, with a thirty-minute hard lifetime. Passive world polling does not keep abandoned sessions alive. The anonymous pool is still finite and active clients can exhaust it; public admission/fairness controls remain deployment work.
+- Owner credentials are bearer credentials. Anyone possessing one can use the owner's controls. Browser session storage is not protection against same-origin script compromise. Better Auth session cookies are HttpOnly, but a same-origin script compromise could still make authenticated requests.
+- Prompts and text classifiers are not security boundaries. The local classifier is intentionally simple, not a robust abuse or sentiment model.
+- Optional remote model context includes recent visitor notes. The interface discloses this; provider retention and privacy settings need review before public use.
+- Call-count limits are not currency caps. Actual provider pricing is not inferred. Provider-side billing limits remain necessary.
+- SQLite/PostgreSQL snapshots protect restart continuity; this version does not supply encrypted offsite backups, point-in-time recovery or a full external-action outbox.
+- Local/development controllers still rely on optimistic writes to halt stale writers. The production PostgreSQL profile additionally enforces exclusive ownership; it does not implement active/active serving. Temporary rollout overlap can produce a brief readiness gap.
+- Visitor sessions are process-local and capped at 64; they are ephemeral, not production multi-server presence infrastructure.
+- Character memories and recently processed IDs are prototype data structures, not a production retention/erasure system.
+- No external worker or wallet is enabled. Adding one requires a separately enforced sandbox, scoped capabilities, protected credential/signing service, resource reservation and verified result handling.
+- Local setup records are plaintext protected by macOS/Linux filesystem permissions, not an encrypted vault or protection against software running as the same user. They must stay out of worker workspaces, source/artifact uploads and shared backups. Hosted secret delivery is not implemented. A crashed setup writer can leave a `.lock` file that needs operator inspection; deleting a local key does not revoke it at the provider.
+- Deployment templates have not been applied remotely. Vercel's route/secret expansion, real client-address forwarding, public cookies and operator access require hosted staging checks. Cloudflare-proxied DNS is not enabled by this design. Repository rule JSON is a template until applied; its initial solo-maintainer review count is zero, with required CI and separate human-controlled release.
+- World transfer is not a complete database backup or authentication-account migration. Integrity hashes do not authenticate a backup's author. Restore only trusted operator snapshots; managed database backups and an offsite recovery/retention drill remain necessary before public launch.
+
+The automated tests cover specific boundaries and failure cases; they do not prove the application cannot be compromised.
