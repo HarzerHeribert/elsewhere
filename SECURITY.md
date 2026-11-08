@@ -28,6 +28,8 @@ The default app binds to loopback and performs no paid model calls, shell execut
 - Account verification can use a dedicated bounded Resend sender, with strict origin/path checks and idempotency keys. Production signup remains disabled when that sender is unconfigured. Test profiles clear account-mail settings and never inherit real email delivery.
 - The non-root backend image uses an allowlisted build context, a bundled entry point and production dependencies. The GitHub CI template uses read-only permissions, pinned actions, no persisted checkout credential and isolated fixture services. `pnpm audit:public` checks staged/tracked files as well as new candidates and withholds matched values.
 - Private world export/import includes an integrity hash, bounded/private-file checks and real-controller validation without ticking. Import rejects populated destinations and uses exclusive PostgreSQL ownership. It never overwrites an existing hosted life.
+- Routed model profiles are host-owned, capability/privacy filtered and strictly validated; credential values cannot appear in their schema. Each dispatched attempt has a durable call/cost reservation, including explicit failover. Missing usage stays charged conservatively, malformed ledgers fail closed, and settlement is idempotent. Resets preserve this ledger. Model selection never grants tools or bypasses world authorization.
+- Exact model-output caching is limited to versioned pure workloads and partitioned by owner, world, character and recipient audience. Full input, model/policy and contract versions affect keys, and values are revalidated on hits. The current decision loop always obtains fresh actions. Cloudflare Gateway action requests bypass response caching, gateway retries and gateway body logging; native provider prefix caching has separate retention rules.
 
 ## Important limits
 
@@ -38,6 +40,7 @@ The default app binds to loopback and performs no paid model calls, shell execut
 - Prompts and text classifiers are not security boundaries. The local classifier is intentionally simple, not a robust abuse or sentiment model.
 - Optional remote model context includes recent visitor notes. The interface discloses this; provider retention and privacy settings need review before public use.
 - Call-count limits are not currency caps. Actual provider pricing is not inferred. Provider-side billing limits remain necessary.
+- Routed currency allowances use operator-supplied conservative rates, not authenticated invoices or live price discovery. Provider overages, unreported upstream retries, changed rates and cache-write fees still require provider-side limits and hosted validation. Default exact caches/affinity metrics are process-local; they are not durable memories or shared authorization stores.
 - SQLite/PostgreSQL snapshots protect restart continuity; this version does not supply encrypted offsite backups, point-in-time recovery or a full external-action outbox.
 - Local/development controllers still rely on optimistic writes to halt stale writers. The production PostgreSQL profile additionally enforces exclusive ownership; it does not implement active/active serving. Temporary rollout overlap can produce a brief readiness gap.
 - Visitor sessions are process-local and capped at 64; they are ephemeral, not production multi-server presence infrastructure.

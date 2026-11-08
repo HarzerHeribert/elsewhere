@@ -40,6 +40,8 @@ Open the private link it prints. It supplies a generated owner credential throug
 
 No `.env` file is needed. Copy `.env.example` to `.env` only to override settings. Credentials and lived state belong in ignored local storage, never Git. Node currently prints an experimental warning for its built-in SQLite module. World snapshots use that module; Better Auth uses its own SQLite adapter. The local profile needs no Docker or external database.
 
+For multiple models, the optional `routed` profile selects approved models by workload, capability, quality, latency and conservative cost. It preserves stable prompt prefixes and supports Cloudflare session affinity or explicit compatible-provider cache keys. Every actual attempt reserves allowance durably; fresh actions are never replayed from a response cache. See [routing configuration and cache boundaries](docs/architecture/deployment.md#workload-model-routing-and-caches). Only the next-action consumer is integrated today; other workload policies are ready for their future consumers. The default local launch makes no paid calls.
+
 ## Guided private setup
 
 The offline [HTML setup guide](docs/setup/index.html) explains what to create in each provider account, which scopes to choose and which connections are still planned. Open it on macOS with `pnpm run setup guide`, or open the HTML file directly in a browser. It has no credential form or external assets.

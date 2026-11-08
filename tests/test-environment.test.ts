@@ -30,6 +30,8 @@ it('isolates both inherited configuration and an operator dotenv file in actual 
         BETTER_AUTH_SECRET: 'operator-sentinel-secret-do-not-inherit',
         AUTH_ADMIN_USER_IDS: 'operator-sentinel-admin',
         MODEL_API_KEY: 'operator-sentinel-key',
+        MODEL_ROUTING_JSON: 'operator-routing-sentinel',
+        MODEL_CF_INFERENCE_KEY: 'operator-routing-key-sentinel',
         AUTH_EMAIL_API_KEY: 'operator-mail-key',
         AUTH_EMAIL_FROM: 'operator@example.com',
         API_PROXY_SECRET: 'operator-ingress-key',
@@ -64,6 +66,8 @@ it('isolates both inherited configuration and an operator dotenv file in actual 
       DATA_DIR: join(directory, 'test-data'),
     });
     expect(environment.BETTER_AUTH_SECRET).not.toBe('operator-sentinel-secret-do-not-inherit');
+    expect(environment.MODEL_ROUTING_JSON).toBeUndefined();
+    expect(environment.MODEL_CF_INFERENCE_KEY).toBeUndefined();
     expect(environment.BETTER_AUTH_SECRET.length).toBeGreaterThanOrEqual(32);
     expect(environment.BETTER_AUTH_SECRET).not.toBe(environment.ADMIN_TOKEN);
   } finally {

@@ -12,6 +12,8 @@ import {
 import { ownerToken } from '../packages/security/src/index';
 import { CompatibleDecisionProvider } from '../packages/adapters/src/models/compatible';
 import { OllamaDecisionProvider } from '../packages/adapters/src/models/ollama';
+import { RoutedDecisionProvider } from '../packages/adapters/src/models/routed';
+import { parseRoutingConfig } from '../packages/models/src/config';
 import { authOptionsFromEnvironment, createLocalAuth } from '../packages/auth/src/index';
 import { verificationSenderFromEnvironment } from '../packages/auth/src/verification-mail';
 
@@ -86,8 +88,23 @@ async function initialize() {
   );
   if (lifetime.signal.aborted) return;
   const onUsage = (input: number, output: number) => controller?.addUsage(input, output);
-  const model =
-    config.MODEL_PROVIDER === 'ollama'
+  const routing =
+    config.MODEL_PROVIDER === 'routed'
+      ? parseRoutingConfig(process.env.MODEL_ROUTING_JSON, config.production)
+      : undefined;
+  let routedBudget: ReturnType<ElsewhereController['modelBudget']> | undefined;
+  const budget = () => (routedBudget ??= controller!.modelBudget(routing!));
+  const model = routing
+    ? new RoutedDecisionProvider(
+        routing,
+        {
+          reserve: (estimate) => budget().reserve(estimate),
+          settle: (id, usage, failed) => budget().settle(id, usage, failed),
+        },
+        process.env,
+        { production: config.production },
+      )
+    : config.MODEL_PROVIDER === 'ollama'
       ? new OllamaDecisionProvider({
           baseUrl: process.env.OLLAMA_BASE_URL,
           model: process.env.MODEL_NAME ?? 'qwen3:4b',
