@@ -126,7 +126,7 @@ On environments that restrict loopback sockets, permit localhost binding for HTT
 
 ## Public deployment foundation
 
-The public source repository is [HarzerHeribert/elsewhere](https://github.com/HarzerHeribert/elsewhere). The [deployment guide](docs/architecture/deployment.md) describes the prepared Vercel frontend, private ingress to the Render Node image, PostgreSQL ownership/handoff, repository controls and state transfer. Cloud resources have not been provisioned. Operator hosting destinations and secrets must be selected first; both provider templates disable automatic Git deployment.
+The public source repository is [HarzerHeribert/elsewhere](https://github.com/HarzerHeribert/elsewhere). **Cloudflare is the preferred production target:** Workers/Static Assets, a Durable Object world clock, D1 accounts and R2 storage. Those runtime adapters still need implementation and validation. The [deployment guide](docs/architecture/deployment.md) records the migration, account/API setup and the existing tested Vercel/Render/PostgreSQL alternative, including ownership/handoff and state transfer. Cloud resources have not been provisioned. Vercel remains useful for isolated previews and future resident-built apps. Both existing provider templates disable automatic Git deployment.
 
 The [initial GitHub CI run](https://github.com/HarzerHeribert/elsewhere/actions/runs/42516776712) passed both required jobs on clean Linux runners, including the production-image handoff. Main requires checked pull requests; force pushes and deletion are blocked. Only the human operator has repository write access. The solo-maintainer ruleset requires no independent approval; production releases remain separately controlled by the operator.
 

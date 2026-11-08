@@ -55,4 +55,6 @@ Do not merge these distinct records or scopes merely because their names overlap
 
 ## Operator resources
 
+Cloudflare is the preferred production host for the world runtime, storage and ordinary inference. Vercel remains a secondary host for isolated previews and future resident apps; the tested Docker/PostgreSQL deployment remains portable. The [deployment guide](deployment.md#preferred-cloudflare-deployment) distinguishes that planned native adapter from the existing implementation. The public repo stays under the operator's personal GitHub account.
+
 Personal credit allowances and grant details are preserved in the ignored operator resource notes, outside the public source release. Provider adapters do not assume grant eligibility or current balances. Resource attribution and real spending limits remain separate from the simulation's fictional needs and materials.
