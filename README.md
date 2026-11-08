@@ -10,7 +10,7 @@ The [feature and ownership ledger](docs/architecture/features.md) distinguishes 
 
 ## Run locally
 
-Requirements: Node.js **22.13+** (tested with 22.22.3) and pnpm **11.1.2**. Docker and API keys are not required.
+Requirements: Node.js **22.x, at least 22.13** (tested with 22.22.3) and pnpm **11.1.2**. Docker and API keys are not required.
 
 ```sh
 pnpm install
@@ -127,6 +127,8 @@ On environments that restrict loopback sockets, permit localhost binding for HTT
 ## Public deployment foundation
 
 The public source repository is [HarzerHeribert/elsewhere](https://github.com/HarzerHeribert/elsewhere). The [deployment guide](docs/architecture/deployment.md) describes the prepared Vercel frontend, private ingress to the Render Node image, PostgreSQL ownership/handoff, repository controls and state transfer. Cloud resources have not been provisioned. Operator hosting destinations and secrets must be selected first; both provider templates disable automatic Git deployment.
+
+The [initial GitHub CI run](https://github.com/HarzerHeribert/elsewhere/actions/runs/42516776712) passed both required jobs on clean Linux runners, including the production-image handoff. Main requires checked pull requests; force pushes and deletion are blocked. Only the human operator has repository write access. The solo-maintainer ruleset requires no independent approval; production releases remain separately controlled by the operator.
 
 ```sh
 pnpm audit:public        # Candidate files/private-path and targeted credential checks; no upload

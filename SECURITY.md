@@ -1,4 +1,4 @@
-# Local security boundaries
+# Security boundaries
 
 The default app binds to loopback and performs no paid model calls, shell execution, deployments or wallet operations. Those defaults are part of the prototype's safety boundary.
 
@@ -32,7 +32,7 @@ The default app binds to loopback and performs no paid model calls, shell execut
 ## Important limits
 
 - Do not expose this development server to the internet unchanged. Development servers, owner session handling, input abuse controls and service credentials need a deployment review.
-- HTTP limits are process-local. Valid visitor requests use an authenticated session bucket; account-attributed messages and world-admin actions use the verified actor. Anonymous registration, guest notes and authentication attempts still depend on the socket address, so proxied clients can share those limits. Public deployments need a trusted proxy/client-identity policy and shared admission controls.
+- HTTP limits are process-local. Valid visitor requests use an authenticated session bucket; account-attributed messages and world-admin actions use the verified actor. Production accepts Vercel's single client-address header only after validating the private ingress secret; development uses the socket address. Actual hosted forwarding, cross-rollout counters and shared admission controls still need validation before public launch.
 - Visitor sessions expire after five minutes without authenticated activity, with a thirty-minute hard lifetime. Passive world polling does not keep abandoned sessions alive. The anonymous pool is still finite and active clients can exhaust it; public admission/fairness controls remain deployment work.
 - Owner credentials are bearer credentials. Anyone possessing one can use the owner's controls. Browser session storage is not protection against same-origin script compromise. Better Auth session cookies are HttpOnly, but a same-origin script compromise could still make authenticated requests.
 - Prompts and text classifiers are not security boundaries. The local classifier is intentionally simple, not a robust abuse or sentiment model.
@@ -44,7 +44,7 @@ The default app binds to loopback and performs no paid model calls, shell execut
 - Character memories and recently processed IDs are prototype data structures, not a production retention/erasure system.
 - No external worker or wallet is enabled. Adding one requires a separately enforced sandbox, scoped capabilities, protected credential/signing service, resource reservation and verified result handling.
 - Local setup records are plaintext protected by macOS/Linux filesystem permissions, not an encrypted vault or protection against software running as the same user. They must stay out of worker workspaces, source/artifact uploads and shared backups. Hosted secret delivery is not implemented. A crashed setup writer can leave a `.lock` file that needs operator inspection; deleting a local key does not revoke it at the provider.
-- Deployment templates have not been applied remotely. Vercel's route/secret expansion, real client-address forwarding, public cookies and operator access require hosted staging checks. Cloudflare-proxied DNS is not enabled by this design. Repository rule JSON is a template until applied; its initial solo-maintainer review count is zero, with required CI and separate human-controlled release.
+- Hosting templates have not been applied remotely. Vercel's route/secret expansion, real client-address forwarding, public cookies and operator access require hosted staging checks. Cloudflare-proxied DNS is not enabled by this design. The repository ruleset is active on main: checked pull requests, no force pushes/deletion and no bypass actors. Its solo-maintainer review count is zero, with required CI and separate human-controlled release. Only the operator has repository write access; repository administrators can change their own settings.
 - World transfer is not a complete database backup or authentication-account migration. Integrity hashes do not authenticate a backup's author. Restore only trusted operator snapshots; managed database backups and an offsite recovery/retention drill remain necessary before public launch.
 
 The automated tests cover specific boundaries and failure cases; they do not prove the application cannot be compromised.
