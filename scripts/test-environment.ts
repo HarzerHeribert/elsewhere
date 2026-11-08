@@ -15,7 +15,10 @@ export function isolatedAppEnvironment(
   parent: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
   const inherited = Object.fromEntries(
-    Object.entries(parent).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    Object.entries(parent).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && !entry[0].startsWith('MODEL_'),
+    ),
   );
   const webOrigin = `http://127.0.0.1:${options.webPort ?? options.port}`;
   return {

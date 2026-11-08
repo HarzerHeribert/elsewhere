@@ -29,6 +29,19 @@ import {
   type HubertState,
 } from '@elsewhere/hubert';
 import type { DecisionProvider } from '@elsewhere/character-runtime';
+import {
+  assertRoutingLedger,
+  reserveRoutingBudget,
+  settleRoutingBudget,
+  type RoutingLedger,
+} from '../packages/models/src/budget';
+import type {
+  AttemptEstimate,
+  ModelBudgetPort,
+  ModelProfile,
+  ModelUsage,
+  RoutingConfig,
+} from '../packages/models/src/contracts';
 import type { SnapshotStore } from '../packages/persistence/src/index';
 import {
   authorizeCommand,
@@ -54,6 +67,7 @@ export interface ControllerState {
     modelStatus: string;
   };
   modelAllowance: ModelAllowance;
+  modelRouting?: RoutingLedger;
   weatherSamples: WeatherSample[];
   artifactCreatedAt: number | null;
   artifactSamples?: WeatherSample[];
@@ -109,6 +123,7 @@ export class ElsewhereController {
   private closing = false;
   private closePromise: Promise<void> | undefined;
   private lastCommitted: ControllerState | undefined;
+  private modelDispatchActive = false;
   private readonly wallNow: () => number;
   constructor(
     private readonly store: SnapshotStore<ControllerState>,
@@ -126,6 +141,7 @@ export class ElsewhereController {
       )
         throw new Error('Unsupported persisted state. Back up .data before migrating it.');
       this.state = saved.value;
+      if (this.state.modelRouting) assertRoutingLedger(this.state.modelRouting);
       this.version = saved.version;
       this.lastCommitted = structuredClone(saved.value);
       const upgraded = withResidentAppearance(upgradeWorldLayout(this.state.world));
@@ -201,7 +217,10 @@ export class ElsewhereController {
         startedAt: s.runtime.startedAt,
         simulatedAt: s.runtime.simulatedAt,
         costUsd: 0,
-        costKnown: !this.options.modelProvider || this.options.modelProvider.id === 'ollama',
+        costKnown:
+          !this.options.modelProvider ||
+          this.options.modelProvider.id === 'ollama' ||
+          this.options.modelProvider.localOnly === true,
         modelCalls: s.modelAllowance.calls,
         modelStatus: this.halted
           ? 'Controller halted after a persistence failure. Check storage and restart.'
@@ -213,6 +232,63 @@ export class ElsewhereController {
   addUsage(input: number, output: number) {
     this.state.modelAllowance.inputTokens += input;
     this.state.modelAllowance.outputTokens += output;
+  }
+  /** Only an owned, serialized decision can reserve spending; never exposed as an HTTP tool. */
+  modelBudget(config: RoutingConfig): ModelBudgetPort {
+    const dailyMaximum = config.dailyMicroUsd;
+    const profiles = new Map(
+      config.profiles.map((profile) => [profile.id, structuredClone(profile)]),
+    );
+    const assertActive = () => {
+      if (!this.modelDispatchActive || this.halted || this.closing)
+        throw new Error('No active owned model dispatch.');
+    };
+    return {
+      reserve: async (estimate: AttemptEstimate) => {
+        assertActive();
+        if (!profiles.has(estimate.profileId))
+          throw new Error('Unknown model reservation profile.');
+        const allowance = reserveModelCall(
+          this.state.modelAllowance,
+          this.wallNow(),
+          this.options.modelMaximum ?? 100,
+        );
+        if (!allowance) return null;
+        const id = randomUUID();
+        const ledger = reserveRoutingBudget(
+          this.state.modelRouting,
+          estimate,
+          dailyMaximum,
+          this.wallNow(),
+          id,
+        );
+        if (!ledger) return null;
+        this.state.modelAllowance = allowance;
+        this.state.modelRouting = ledger;
+        await this.commit();
+        return id;
+      },
+      settle: async (id: string, usage: ModelUsage | undefined, failed: boolean) => {
+        // Already accepted requests may settle during graceful shutdown.
+        if (!this.modelDispatchActive || this.halted)
+          throw new Error('No active owned model settlement.');
+        const receipt = this.state.modelRouting?.receipts.find((item) => item.id === id);
+        const profile: ModelProfile | undefined = receipt && profiles.get(receipt.profileId);
+        if (!receipt || !profile) throw new Error('Model reservation is unavailable.');
+        const pending = receipt.status === 'pending';
+        this.state.modelRouting = settleRoutingBudget(
+          this.state.modelRouting!,
+          id,
+          profile,
+          usage,
+          failed,
+        );
+        const completed = this.state.modelRouting.receipts.find((item) => item.id === id)!;
+        if (pending && completed.usage)
+          this.addUsage(completed.usage.inputTokens, completed.usage.outputTokens);
+        await this.commit();
+      },
+    };
   }
   tick() {
     return this.serialize(async () => this.advance(false));
@@ -246,15 +322,15 @@ export class ElsewhereController {
       const observation = observeWorld(s.world, 'hubert', now);
       let decision;
       if (this.options.modelProvider && !needsRest(s.hubert)) {
-        const allowance = reserveModelCall(
-          s.modelAllowance,
-          this.wallNow(),
-          this.options.modelMaximum ?? 100,
-        );
+        const managed = this.options.modelProvider.managesAllowance === true;
+        const allowance = managed
+          ? s.modelAllowance
+          : reserveModelCall(s.modelAllowance, this.wallNow(), this.options.modelMaximum ?? 100);
         if (allowance) {
           s.modelAllowance = allowance;
-          // Reserve attempts durably before sending anything to a paid provider.
-          await this.commit();
+          // Legacy adapters reserve here; routed adapters reserve each actual attempt via modelBudget.
+          if (!managed) await this.commit();
+          this.modelDispatchActive = true;
           try {
             decision = await chooseActionWithProvider(
               s.hubert,
@@ -263,11 +339,16 @@ export class ElsewhereController {
               this.options.modelProvider,
             );
             s.runtime.modelStatus =
-              this.options.modelProvider.id === 'ollama'
-                ? 'Ollama local proposal validated; tools remain policy-controlled'
-                : 'Remote proposal validated; tools remain policy-controlled';
+              this.options.modelProvider.id === 'routed'
+                ? 'Routed model proposal validated; tools remain policy-controlled'
+                : this.options.modelProvider.id === 'ollama'
+                  ? 'Ollama local proposal validated; tools remain policy-controlled'
+                  : 'Remote proposal validated; tools remain policy-controlled';
           } catch {
+            if (this.halted) throw new Error('Model dispatch stopped after a persistence failure.');
             s.runtime.modelStatus = 'Provider unavailable or invalid proposal; local fallback';
+          } finally {
+            this.modelDispatchActive = false;
           }
         } else s.runtime.modelStatus = 'Daily model allowance reached; local fallback';
       }
@@ -328,11 +409,13 @@ export class ElsewhereController {
   reset() {
     return this.serialize(async () => {
       const allowance = structuredClone(this.state.modelAllowance);
+      const routing = structuredClone(this.state.modelRouting);
       const previous = this.state.hubert;
       const worldVersion = this.state.world.version;
       this.state = initialState(this.wallNow());
       // Resetting a fictional life never replenishes real paid-call allowance.
       this.state.modelAllowance = allowance;
+      if (routing) this.state.modelRouting = routing;
       this.state.hubert = preserveWishLedger(this.state.hubert, previous);
       this.state.world.version = Math.max(this.state.world.version, worldVersion + 1);
       for (const wish of this.state.hubert.wishes ?? []) {

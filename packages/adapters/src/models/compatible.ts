@@ -1,6 +1,13 @@
 import type { CharacterCommand } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
-import { decisionMessages, parseModelAction, readModelPayload, usageCount } from './shared';
+import {
+  decisionMessages,
+  parseModelAction,
+  readModelPayload,
+  reportedUsage,
+  usageCount,
+} from './shared';
+import type { ModelUsage } from '../../../models/src/contracts';
 
 export interface CompatibleModelOptions {
   baseUrl: string;
@@ -8,6 +15,13 @@ export interface CompatibleModelOptions {
   apiKey: string;
   timeoutMs?: number;
   onUsage?: (inputTokens: number, outputTokens: number) => void;
+  onUsageDetails?: (usage: ModelUsage | undefined) => void;
+  maxOutputTokens?: number;
+  signal?: AbortSignal;
+  promptCacheKey?: string;
+  cloudflareGateway?: boolean;
+  sessionAffinity?: string;
+  messages?: ReturnType<typeof decisionMessages>;
   fetcher?: typeof fetch;
 }
 
@@ -33,23 +47,48 @@ export class CompatibleDecisionProvider implements DecisionProvider<CharacterCom
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${this.options.apiKey}`,
+        ...(this.options.sessionAffinity
+          ? { 'x-session-affinity': this.options.sessionAffinity }
+          : {}),
+        ...(this.options.cloudflareGateway || this.endpoint.hostname === 'gateway.ai.cloudflare.com'
+          ? {
+              'cf-aig-skip-cache': 'true',
+              'cf-aig-max-attempts': '1',
+              'cf-aig-collect-log': 'false',
+            }
+          : {}),
       },
       redirect: 'error',
-      signal: AbortSignal.timeout(this.options.timeoutMs ?? 15_000),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(this.options.timeoutMs ?? 15_000),
+        ...(this.options.signal ? [this.options.signal] : []),
+      ]),
       body: JSON.stringify({
         model: this.options.model,
         temperature: 0.5,
-        max_tokens: 300,
-        messages: decisionMessages(context),
+        max_tokens: this.options.maxOutputTokens ?? 300,
+        ...(this.options.promptCacheKey ? { prompt_cache_key: this.options.promptCacheKey } : {}),
+        messages: this.options.messages ?? decisionMessages(context),
       }),
     });
     const payload = (await readModelPayload(response)) as {
       choices?: Array<{ message?: { content?: unknown } }>;
-      usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
+      usage?: {
+        prompt_tokens?: unknown;
+        completion_tokens?: unknown;
+        prompt_tokens_details?: { cached_tokens?: unknown };
+      };
     };
     this.options.onUsage?.(
       usageCount(payload.usage?.prompt_tokens),
       usageCount(payload.usage?.completion_tokens),
+    );
+    this.options.onUsageDetails?.(
+      reportedUsage(
+        payload.usage?.prompt_tokens,
+        payload.usage?.completion_tokens,
+        payload.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      ),
     );
     return parseModelAction(payload.choices?.[0]?.message?.content);
   }

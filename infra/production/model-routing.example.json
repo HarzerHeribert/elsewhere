@@ -1,0 +1,135 @@
+{
+  "scope": { "ownerId": "your-operator", "worldId": "elsewhere", "characterId": "hubert" },
+  "allowRemote": true,
+  "dailyMicroUsd": 1000000,
+  "profiles": [
+    {
+      "id": "cf-routine",
+      "vendor": "cloudflare",
+      "transport": "compatible",
+      "baseUrl": "https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1",
+      "model": "REPLACE_WITH_EVALUATED_ROUTINE_MODEL",
+      "apiKeyEnv": "MODEL_CF_INFERENCE_KEY",
+      "local": false,
+      "capabilities": ["text", "json"],
+      "quality": 3,
+      "contextTokens": 32768,
+      "maxOutputTokens": 1024,
+      "expectedLatencyMs": 2000,
+      "rates": { "inputUsdPerMillion": 1, "outputUsdPerMillion": 3, "cachedInputUsdPerMillion": 1 },
+      "promptCache": "none"
+    },
+    {
+      "id": "gateway-deep",
+      "vendor": "vercel",
+      "transport": "compatible",
+      "baseUrl": "https://ai-gateway.vercel.sh/v1",
+      "model": "REPLACE_WITH_EVALUATED_DEEP_MODEL",
+      "apiKeyEnv": "MODEL_VERCEL_GATEWAY_KEY",
+      "local": false,
+      "capabilities": ["text", "json", "code", "vision"],
+      "quality": 5,
+      "contextTokens": 65536,
+      "maxOutputTokens": 4096,
+      "expectedLatencyMs": 10000,
+      "rates": {
+        "inputUsdPerMillion": 5,
+        "outputUsdPerMillion": 15,
+        "cachedInputUsdPerMillion": 5
+      },
+      "promptCache": "none"
+    },
+    {
+      "id": "cf-embedding",
+      "vendor": "cloudflare",
+      "transport": "compatible",
+      "baseUrl": "https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/v1",
+      "model": "REPLACE_WITH_EVALUATED_EMBEDDING_MODEL",
+      "apiKeyEnv": "MODEL_CF_INFERENCE_KEY",
+      "local": false,
+      "capabilities": ["embedding"],
+      "quality": 2,
+      "contextTokens": 8192,
+      "maxOutputTokens": 1,
+      "expectedLatencyMs": 1000,
+      "rates": {
+        "inputUsdPerMillion": 0.2,
+        "outputUsdPerMillion": 0,
+        "cachedInputUsdPerMillion": 0.2
+      },
+      "promptCache": "none"
+    }
+  ],
+  "policies": {
+    "decision": {
+      "models": ["cf-routine"],
+      "strategy": "economy",
+      "minimumQuality": 2,
+      "maxLatencyMs": 15000,
+      "maxOutputTokens": 300,
+      "maxRequestMicroUsd": 50000,
+      "maxAttempts": 1,
+      "affinityTolerancePercent": 10
+    },
+    "classification": {
+      "models": ["cf-routine"],
+      "strategy": "latency",
+      "minimumQuality": 2,
+      "maxLatencyMs": 10000,
+      "maxOutputTokens": 200,
+      "maxRequestMicroUsd": 20000,
+      "maxAttempts": 1,
+      "affinityTolerancePercent": 0
+    },
+    "summary": {
+      "models": ["cf-routine"],
+      "strategy": "economy",
+      "minimumQuality": 2,
+      "maxLatencyMs": 20000,
+      "maxOutputTokens": 700,
+      "maxRequestMicroUsd": 50000,
+      "maxAttempts": 1,
+      "affinityTolerancePercent": 10
+    },
+    "reflection": {
+      "models": ["cf-routine"],
+      "strategy": "economy",
+      "minimumQuality": 3,
+      "maxLatencyMs": 20000,
+      "maxOutputTokens": 700,
+      "maxRequestMicroUsd": 50000,
+      "maxAttempts": 1,
+      "affinityTolerancePercent": 10
+    },
+    "embedding": {
+      "models": ["cf-embedding"],
+      "strategy": "economy",
+      "minimumQuality": 2,
+      "maxLatencyMs": 10000,
+      "maxOutputTokens": 1,
+      "maxRequestMicroUsd": 10000,
+      "maxAttempts": 1,
+      "affinityTolerancePercent": 0
+    },
+    "vision": {
+      "models": ["gateway-deep"],
+      "strategy": "quality",
+      "minimumQuality": 4,
+      "maxLatencyMs": 45000,
+      "maxOutputTokens": 1000,
+      "maxRequestMicroUsd": 500000,
+      "maxAttempts": 1,
+      "affinityTolerancePercent": 0
+    },
+    "code": {
+      "models": ["gateway-deep"],
+      "strategy": "quality",
+      "minimumQuality": 4,
+      "maxLatencyMs": 60000,
+      "maxOutputTokens": 2048,
+      "maxRequestMicroUsd": 500000,
+      "maxAttempts": 1,
+      "affinityTolerancePercent": 0
+    }
+  }
+}

@@ -9,7 +9,7 @@ const schema = z.object({
   ALLOW_NEW_LIFE: z.enum(['true', 'false']).default('false'),
   TICK_INTERVAL_MS: z.coerce.number().int().min(250).max(60_000).default(2000),
   SIMULATION_RATE: z.coerce.number().min(0.1).max(60).default(3),
-  MODEL_PROVIDER: z.enum(['local', 'compatible', 'ollama']).default('local'),
+  MODEL_PROVIDER: z.enum(['local', 'compatible', 'ollama', 'routed']).default('local'),
   MODEL_MAX_CALLS_PER_DAY: z.coerce.number().int().min(1).max(1000).default(100),
   MODEL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15000),
 });

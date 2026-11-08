@@ -1,6 +1,13 @@
 import { MODEL_ACTION_FORMAT, type CharacterCommand } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
-import { decisionMessages, parseModelAction, readModelPayload, usageCount } from './shared';
+import {
+  decisionMessages,
+  parseModelAction,
+  readModelPayload,
+  reportedUsage,
+  usageCount,
+} from './shared';
+import type { ModelUsage } from '../../../models/src/contracts';
 
 export interface OllamaOptions {
   baseUrl?: string;
@@ -8,6 +15,11 @@ export interface OllamaOptions {
   timeoutMs?: number;
   fetcher?: typeof fetch;
   onUsage?: (input: number, output: number) => void;
+  onUsageDetails?: (usage: ModelUsage | undefined) => void;
+  maxOutputTokens?: number;
+  contextTokens?: number;
+  signal?: AbortSignal;
+  messages?: ReturnType<typeof decisionMessages>;
 }
 
 /** Native local Ollama, with constrained output and thinking disabled for the small test model. */
@@ -50,15 +62,22 @@ export class OllamaDecisionProvider implements DecisionProvider<CharacterCommand
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       redirect: 'error',
-      signal: AbortSignal.timeout(this.options.timeoutMs ?? 30000),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(this.options.timeoutMs ?? 30000),
+        ...(this.options.signal ? [this.options.signal] : []),
+      ]),
       body: JSON.stringify({
         model: this.model,
         stream: false,
         think: false,
         keep_alive: '5m',
         format: MODEL_ACTION_FORMAT,
-        options: { temperature: 0.4, num_ctx: 8192, num_predict: 160 },
-        messages: decisionMessages(context),
+        options: {
+          temperature: 0.4,
+          num_ctx: this.options.contextTokens ?? 8192,
+          num_predict: this.options.maxOutputTokens ?? 160,
+        },
+        messages: this.options.messages ?? decisionMessages(context),
       }),
     });
     const payload = (await readModelPayload(response)) as {
@@ -67,6 +86,7 @@ export class OllamaDecisionProvider implements DecisionProvider<CharacterCommand
       eval_count?: unknown;
     };
     this.options.onUsage?.(usageCount(payload.prompt_eval_count), usageCount(payload.eval_count));
+    this.options.onUsageDetails?.(reportedUsage(payload.prompt_eval_count, payload.eval_count));
     return parseModelAction(payload.message?.content);
   }
 }

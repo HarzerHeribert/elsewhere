@@ -10,6 +10,49 @@ const context = {
 };
 
 describe('replaceable real-model boundary', () => {
+  it('supports explicit prefix keys, cache accounting and Cloudflare action-cache/retry opt-outs', async () => {
+    const details = vi.fn();
+    const fetcher = vi.fn(
+      async (_url: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{"type":"reflect"}' } }],
+            usage: {
+              prompt_tokens: 100,
+              completion_tokens: 10,
+              prompt_tokens_details: { cached_tokens: 80 },
+            },
+          }),
+        ),
+    );
+    const provider = new CompatibleDecisionProvider({
+      baseUrl: 'https://gateway.example.invalid/v1',
+      model: 'fixture',
+      apiKey: 'fixture',
+      promptCacheKey: 'opaque-fixture',
+      sessionAffinity: 'opaque-session',
+      cloudflareGateway: true,
+      maxOutputTokens: 160,
+      fetcher: fetcher as typeof fetch,
+      onUsageDetails: details,
+    });
+    await provider.propose(context);
+    expect(details).toHaveBeenCalledWith({
+      inputTokens: 100,
+      outputTokens: 10,
+      cachedInputTokens: 80,
+    });
+    expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({
+      'cf-aig-skip-cache': 'true',
+      'x-session-affinity': 'opaque-session',
+      'cf-aig-max-attempts': '1',
+      'cf-aig-collect-log': 'false',
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toMatchObject({
+      max_tokens: 160,
+      prompt_cache_key: 'opaque-fixture',
+    });
+  });
   it('validates proposals and accounts for usage without returning credentials', async () => {
     const usage = vi.fn();
     const fetcher = vi.fn(

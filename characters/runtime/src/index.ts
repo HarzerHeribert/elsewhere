@@ -96,6 +96,9 @@ export interface DecisionContext {
 }
 export interface DecisionProvider<T = unknown> {
   id: string;
+  /** Trusted composition-root providers can reserve each routed attempt through the controller. */
+  managesAllowance?: boolean;
+  localOnly?: boolean;
   propose(context: DecisionContext): Promise<T>;
 }
 
