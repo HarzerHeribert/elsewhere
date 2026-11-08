@@ -1,4 +1,6 @@
 /** Provider-independent memory and context machinery. Private memories never become world state. */
+export * from './progress';
+export * from './dreams';
 export type MemoryCueKind = 'place' | 'object' | 'entity' | 'person' | 'phrase';
 export interface MemoryCue {
   kind: MemoryCueKind;
@@ -14,6 +16,12 @@ export interface EpisodicMemory {
   cues: MemoryCue[];
   emotionalContext: { mood: number; frustration: number };
   salience: number;
+  /** Host-owned execution receipt metadata; emotional similarity is not outcome evidence. */
+  experience?: {
+    action: string;
+    targetId?: string;
+    status: 'completed' | 'rejected';
+  };
 }
 export interface RecallRecord {
   at: number;
@@ -27,6 +35,8 @@ export interface RecallContext {
   history: Record<string, RecallRecord>;
   globalCooldownMs?: number;
   memoryCooldownMs?: number;
+  /** Host-owned, source-revision-checked dream annotations; episodes remain unchanged. */
+  rankingOffsets?: Readonly<Record<string, number>>;
 }
 export interface Recollection {
   memoryId: string;
@@ -65,12 +75,14 @@ export function selectAssociativeMemory(
     const cueScore = matches.reduce((sum, cue) => sum + cueWeight[cue.kind], 0);
     const stateSimilarity =
       1 - Math.min(1, Math.abs(memory.emotionalContext.mood - context.mood) / 100);
+    const offset = context.rankingOffsets?.[memory.id] ?? 0;
     // State affects ranking modestly. It never changes a stored event or dominates actual cue matches.
     const score =
       cueScore +
       Math.min(1, Math.max(0, memory.salience)) * 0.5 +
       stateSimilarity * 0.25 -
-      Math.min(previous?.count ?? 0, 5) * 0.12;
+      Math.min(previous?.count ?? 0, 5) * 0.12 +
+      (Number.isFinite(offset) ? Math.max(-0.25, Math.min(0.25, offset)) : 0);
     return [
       { memoryId: memory.id, summary: memory.summary, sourceEventId: memory.sourceEventId, score },
     ];

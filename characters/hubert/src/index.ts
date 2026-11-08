@@ -1,4 +1,11 @@
 import { HUBERT_IDENTITY, bodyLanguage } from './persona';
+import { hubertDreamActions, hubertDreamSources } from './dreams';
+import {
+  followThrough,
+  settleHubertAttention,
+  trackHubertIntent,
+  wakeImpulseDecision,
+} from './attention';
 import { developInterests, seedBirdInterest, type InterestEvidence } from './interests';
 import type { CharacterWish, WishReceipt } from './wishes';
 export {
@@ -24,6 +31,14 @@ import {
   buildWorkingContext,
   cleanOutsideText,
   selectAssociativeMemory,
+  createDreamState,
+  dreamRankingOffsets,
+  pruneDreamState,
+  wakingDreamImpulses,
+  createProgressLedger,
+  type DreamState,
+  type ProgressLedger,
+  type ProgressGuidance,
   type DecisionContext,
   type DecisionProvider,
   type EpisodicMemory,
@@ -93,6 +108,11 @@ export interface HubertState {
   lastReflection: string;
   wishes: CharacterWish[];
   wishReceipts: WishReceipt[];
+  dreams: DreamState;
+  progress: ProgressLedger;
+  progressGuidance: ProgressGuidance | null;
+  progressDecision: { id: string; intentionKey: string } | null;
+  activeWakeImpulse: string | null;
 }
 export interface OutsideEvent {
   id: string;
@@ -168,6 +188,11 @@ export function createInitialHubert(now: number, ownerId = 'local-owner'): Huber
     lastReflection: '',
     wishes: [],
     wishReceipts: [],
+    dreams: createDreamState('hubert'),
+    progress: createProgressLedger(now),
+    progressGuidance: null,
+    progressDecision: null,
+    activeWakeImpulse: null,
   };
 }
 
@@ -180,6 +205,12 @@ export function upgradeHubertState(input: HubertState): HubertState {
   state.dormantInterests ??= [];
   state.interestEvidence ??= {};
   state.visitedPlaces ??= {};
+  state.dreams ??= createDreamState(state.id);
+  state.dreams = pruneDreamState(state.dreams, hubertDreamSources(state));
+  state.progress ??= createProgressLedger(state.updatedAt);
+  state.progressGuidance ??= null;
+  state.progressDecision ??= null;
+  state.activeWakeImpulse ??= null;
   seedBirdInterest(state);
   return state;
 }
@@ -231,6 +262,7 @@ function rememberObservation(state: HubertState, observation: Observation, now: 
     frustration: state.stats.frustration,
     lastRecallAt: state.lastRecallAt,
     history: state.recallHistory,
+    rankingOffsets: dreamRankingOffsets(state.dreams, hubertDreamSources(state)),
   });
   if (memory) {
     state.activeRecall = { memoryId: memory.memoryId, at: now };
@@ -250,6 +282,7 @@ function recordIntent(
   now: number,
 ): HubertDecision {
   state.turn += 1;
+  trackHubertIntent(state, action, now);
   state.lastDecisionAt = now;
   state.intent = explanation;
   state.activity = {
@@ -293,6 +326,10 @@ const entitySignature = (entity: Pick<WorldEntity, 'kind' | 'species' | 'behavio
 export function needsRest(state: HubertState): boolean {
   return state.stats.energy < 24 || (state.activity.kind === 'rest' && state.stats.energy < 68);
 }
+export function needsLocalFollowThrough(state: HubertState): boolean {
+  return state.progressGuidance != null;
+}
+
 function canWatch(
   state: HubertState,
   entity: WorldEntity,
@@ -357,6 +394,7 @@ export function chooseAction(
   input: HubertState,
   observation: Observation,
   now: number,
+  nowReal = now,
 ): HubertDecision {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
@@ -368,6 +406,14 @@ export function chooseAction(
       now,
     );
   }
+  const recovery = followThrough(state, observation, now, {
+    recordIntent,
+    recordWatchIntent,
+    chooseVisibleEntity,
+  });
+  if (recovery) return recovery;
+  const impulse = wakeImpulseDecision(state, observation, now, nowReal, recordIntent);
+  if (impulse) return impulse;
   if (state.turn > 0 && state.turn % 11 === 0) {
     return recordIntent(
       state,
@@ -588,6 +634,7 @@ function applyEntityObservation(
     cues,
     emotionalContext: { mood: state.stats.mood, frustration: state.stats.frustration },
     salience: familiar ? 0.2 : previous ? 0.55 : 0.75,
+    experience: { action: outcome.command.type, targetId: visible.id, status: 'completed' },
   });
   state.journal.push({ id: outcome.id, at: now, text: summary, kind: 'entity_observed' });
   state.journal = state.journal.slice(-100);
@@ -599,6 +646,7 @@ export function applyOutcome(
   outcome: WorldOutcome,
   observation: Observation,
   now: number,
+  nowReal = now,
 ): HubertState {
   const state = advanceHubert(input, now);
   if (observation.characterId !== state.id)
@@ -613,6 +661,7 @@ export function applyOutcome(
   state.processedOutcomeIds.push(outcome.id);
   // Recent receipts cover retries; retained source episodes also prevent old accomplishments being replayed.
   state.processedOutcomeIds = state.processedOutcomeIds.slice(-2_000);
+  settleHubertAttention(state, outcome, now, nowReal);
   if (outcome.status === 'started') return state;
   const targetId =
     outcome.objectId ?? ('targetId' in outcome.command ? outcome.command.targetId : undefined);
@@ -622,6 +671,25 @@ export function applyOutcome(
     state.intent = 'That did not work. I will reconsider rather than pretend it succeeded.';
     if (targetId) state.lastObjectUse[targetId] = now;
     state.stats = normalizeStats(state.stats);
+    state.memories.push({
+      id: `memory:${outcome.id}`,
+      createdAt: now,
+      summary: cleanOutsideText(outcome.summary, 500),
+      sourceEventId: outcome.id,
+      source: 'world-outcome',
+      verified: true,
+      cues: [
+        { kind: 'place', value: outcome.placeId ?? observation.placeId },
+        ...(targetId ? [{ kind: 'object' as const, value: targetId }] : []),
+      ],
+      emotionalContext: { mood: state.stats.mood, frustration: state.stats.frustration },
+      salience: 0.55,
+      experience: {
+        action: outcome.command.type,
+        ...(targetId ? { targetId } : {}),
+        status: 'rejected',
+      },
+    });
     return state;
   }
   if (outcome.command.type === 'inspect' && (outcome.entityId || outcome.encounter))
@@ -707,6 +775,11 @@ export function applyOutcome(
       cues,
       emotionalContext: { mood: state.stats.mood, frustration: state.stats.frustration },
       salience: outcome.command.type === 'work' ? 0.8 : 0.5,
+      experience: {
+        action: outcome.command.type,
+        ...(targetId ? { targetId } : {}),
+        status: 'completed',
+      },
     });
   }
   if (shouldRemember || outcome.command.type === 'reflect') {
@@ -817,7 +890,7 @@ export function recalledMemory(state: HubertState, now: number): PublicMemory | 
   return memory ? toPublicMemory(memory) : null;
 }
 /** A compact planning view; original episodes, memories and cue records stay in character state. */
-function planningSummary(state: HubertState, observation: Observation) {
+function planningSummary(state: HubertState, observation: Observation, nowReal: number) {
   const now = observation.observedAt;
   const objects = Object.values(state.knownObjects)
     .sort((a, b) => {
@@ -858,14 +931,37 @@ function planningSummary(state: HubertState, observation: Observation) {
     watchableEntityIds: (observation.visibleEntities ?? [])
       .filter((entity) => canWatch(state, entity, observation, now))
       .map((entity) => entity.id),
+    wakingImpulseOffers: wakingDreamImpulses(state.dreams, nowReal)
+      .filter((impulse) =>
+        hubertDreamActions(state, observation, nowReal).some(
+          (action) => action.id === impulse.affordanceId,
+        ),
+      )
+      .map(({ affordanceId, targetId, action, retryCondition }) => ({
+        affordanceId,
+        targetId,
+        action,
+        retryCondition,
+      })),
+    progressAdvice: state.progressGuidance
+      ? {
+          kind: state.progressGuidance.kind,
+          reason: state.progressGuidance.reason,
+          intentionKey: state.progressGuidance.intentionKey,
+        }
+      : null,
   };
 }
 export type HubertPlanningSummary = ReturnType<typeof planningSummary>;
 
-export function workingContext(state: HubertState, observation: Observation): DecisionContext {
+export function workingContext(
+  state: HubertState,
+  observation: Observation,
+  nowReal = observation.observedAt,
+): DecisionContext {
   return buildWorkingContext({
     identity: HUBERT_IDENTITY,
-    state: planningSummary(state, observation),
+    state: planningSummary(state, observation, nowReal),
     intentions: [state.intent, state.project.name],
     memories: state.activeRecall
       ? state.memories
@@ -921,11 +1017,13 @@ export async function chooseActionWithProvider(
   observation: Observation,
   now: number,
   provider: DecisionProvider,
+  nowReal = now,
 ): Promise<HubertDecision> {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
-  if (needsRest(state)) return chooseAction(input, observation, now);
-  const result = await provider.propose(workingContext(state, observation));
+  if (needsRest(state) || needsLocalFollowThrough(state))
+    return chooseAction(input, observation, now, nowReal);
+  const result = await provider.propose(workingContext(state, observation, nowReal));
   const action = CharacterCommandSchema.parse(result);
   if (
     action.type === 'move' &&
@@ -934,11 +1032,11 @@ export async function chooseActionWithProvider(
     !state.knownObjects[action.targetId] &&
     !observation.knownPlaces?.some((place) => place.id === action.targetId)
   )
-    return chooseAction(input, observation, now);
+    return chooseAction(input, observation, now, nowReal);
   if ('targetId' in action && action.targetId && state.knownEntities[action.targetId]) {
     const current = observation.visibleEntities?.find((entity) => entity.id === action.targetId);
     if (!current || (action.type === 'inspect' && !canWatch(state, current, observation, now)))
-      return chooseAction(input, observation, now);
+      return chooseAction(input, observation, now, nowReal);
   }
   if (
     'targetId' in action &&
@@ -946,8 +1044,18 @@ export async function chooseActionWithProvider(
     ['work', 'interact'].includes(action.type) &&
     now - (state.lastObjectUse[action.targetId] ?? -Infinity) < 90_000
   )
-    return chooseAction(input, observation, now);
+    return chooseAction(input, observation, now, nowReal);
   const explanation = 'I have chosen a next step from what I can currently observe.';
+  const offered = wakingDreamImpulses(state.dreams, nowReal).find(
+    (impulse) =>
+      impulse.action === action.type &&
+      'targetId' in action &&
+      impulse.targetId === action.targetId &&
+      hubertDreamActions(state, observation, nowReal).some(
+        (offer) => offer.id === impulse.affordanceId,
+      ),
+  );
+  if (offered) state.activeWakeImpulse = offered.id;
   if (
     action.type === 'inspect' &&
     observation.visibleEntities?.some((entity) => entity.id === action.targetId)

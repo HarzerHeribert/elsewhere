@@ -25,10 +25,25 @@ import {
   preserveWishLedger,
   publicWishes,
   needsRest,
+  needsLocalFollowThrough,
   resolveWish as resolveCharacterWish,
   type HubertState,
 } from '@elsewhere/hubert';
-import type { DecisionProvider } from '@elsewhere/character-runtime';
+import {
+  abandonDreamConsolidation,
+  beginDreamConsolidation,
+  completeDreamConsolidation,
+  pruneDreamState,
+  type DecisionProvider,
+} from '@elsewhere/character-runtime';
+import {
+  hubertDreamActions,
+  hubertDreamFallback,
+  hubertDreamInterpretations,
+  hubertDreamSources,
+} from '../characters/hubert/src/dreams';
+import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
+import type { ReflectionProvider } from '../packages/adapters/src/models/reflection';
 import {
   assertRoutingLedger,
   reserveRoutingBudget,
@@ -65,6 +80,8 @@ export interface ControllerState {
     simulatedAt: number;
     lastDecisionAt: number;
     modelStatus: string;
+    /** Continuous observed rest only; a restart or pause begins a new session. */
+    dreamRest?: { id: string; startedAt: number; startedAtReal: number };
   };
   modelAllowance: ModelAllowance;
   modelRouting?: RoutingLedger;
@@ -79,6 +96,7 @@ export interface ControllerOptions {
   simulationRate?: number;
   modelMaximum?: number;
   modelProvider?: DecisionProvider;
+  reflectionProvider?: ReflectionProvider;
 }
 
 /** Character definitions supply their body dimensions; the shared world stays species-agnostic. */
@@ -146,12 +164,17 @@ export class ElsewhereController {
       this.lastCommitted = structuredClone(saved.value);
       const upgraded = withResidentAppearance(upgradeWorldLayout(this.state.world));
       const upgradedHubert = upgradeHubertState(this.state.hubert);
+      // Never resume an in-flight creative call or count offline time as observed rest.
+      upgradedHubert.dreams = abandonDreamConsolidation(upgradedHubert.dreams);
+      const interruptedRest = this.state.runtime.dreamRest !== undefined;
+      delete this.state.runtime.dreamRest;
       const freezeArtifact =
         this.state.artifactCreatedAt != null && this.state.artifactSamples === undefined;
       const changed =
         JSON.stringify(upgraded) !== JSON.stringify(this.state.world) ||
         JSON.stringify(upgradedHubert) !== JSON.stringify(this.state.hubert) ||
-        freezeArtifact;
+        freezeArtifact ||
+        interruptedRest;
       this.state.world = upgraded;
       this.state.hubert = preserveWishLedger(upgradedHubert, upgradedHubert);
       if (freezeArtifact) this.state.artifactSamples = structuredClone(this.state.weatherSamples);
@@ -217,10 +240,9 @@ export class ElsewhereController {
         startedAt: s.runtime.startedAt,
         simulatedAt: s.runtime.simulatedAt,
         costUsd: 0,
-        costKnown:
-          !this.options.modelProvider ||
-          this.options.modelProvider.id === 'ollama' ||
-          this.options.modelProvider.localOnly === true,
+        costKnown: [this.options.modelProvider, this.options.reflectionProvider].every(
+          (provider) => !provider || provider.id === 'ollama' || provider.localOnly === true,
+        ),
         modelCalls: s.modelAllowance.calls,
         modelStatus: this.halted
           ? 'Controller halted after a persistence failure. Check storage and restart.'
@@ -296,6 +318,70 @@ export class ElsewhereController {
   step() {
     return this.serialize(async () => this.advance(true));
   }
+  private async dreamDuringRest() {
+    const s = this.state;
+    const nowReal = this.wallNow();
+    if (s.hubert.activity.kind !== 'rest') {
+      delete s.runtime.dreamRest;
+      return;
+    }
+    const rest = (s.runtime.dreamRest ??= {
+      id: `rest:${nowReal}:${s.hubert.turn}`,
+      startedAt: s.runtime.simulatedAt,
+      startedAtReal: nowReal,
+    });
+    const sources = hubertDreamSources(s.hubert);
+    const begin = beginDreamConsolidation({
+      state: s.hubert.dreams,
+      sources,
+      rest: { ...rest, voluntary: true, endedAt: s.runtime.simulatedAt, endedAtReal: nowReal },
+      nowReal,
+    });
+    s.hubert.dreams = begin.state;
+    if (!begin.request) return;
+    // Reserve the rest/source window before any inference. A crash abandons this opportunity.
+    await this.commit();
+    const observation = observeWorld(s.world, 'hubert', s.runtime.simulatedAt);
+    const actions = hubertDreamActions(s.hubert, observation, nowReal, begin.request.sources);
+    let proposal = hubertDreamFallback(actions);
+    const provider = this.options.reflectionProvider;
+    if (provider) {
+      const managed = provider.managesAllowance === true;
+      const allowance = managed
+        ? s.modelAllowance
+        : reserveModelCall(s.modelAllowance, nowReal, this.options.modelMaximum ?? 100);
+      if (allowance) {
+        s.modelAllowance = allowance;
+        if (!managed) await this.commit();
+        this.modelDispatchActive = true;
+        try {
+          proposal = await provider.reflect({
+            identity: HUBERT_IDENTITY,
+            episodes: begin.request.sources.map(({ id, summary }) => ({ id, summary })),
+            affordances: actions.map(({ id, description }) => ({ id, description })),
+          });
+        } catch {
+          if (this.halted) throw new Error('Dream dispatch stopped after a persistence failure.');
+          // Energy recovery and a bounded local consolidation do not depend on model availability.
+        } finally {
+          this.modelDispatchActive = false;
+        }
+      }
+    }
+    const completed = completeDreamConsolidation({
+      state: s.hubert.dreams,
+      requestKey: begin.request.idempotencyKey,
+      currentSources: hubertDreamSources(s.hubert),
+      proposal,
+      nowReal: this.wallNow(),
+      availableActions: actions,
+      interpretations: hubertDreamInterpretations(begin.request.sources),
+    });
+    s.hubert.dreams = completed.state;
+    if (completed.receipt) s.hubert.activity.label = 'Dreaming quietly';
+    // One snapshot atomically publishes all private derived records; none enter world events.
+    await this.commit();
+  }
   private async advance(force: boolean): Promise<PublicSnapshot> {
     if (this.state.runtime.paused && !force) return this.getSnapshot();
     const s = this.state;
@@ -305,6 +391,7 @@ export class ElsewhereController {
     s.runtime.tick++;
     s.world = advanceWorld(s.world, now);
     s.hubert = advanceHubert(s.hubert, now);
+    await this.dreamDuringRest();
     // A tiny independent local service: measurements continue without a viewer or model.
     const phase = (now - s.runtime.startedAt) / 60_000;
     s.weatherSamples.push({
@@ -321,7 +408,11 @@ export class ElsewhereController {
     if (ready) {
       const observation = observeWorld(s.world, 'hubert', now);
       let decision;
-      if (this.options.modelProvider && !needsRest(s.hubert)) {
+      if (
+        this.options.modelProvider &&
+        !needsRest(s.hubert) &&
+        !needsLocalFollowThrough(s.hubert)
+      ) {
         const managed = this.options.modelProvider.managesAllowance === true;
         const allowance = managed
           ? s.modelAllowance
@@ -337,6 +428,7 @@ export class ElsewhereController {
               observation,
               now,
               this.options.modelProvider,
+              this.wallNow(),
             );
             s.runtime.modelStatus =
               this.options.modelProvider.id === 'routed'
@@ -352,7 +444,7 @@ export class ElsewhereController {
           }
         } else s.runtime.modelStatus = 'Daily model allowance reached; local fallback';
       }
-      decision ??= chooseAction(s.hubert, observation, now);
+      decision ??= chooseAction(s.hubert, observation, now, this.wallNow());
       s.hubert = decision.state;
       const policy = authorizeCommand(decision.action);
       if (policy.allowed) {
@@ -363,6 +455,7 @@ export class ElsewhereController {
           result.outcome,
           observeWorld(s.world, 'hubert', now),
           now,
+          this.wallNow(),
         );
       } else {
         s.hubert.intent = policy.reason;
@@ -395,6 +488,7 @@ export class ElsewhereController {
   pause() {
     return this.serialize(async () => {
       this.state.runtime.paused = true;
+      delete this.state.runtime.dreamRest;
       await this.commit();
       return this.getSnapshot();
     });
@@ -417,6 +511,7 @@ export class ElsewhereController {
       this.state.modelAllowance = allowance;
       if (routing) this.state.modelRouting = routing;
       this.state.hubert = preserveWishLedger(this.state.hubert, previous);
+      this.state.hubert.dreams = pruneDreamState(previous.dreams, []);
       this.state.world.version = Math.max(this.state.world.version, worldVersion + 1);
       for (const wish of this.state.hubert.wishes ?? []) {
         if (wish.status === 'fulfilled')
