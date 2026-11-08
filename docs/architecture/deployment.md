@@ -1,8 +1,47 @@
 # First public deployment
 
-The deployment foundation is implemented and tested. The public source repository is [HarzerHeribert/elsewhere](https://github.com/HarzerHeribert/elsewhere). No cloud runtime or live connector account has been created. The operator must choose the public origin, Vercel project and Render workspace before provisioning. Applying `render.yaml` creates paid resources; confirm plan availability and credit coverage in that workspace first. The default region is Frankfurt and is a proposal, not an existing deployment.
+Cloudflare is the preferred production target. The public source repository is [HarzerHeribert/elsewhere](https://github.com/HarzerHeribert/elsewhere), under the operator's personal GitHub account; no organization is required. The existing Node/PostgreSQL deployment foundation is implemented and tested, while the Cloudflare-native runtime below is planned adapter work. No cloud runtime or live connector account has been created. The operator's Cloudflare grant eligibility, account connection and public origin still need verification before provisioning.
 
-## Topology and authority
+## Preferred Cloudflare deployment
+
+Put the world runtime, storage and ordinary model usage on Cloudflare. Use Vercel for isolated previews and future resident-built apps, with its AI Gateway as an optional model route. Preserve the tested Docker/PostgreSQL path as a portable alternative. Provider credit expiration does not require consuming unused allowances or duplicating live infrastructure.
+
+| Responsibility                            | Preferred service                                                   | Implementation status                                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Public world and same-origin API          | Workers with Static Assets                                          | Existing Vite client reusable; Worker transport/routing adapter needed                                  |
+| Authoritative world and character clock   | SQLite-backed Durable Object with alarms                            | Controller reusable after import-boundary audit; persistence and lifecycle adapters needed              |
+| Accounts, sessions and world roles        | D1 with Better Auth                                                 | D1 supports Better Auth; current Node/PostgreSQL integration and role helpers must be ported and tested |
+| Larger assets and public creations        | R2 through explicit public projections                              | Storage adapter needed; separate public objects from private memories/backups                           |
+| Private recovery copies                   | Private R2 bucket                                                   | Export format exists; encrypted upload, retention and isolated restore drill remain work                |
+| Ordinary inference and embeddings         | Workers AI                                                          | Model adapter/structured-output evaluation needed; existing compatible/local providers remain           |
+| Background jobs and external actions      | Queues/Workflows behind the existing capability contract            | Planned; does not activate email, payments, workers or social posting                                   |
+| Operator access and public abuse controls | Cloudflare Access, application authorization and admission controls | Planned; authentication and authorization remain separate                                               |
+
+Start with one authoritative world Durable Object for Hubert's existing controller. Alarms must advance the world with no browser connected. They are delivered at least once: persist a step/job identity and the model allowance reservation before dispatch, recognize completed steps on retry, and recover uncertain external results without blindly replaying a model call or tool effect. Serialize world mutations and test eviction, alarm retries, in-flight requests, deployment and restart. Do not transplant the current process's `setInterval` into an ordinary request Worker or claim exactly-once external execution.
+
+Keep world rules, character definitions and command policy independent of Cloudflare bindings. Split storage contracts from Node-only adapters, audit shared barrel imports, add a Fetch transport alongside the Node HTTP transport, and implement the Cloudflare composition root separately. Preserve all current public/private projections, auth roles, visitor limits, wishes, memories, artifacts and model counters. Keep the existing snapshot transfer envelope; add a validated import into an empty Durable Object before moving the current life. D1 is not a PostgreSQL connection string, so the existing production entry point cannot simply be pointed at D1.
+
+Better Auth documents D1 support, but this application's native SQLite imports, Node handlers, migrations and role administration still need adaptation. Re-run the account verification and authorization tests against local D1 before opening signup. Keep native worker bindings and provider credentials outside creature context; worker-built apps receive separate capabilities and allowances.
+
+Cloudflare Containers can run the existing Docker image as a bridge or isolated future build worker. Their default disk is ephemeral, so they do not make the current SQLite life durable. The current production image still requires external PostgreSQL and ownership fencing. A native Durable Object is the preferred persistent world host; container snapshots or R2-mounted files are not a substitute for the tested state transaction semantics.
+
+The current static asset tree contains 157 files totaling 91,072,445 bytes, with a largest file of 13,962,620 bytes. No individual file exceeds Workers Static Assets' 25 MiB limit. Recheck the built output during adapter validation; future larger models belong in R2 or need repacking. Assets can remain under the public same origin to preserve the current CSP and cookie boundary.
+
+The exact grant determines covered products and balances. Do not infer that Registrar purchases, partner-model inference or gateway charges are covered by developer credits. Keep credit amounts and domain candidates out of the public repo. Authoritative Cloudflare domain availability and renewal pricing must be checked immediately before a separately selected registration.
+
+### Account connection and staged activation
+
+One account login or appropriately scoped operator API token is needed to use the existing credited account. Workers, D1, R2 and their bindings can then be provisioned through API/CLI without manually creating every resource in the dashboard. Billing activation, grant redemption and Registrar contact/agreement requirements may still need account-owner setup. No provider credential is installed in GitHub Actions or creature storage by this plan.
+
+When the operator is available, connect the credited Cloudflare account, verify the grant's product coverage and expiry, then create isolated staging resources. Start with a `workers.dev` address; a purchased domain is not required to test the world. An OAuth device login can be approved from another device, although its default authorization is broader than a narrowly scoped deployment token. Keep Registrar purchase authority separate from runtime deployment credentials.
+
+Complete the adapter and local Workers/D1/Durable Object tests first, then deploy staging, verify the existing 3D/auth/privacy flows, rehearse private state import and recovery, and promote an exact checked commit. Actual hosted network headers and account/billing settings must be read back. The current tested Node image and Postgres tests continue to run throughout the migration.
+
+Primary references checked November 8, 2026: [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/), [Durable Object alarms and retry semantics](https://developers.cloudflare.com/durable-objects/api/alarms/), [D1](https://developers.cloudflare.com/d1/), [Better Auth databases](https://better-auth.com/docs/concepts/database), [Containers and ephemeral disk](https://developers.cloudflare.com/containers/faq/), [Wrangler authentication](https://developers.cloudflare.com/workers/wrangler/commands/general/), [Registrar API prerequisites and checks](https://developers.cloudflare.com/registrar/registrar-api/). These establish service capabilities; they are not proof of this operator's credit eligibility or a deployed adapter.
+
+## Tested Node/PostgreSQL alternative: topology and authority
+
+The following Vercel/Render configuration is the implemented alternative, not the preferred Cloudflare target. Applying `render.yaml` creates paid resources; confirm plan availability and credit coverage in the selected workspace first. Frankfurt is a proposed region, not an existing deployment. The remaining provisioning variables, ownership lifecycle and ingress-header policy in this guide describe this specific alternative.
 
 - The public GitHub monorepo contains application code, tests and licensed assets. The human operator controls write access and production releases. Creatures get separate project repositories through their future GitHub Apps, with no infrastructure-repository or deployment credentials.
 - Vercel builds the existing static client at `elsewhere/web/dist`. Its server-side `/api/*` route forwards to the configured Render origin and replaces `x-elsewhere-proxy-token` with its private environment secret. No custom proxy function is needed. Both provider templates disable automatic Git deployments; an operator promotes an exact checked commit.
