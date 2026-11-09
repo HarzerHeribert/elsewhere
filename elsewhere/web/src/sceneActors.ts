@@ -14,6 +14,7 @@ export function placeActorModel(
   dt: number,
   world: PublicWorldState | undefined,
   approved: Position[] = [],
+  immediate = false,
 ) {
   if (!model.userData.placed) {
     model.position.set(target.x, 0, target.z);
@@ -24,7 +25,10 @@ export function placeActorModel(
   const previous = { x: model.position.x, z: model.position.z };
   const direct = !world || clearSegment(world, previous, target);
   if (direct) {
-    model.position.lerp(new THREE.Vector3(target.x, 0, target.z), 1 - Math.exp(-dt * 22));
+    model.position.lerp(
+      new THREE.Vector3(target.x, 0, target.z),
+      immediate ? 1 : 1 - Math.exp(-dt * 22),
+    );
   } else {
     const prior = (model.userData.approvedRoute ?? []) as Position[];
     const candidates = [...prior, ...approved]
@@ -46,11 +50,25 @@ export function placeActorModel(
   if (direct) model.userData.approvedRoute = approved;
   const distance = Math.hypot(model.position.x - previous.x, model.position.z - previous.z);
   model.userData.stepPhase = (model.userData.stepPhase ?? 0) + distance * 8;
+  const speed = distance / Math.max(dt, 0.001);
+  const weight = Math.min(1, speed / 3.2);
+  model.userData.gaitWeight =
+    (model.userData.gaitWeight ?? 0) +
+    (weight - (model.userData.gaitWeight ?? 0)) * (1 - Math.exp(-dt * 18));
+  const gait = model.userData.gaitWeight;
   const feet = model.userData.feet as THREE.Mesh[] | undefined;
-  if (feet)
-    for (let i = 0; i < feet.length; i++)
-      feet[i]!.rotation.x =
-        distance > 0.002
-          ? Math.sin(model.userData.stepPhase + i * Math.PI) * 0.35
-          : THREE.MathUtils.lerp(feet[i]!.rotation.x, 0, Math.min(1, dt * 15));
+  if (feet) {
+    for (let i = 0; i < feet.length; i++) {
+      const phase = model.userData.stepPhase + i * Math.PI;
+      feet[i]!.rotation.x = Math.sin(phase) * 0.5 * gait;
+      const foot = feet[i]!;
+      foot.userData.restY ??= foot.position.y;
+      foot.position.y = foot.userData.restY + Math.max(0, Math.sin(phase)) * 0.09 * gait;
+      feet[i]!.position.z = 0.03 + Math.cos(phase) * 0.13 * gait;
+    }
+    const arms = model.userData.arms as THREE.Mesh[] | undefined;
+    arms?.forEach((arm, i) => {
+      arm.rotation.x = -Math.sin(model.userData.stepPhase + i * Math.PI) * 0.4 * gait;
+    });
+  }
 }

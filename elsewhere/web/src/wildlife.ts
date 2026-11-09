@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SnapshotMotion } from './snapshotMotion';
 import type { WorldEntity } from '@elsewhere/character-interfaces';
 import type { AttachWorldAsset } from './worldAssets';
 import { ResourceScope, releaseObjectResources } from './sceneResources';
@@ -12,8 +13,7 @@ type Animal = {
   ring: THREE.Mesh;
   phase: number;
   butterfly: boolean;
-  target: THREE.Vector3;
-  initialized: boolean;
+  motion: SnapshotMotion;
   behavior: WorldEntity['behavior'];
   observationVersion: number;
 };
@@ -270,8 +270,7 @@ export function createWildlife(scene: THREE.Scene, attach: AttachWorldAsset) {
       ring,
       phase: entity.id.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0) % 17,
       butterfly,
-      target: new THREE.Vector3(),
-      initialized: false,
+      motion: new SnapshotMotion(),
       behavior: entity.behavior,
       observationVersion: entity.observationVersion,
     };
@@ -286,16 +285,16 @@ export function createWildlife(scene: THREE.Scene, attach: AttachWorldAsset) {
     selected: string | null,
     viewer: THREE.Vector3,
     overview: boolean,
+    now: number,
+    stamp: number,
   ) {
     for (const entity of entities) {
       const animal = animals.get(entity.id) ?? build(entity);
       animal.behavior = entity.behavior;
       animal.observationVersion = entity.observationVersion;
-      animal.target.set(entity.position.x, entity.elevation, entity.position.z);
-      if (!animal.initialized) {
-        animal.root.position.copy(animal.target);
-        animal.initialized = true;
-      } else animal.root.position.lerp(animal.target, 1 - Math.exp(-dt * 13));
+      animal.motion.sample(stamp, now, entity.position.x, entity.elevation, entity.position.z);
+      const position = animal.motion.position(now)!;
+      animal.root.position.set(position.x, position.y, position.z);
       const delta = Math.atan2(
         Math.sin(entity.facing - animal.root.rotation.y),
         Math.cos(entity.facing - animal.root.rotation.y),

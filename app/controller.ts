@@ -43,6 +43,7 @@ import {
   hubertDreamSources,
 } from '../characters/hubert/src/dreams';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
+import { hubertActivityDurationMs } from '../characters/hubert/src/pacing';
 import type { ReflectionProvider } from '../packages/adapters/src/models/reflection';
 import {
   assertRoutingLedger,
@@ -79,6 +80,8 @@ export interface ControllerState {
     startedAt: number;
     simulatedAt: number;
     lastDecisionAt: number;
+    /** Earliest natural completion of the current activity, in simulated world time. */
+    activityUntil?: number;
     modelStatus: string;
     /** Continuous observed rest only; a restart or pause begins a new session. */
     dreamRest?: { id: string; startedAt: number; startedAtReal: number };
@@ -404,7 +407,9 @@ export class ElsewhereController {
     const ready =
       resident &&
       !resident.path.length &&
-      (force || now - s.runtime.lastDecisionAt >= (this.options.decisionIntervalMs ?? 18_000));
+      (force ||
+        (now >= (s.runtime.activityUntil ?? 0) &&
+          now - s.runtime.lastDecisionAt >= (this.options.decisionIntervalMs ?? 90_000)));
     if (ready) {
       const observation = observeWorld(s.world, 'hubert', now);
       let decision;
@@ -448,9 +453,13 @@ export class ElsewhereController {
       decision ??= chooseAction(s.hubert, observation, now, this.wallNow());
       s.hubert = decision.state;
       const policy = authorizeCommand(decision.action);
+      delete s.runtime.activityUntil;
       if (policy.allowed) {
         const result = executeWorldCommand(s.world, 'hubert', policy.command, now);
         s.world = result.world;
+        const duration = hubertActivityDurationMs(policy.command);
+        if (result.outcome.status !== 'rejected' && duration > 0)
+          s.runtime.activityUntil = now + duration;
         s.hubert = applyOutcome(
           s.hubert,
           result.outcome,

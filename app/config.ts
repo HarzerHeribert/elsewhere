@@ -8,6 +8,7 @@ const schema = z.object({
   DATA_DIR: z.string().default('.data'),
   ALLOW_NEW_LIFE: z.enum(['true', 'false']).default('false'),
   TICK_INTERVAL_MS: z.coerce.number().int().min(250).max(60_000).default(2000),
+  DECISION_INTERVAL_MS: z.coerce.number().int().min(1000).max(3_600_000).default(90_000),
   SIMULATION_RATE: z.coerce.number().min(0.1).max(60).default(3),
   MODEL_PROVIDER: z
     .enum(['local', 'compatible', 'ollama', 'routed', 'chatgpt', 'broker'])

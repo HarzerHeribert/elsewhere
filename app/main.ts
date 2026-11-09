@@ -96,6 +96,7 @@ async function initialize() {
   });
   controller = await new ElsewhereController(store, {
     simulationStepMs: config.TICK_INTERVAL_MS * config.SIMULATION_RATE,
+    decisionIntervalMs: config.DECISION_INTERVAL_MS,
     simulationRate: config.SIMULATION_RATE,
     modelProvider: providers.model,
     reflectionProvider: providers.reflection,
