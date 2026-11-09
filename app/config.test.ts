@@ -42,3 +42,24 @@ it('allows explicit local subscription mode and blocks an unreviewed hosted cred
   );
   expect(() => appConfig({ MODEL_PROVIDER: 'chatgpt', HOST: '0.0.0.0' })).toThrow('loopback');
 });
+
+it('keeps research optional and requires its own service credentials', () => {
+  const research = {
+    ...production,
+    RESEARCH_BROKER_URL: 'https://research.example',
+    RESEARCH_BROKER_TOKEN: 'fixture-research-'.repeat(4),
+  };
+  expect(appConfig(research).RESEARCH_BROKER_URL).toBe('https://research.example');
+  expect(() => appConfig({ ...research, RESEARCH_BROKER_TOKEN: undefined })).toThrow('both');
+  expect(() => appConfig({ ...research, RESEARCH_BROKER_URL: undefined })).toThrow('both');
+  for (const name of ['ADMIN_TOKEN', 'BETTER_AUTH_SECRET', 'API_PROXY_SECRET'] as const)
+    expect(() => appConfig({ ...research, RESEARCH_BROKER_TOKEN: production[name] })).toThrow(
+      'separate',
+    );
+  expect(() =>
+    appConfig({ ...research, INFERENCE_BROKER_TOKEN: research.RESEARCH_BROKER_TOKEN }),
+  ).toThrow('separate');
+  expect(() => appConfig({ ...research, TAVILY_API_KEY: 'fixture-search-provider-key' })).toThrow(
+    'private research service',
+  );
+});

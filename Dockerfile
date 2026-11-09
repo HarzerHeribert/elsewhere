@@ -31,7 +31,8 @@ COPY --from=build --chown=node:node /app/dist/server.mjs ./dist/server.mjs
 COPY --from=build --chown=node:node /app/dist/inference.mjs ./dist/inference.mjs
 COPY --from=build --chown=node:node /app/dist/inference-operator.mjs ./dist/inference-operator.mjs
 COPY --from=build --chown=node:node /app/dist/auth-operator.mjs ./dist/auth-operator.mjs
-RUN install -d -o node -g node -m 0700 /var/lib/elsewhere-inference /home/node/.ssh && usermod -s /bin/bash node
+COPY --from=build --chown=node:node /app/dist/research.mjs ./dist/research.mjs
+RUN install -d -o node -g node -m 0700 /var/lib/elsewhere-inference /var/lib/elsewhere-research /home/node/.ssh && usermod -s /bin/bash node
 USER node
 EXPOSE 4000
 CMD ["node", "dist/server.mjs"]

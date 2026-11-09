@@ -1,6 +1,6 @@
 # Next systems: agreed design, not yet implemented
 
-The fullscreen game, contextual panels, encounters, accounts and world roles are implemented. The systems below are design decisions for the next iteration; an interface panel is not evidence that these backend capabilities already exist. External connectors now have a shared contract and a tested scope/input preflight, but no live adapter, broker or character-loop integration.
+The fullscreen game, contextual panels, encounters, accounts and world roles are implemented. The systems below are design decisions for the next iteration; an interface panel is not evidence that these backend capabilities already exist. External connectors have a shared contract and tested scope/input preflight. The first implemented adapter is [private web research](../../packages/research/README.md): Tavily with a metasearch fallback, controlled page reading and source-linked memories. Other external services below remain future work.
 
 The [feature ledger](features.md) is the current scope and ownership index. Repeated requests extend the system specified here rather than creating parallel journals, inventories, wish queues or interaction engines.
 
@@ -170,7 +170,7 @@ A thought could become a saved note, sketch or small creation through the same b
 
 ## Character connectors and real-world services
 
-Every character should receive a host-created `CharacterConnectorPort`, scoped to its world, operator and character. It can discover available offers, propose an operation and look up its own request status. The contract lives at `characters/interfaces/src/connectors.ts`; provider-independent scope/input checks live at `packages/security/src/connectors.ts`. This is a foundation, not a connected service. The current planner's closed action schema does not yet invoke it. No account, credential, payment endpoint or external job was created by adding the contract.
+Every character should receive a host-created `CharacterConnectorPort`, scoped to its world, operator and character. It can discover available offers, propose an operation and look up its own request status. The contract lives at `characters/interfaces/src/connectors.ts`; provider-independent scope/input checks live at `packages/security/src/connectors.ts`. Web research now uses this scope/input preflight through a dedicated actor-bound service and the planner's `research`/`read` actions. Its durable reservations, private provider credentials and source provenance are implemented in `packages/research`. The general connector discovery/execution broker, external write actions and account onboarding remain future work. No payment endpoint, email account or GitHub job is connected by this adapter.
 
 The [offline setup guide](../setup/index.html) and `pnpm run setup` now support private local credential entry. Each character/service gets a separate owner-only plaintext record; the explicit configured launcher can deliver a saved model to the API. Stripe sandbox and Resend credentials are staged only. Saving a record does not verify the provider, create a binding/grant or activate a connector. Production vault storage and delivery to a chosen hosting environment remain separate work.
 

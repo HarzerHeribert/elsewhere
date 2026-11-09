@@ -7,6 +7,7 @@ import {
   wakeImpulseDecision,
 } from './attention';
 import { developInterests, seedBirdInterest, type InterestEvidence } from './interests';
+import { researchContext, type HubertResearchState } from './research';
 import type { CharacterWish, WishReceipt } from './wishes';
 export {
   WISH_CATALOG,
@@ -113,6 +114,7 @@ export interface HubertState {
   progressGuidance: ProgressGuidance | null;
   progressDecision: { id: string; intentionKey: string } | null;
   activeWakeImpulse: string | null;
+  research?: HubertResearchState;
 }
 export interface OutsideEvent {
   id: string;
@@ -874,10 +876,17 @@ const toPublicMemory = (memory: EpisodicMemory): PublicMemory => ({
   entityId: memory.cues.find((cue) => cue.kind === 'entity')?.value,
   moodAtEncoding: memory.emotionalContext.mood,
   salience: memory.salience,
+  ...(memory.source === 'web-reading' && memory.reference
+    ? { sourceUrl: memory.reference.url, sourceTitle: memory.reference.title }
+    : {}),
 });
 export function publicMemories(state: HubertState): PublicMemory[] {
   return state.memories
-    .filter((memory) => memory.verified && memory.source === 'world-outcome')
+    .filter(
+      (memory) =>
+        (memory.source === 'web-reading' && Boolean(memory.reference)) ||
+        (memory.verified && memory.source === 'world-outcome'),
+    )
     .slice(-12)
     .map(toPublicMemory);
 }
@@ -885,7 +894,9 @@ export function recalledMemory(state: HubertState, now: number): PublicMemory | 
   if (!state.activeRecall || now - state.activeRecall.at > 90_000) return null;
   const memory = state.memories.find(
     (item) =>
-      item.id === state.activeRecall?.memoryId && item.verified && item.source === 'world-outcome',
+      item.id === state.activeRecall?.memoryId &&
+      ((item.source === 'web-reading' && Boolean(item.reference)) ||
+        (item.verified && item.source === 'world-outcome')),
   );
   return memory ? toPublicMemory(memory) : null;
 }
@@ -958,10 +969,14 @@ export function workingContext(
   state: HubertState,
   observation: Observation,
   nowReal = observation.observedAt,
+  researchEnabled = false,
 ): DecisionContext {
   return buildWorkingContext({
     identity: HUBERT_IDENTITY,
-    state: planningSummary(state, observation, nowReal),
+    state: {
+      ...planningSummary(state, observation, nowReal),
+      research: researchContext(state, observation, nowReal, researchEnabled),
+    },
     intentions: [state.intent, state.project.name],
     memories: state.activeRecall
       ? state.memories
@@ -1018,12 +1033,15 @@ export async function chooseActionWithProvider(
   now: number,
   provider: DecisionProvider,
   nowReal = now,
+  researchEnabled = false,
 ): Promise<HubertDecision> {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
   if (needsRest(state) || needsLocalFollowThrough(state))
     return chooseAction(input, observation, now, nowReal);
-  const result = await provider.propose(workingContext(state, observation, nowReal));
+  const result = await provider.propose(
+    workingContext(state, observation, nowReal, researchEnabled),
+  );
   const action = CharacterCommandSchema.parse(result);
   if (
     action.type === 'move' &&

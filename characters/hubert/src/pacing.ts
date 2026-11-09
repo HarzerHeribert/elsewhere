@@ -3,6 +3,9 @@ import type { CharacterCommand } from '@elsewhere/character-interfaces';
 /** Host-owned activity time. Rendering or a visitor's presence never advances completion. */
 export function hubertActivityDurationMs(command: CharacterCommand): number {
   switch (command.type) {
+    case 'research':
+    case 'read':
+      return 120_000;
     case 'rest':
       return command.durationMs ?? 60_000;
     case 'work':

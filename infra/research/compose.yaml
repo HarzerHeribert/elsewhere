@@ -1,0 +1,73 @@
+name: elsewhere-hubert-research
+services:
+  search:
+    image: ghcr.io/searxng/searxng@sha256:287af61f1a13e86d02974fcde91a3413a9945788de38b61ffbc491d81a19bcc2
+    user: '977:977'
+    environment:
+      FORCE_OWNERSHIP: 'false'
+      SEARXNG_SECRET: '${SEARXNG_SECRET:?set a private random SearXNG secret}'
+      GRANIAN_WORKERS: '1'
+      GRANIAN_THREADS: '2'
+      SEARXNG_PORT: '8080'
+    volumes:
+      - './settings.yml:/etc/searxng/settings.yml:ro'
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=977,gid=977
+      - /var/cache/searxng:rw,noexec,nosuid,size=16m,uid=977,gid=977
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    mem_limit: 512m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          'CMD',
+          '/usr/local/searxng/.venv/bin/python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  gateway:
+    image: '${RESEARCH_IMAGE:-elsewhere-research:local}'
+    command: ['node', 'dist/research.mjs']
+    environment:
+      NODE_ENV: production
+      HOST: '0.0.0.0'
+      PORT: '4120'
+      RESEARCH_DATA_ROOT: /var/lib/elsewhere-research
+      SEARXNG_URL: http://search:8080/
+      HUBERT_OWNER_USER_ID: '${HUBERT_OWNER_USER_ID:?set the real character owner}'
+      RESEARCH_BROKER_TOKEN: '${RESEARCH_BROKER_TOKEN:?set a dedicated research credential}'
+      TAVILY_API_KEY: '${TAVILY_API_KEY:-}'
+      RESEARCH_TAVILY_MONTHLY_LIMIT: '${RESEARCH_TAVILY_MONTHLY_LIMIT:-1000}'
+    ports:
+      - '127.0.0.1:4120:4120'
+    volumes:
+      - research-private:/var/lib/elsewhere-research
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=16m']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    mem_limit: 256m
+    cpus: 0.25
+    restart: unless-stopped
+    depends_on:
+      search:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4120/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  research-private:

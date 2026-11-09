@@ -17,6 +17,22 @@
 
 https://{$HUBERT_INFERENCE_HOST}:9443 {
 	tls /etc/hubert-tls/cert.pem /etc/hubert-tls/key.pem
+	@research_routes path /v1/research/search /v1/research/read /v1/research/ready
+	handle @research_routes {
+		request_body {
+			max_size 8KB
+		}
+		@research_unauthorized not header Authorization "Bearer {$RESEARCH_BROKER_TOKEN}"
+		handle @research_unauthorized {
+			header Content-Type application/json
+			respond `{"error":"unauthorized"}` 401 {
+				close
+			}
+		}
+		handle {
+			reverse_proxy 127.0.0.1:4120
+		}
+	}
 	@hubert_routes path /v1/decision /v1/reflection /readyz
 	handle @hubert_routes {
 		request_body {

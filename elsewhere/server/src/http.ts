@@ -64,6 +64,9 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
     entityId: item.entityId,
     moodAtEncoding: item.moodAtEncoding,
     salience: item.salience,
+    ...(item.sourceUrl?.startsWith('https://')
+      ? { sourceUrl: item.sourceUrl, sourceTitle: item.sourceTitle }
+      : {}),
   });
   return {
     world: publicWorld(snapshot.world),

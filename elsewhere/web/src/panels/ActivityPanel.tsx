@@ -62,6 +62,16 @@ export function ActivityPanel({
                 <time>{formatTime(m.at)}</time>
                 <p>{m.summary}</p>
                 <small>{m.placeId?.replace(/-/g, ' ')}</small>
+                {m.sourceUrl && (
+                  <a
+                    href={m.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-button"
+                  >
+                    {m.sourceTitle ?? 'External source'} ↗
+                  </a>
+                )}
               </article>
             ))}
       </div>

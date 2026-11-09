@@ -203,6 +203,8 @@ export interface PublicMemory {
   entityId?: string;
   moodAtEncoding?: number;
   salience?: number;
+  sourceUrl?: string;
+  sourceTitle?: string;
 }
 export interface PublicCharacterState {
   id: string;
