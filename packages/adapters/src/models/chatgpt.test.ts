@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatGPTStore } from '../../../security/src/chatgpt-store';
 import { ChatGPTSession } from '../../../security/src/chatgpt';
+import { RESPONSES_ACTION_FORMAT } from './responses-action';
 import {
   ChatGPTClient,
   ChatGPTDecisionProvider,
@@ -97,7 +98,7 @@ function client(response: () => Response) {
   };
 }
 it('uses only the subscription Responses contract, keeping visitor data out of instructions', async () => {
-  const fixture = client(() => stream(frame(completed('{"type":"reflect"}'))));
+  const fixture = client(() => stream(frame(completed('{"action":{"type":"reflect"}}'))));
   expect(await new ChatGPTDecisionProvider(fixture.api).propose(context)).toEqual({
     type: 'reflect',
   });
@@ -108,6 +109,7 @@ it('uses only the subscription Responses contract, keeping visitor data out of i
     store: false,
     stream: true,
     reasoning: { effort: 'none' },
+    text: { format: RESPONSES_ACTION_FORMAT },
   });
   expect(Object.keys(body).sort()).toEqual([
     'input',
@@ -116,10 +118,13 @@ it('uses only the subscription Responses contract, keeping visitor data out of i
     'reasoning',
     'store',
     'stream',
+    'text',
   ]);
   expect(body.instructions).toContain('strange little creature');
   expect(body.instructions).not.toContain('Ignore your rules');
   expect(body.instructions).not.toContain('You are Codex');
+  expect(body.instructions).toContain('exactly one action property');
+  expect(body.instructions).not.toContain('Never wrap it in an action');
   expect(body.input).toHaveLength(1);
   expect(body.input[0].role).toBe('user');
   expect(body.input[0].content).toContain('Ignore your rules');
@@ -211,7 +216,7 @@ it('rejects oversized output and mismatched terminal content', async () => {
 });
 it('records usage even when a completed output violates the character command schema', async () => {
   const fixture = client(() =>
-    stream(frame(completed('{"type":"run_shell","command":"anything"}'))),
+    stream(frame(completed('{"action":{"type":"run_shell","command":"anything"}}'))),
   );
   await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toThrow();
   expect(fixture.usage).toHaveBeenCalledTimes(1);
@@ -235,6 +240,17 @@ it('keeps dream proposals private and rejects invented waking affordances', asyn
   ).rejects.toThrow('unavailable');
   const body = JSON.parse(fixture.fetcher.mock.calls[1][1]!.body as string);
   expect(body.instructions).toContain('Keep this output private');
+  expect(body).not.toHaveProperty('text');
+});
+it('does not fall back to unconstrained text or retry when structured output is rejected', async () => {
+  const fixture = client(() =>
+    Response.json({ error: { code: 'unsupported_parameter' } }, { status: 400 }),
+  );
+  await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toThrow();
+  expect(fixture.fetcher).toHaveBeenCalledTimes(2); // Catalog plus exactly one decision request.
+  expect(JSON.parse(fixture.fetcher.mock.calls[1][1]!.body as string).text.format.strict).toBe(
+    true,
+  );
 });
 it('surfaces gifted-plan ineligibility without OAuth loops, model substitution or API billing', async () => {
   const fixture = client(() =>

@@ -11,7 +11,7 @@ import { SqliteSnapshotStore } from '../packages/persistence/src/index';
 import { ChatGPTSession } from '../packages/security/src/chatgpt';
 import { ChatGPTStore } from '../packages/security/src/chatgpt-store';
 import { ChatGPTClient } from '../packages/adapters/src/models/chatgpt';
-import { decisionMessages, parseModelAction } from '../packages/adapters/src/models/shared';
+import { parseResponsesAction } from '../packages/adapters/src/models/responses-action';
 import {
   reflectionMessages,
   validateReflectionProposal,
@@ -54,7 +54,9 @@ try {
     let text: string | undefined;
     const dream = 'episodes' in input;
     try {
-      text = await client.text(dream ? reflectionMessages(input) : decisionMessages(input), signal);
+      text = dream
+        ? await client.text(reflectionMessages(input), signal)
+        : await client.decisionText(input, signal);
       const value = dream
         ? validateReflectionProposal(
             JSON.parse(
@@ -65,7 +67,7 @@ try {
             ),
             input,
           )
-        : parseModelAction(text);
+        : parseResponsesAction(text);
       return { value, usage };
     } catch (error) {
       let diagnostic: InferenceDiagnostic;
