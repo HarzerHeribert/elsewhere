@@ -80,11 +80,11 @@ test('a model correction notice distinguishes paced reconsideration from owner i
   await page.getByRole('button', { name: 'Your account', exact: true }).click();
   const notices = page.getByRole('region', { name: 'Character provider notices' });
   await expect(notices).toContainText('Hubert · Reconsidering');
-  await expect(notices).toContainText('invalid action');
-  await expect(notices.getByRole('button', { name: 'Retry provider' })).toHaveCount(0);
+  await expect(notices).toContainText('allowed action format');
+  await expect(notices.getByRole('button', { name: 'Retry Hubert' })).toHaveCount(0);
   await expect(page.getByLabel('Character needs attention', { exact: true })).toHaveCount(0);
   issue.retrying = false;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(notices).toContainText('Hubert · Needs attention');
-  await expect(notices.getByRole('button', { name: 'Retry provider' })).toBeVisible();
+  await expect(notices.getByRole('button', { name: 'Retry Hubert' })).toBeVisible();
 });

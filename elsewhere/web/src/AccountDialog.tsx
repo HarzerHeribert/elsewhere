@@ -1,5 +1,6 @@
 import type { PublicCreation } from '@elsewhere/character-interfaces';
 import { CreationManager } from './CreationManager';
+import { CharacterProviderNotices } from './CharacterProviderNotices';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
 import { Button } from './ui/Button';
@@ -81,6 +82,11 @@ export function AccountDialog({
           <p>
             You are signed in as <strong>{account.name}</strong>.
           </p>
+          <CharacterProviderNotices
+            issues={session.characterIssues}
+            pending={pending}
+            onRetry={session.retryCharacterProvider}
+          />
           <dl className="account-details">
             <div>
               <dt>Email</dt>
@@ -119,57 +125,6 @@ export function AccountDialog({
               onChanged={onCreationsChanged}
             />
           ))}
-          {session.characterIssues.length > 0 && (
-            <section aria-label="Character provider notices">
-              <h3>Your characters</h3>
-              {session.characterIssues
-                .slice()
-                .reverse()
-                .map((issue) => (
-                  <article key={issue.id} className="memory-glimpse">
-                    <strong>
-                      {issue.characterId === 'hubert' ? 'Hubert' : issue.characterId} ·{' '}
-                      {issue.resolvedAt !== undefined
-                        ? 'Recovered'
-                        : issue.retrying
-                          ? 'Reconsidering'
-                          : 'Needs attention'}
-                    </strong>
-                    <p>
-                      {issue.resolvedAt !== undefined
-                        ? 'This earlier issue has recovered.'
-                        : issue.message}
-                    </p>
-                    {issue.code && (
-                      <p>
-                        Action feedback: {issue.code.replace(/_/g, ' ')}
-                        {issue.fields?.length ? ' · fields: ' + issue.fields.join(', ') : ''}
-                      </p>
-                    )}
-                    <small>
-                      {issue.workload === 'notebook'
-                        ? 'Notebook'
-                        : issue.workload === 'reflection'
-                          ? 'Reflection'
-                          : 'Decisions'}{' '}
-                      · {new Date(issue.since).toLocaleString()}
-                      {issue.resolvedAt !== undefined && (
-                        <> · Recovered {new Date(issue.resolvedAt).toLocaleString()}</>
-                      )}
-                    </small>
-                    {issue.resolvedAt === undefined && !issue.retrying && (
-                      <Button
-                        variant="secondary"
-                        busy={pending}
-                        onClick={() => void session.retryCharacterProvider(issue.characterId)}
-                      >
-                        Retry provider
-                      </Button>
-                    )}
-                  </article>
-                ))}
-            </section>
-          )}
           <p className="privacy-note">
             Your email stays private. Character email delivery requires verified contact details and
             explicit consent; it is not connected yet.
