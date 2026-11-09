@@ -135,9 +135,7 @@ export function CharacterInterests({
               <small>
                 {interest.encounters > 0
                   ? `${interest.encounters} ${interest.encounters === 1 ? 'encounter' : 'encounters'}`
-                  : interest.id === 'birds'
-                    ? 'His starting fascination'
-                    : 'A curiosity to follow'}
+                  : 'A curiosity to follow'}
               </small>
             )}
           </div>

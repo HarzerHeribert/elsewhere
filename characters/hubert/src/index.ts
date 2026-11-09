@@ -994,6 +994,11 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
         retryCondition,
       })),
     actionOffers: hubertActionOffers(state, observation, now).map((offer) => ({ ...offer })),
+    recentNotebook: (state.notebook?.entries ?? []).slice(-2).map(({ id, text }) => ({
+      id,
+      text,
+      meaning: 'A previous public observation or question, not a verified event or an obligation.',
+    })),
     lastOutcome: state.lastOutcome ? { ...state.lastOutcome } : null,
     lastProposal: state.lastProposal ? { ...state.lastProposal } : null,
     progressAdvice: state.progressGuidance
