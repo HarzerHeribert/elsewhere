@@ -150,6 +150,10 @@ export interface AccountSummary {
 }
 export interface AccountCapabilities {
   emailLinkAuthEnabled?: boolean;
+  passkeyAuthEnabled?: boolean;
+  ownerControlsRequirePasskey?: boolean;
+  ownerControlsUnlocked?: boolean;
+  passkeyVerifiedRecently?: boolean;
   enabled: boolean;
   passwordAuthEnabled: boolean;
   requiresEmailVerification: boolean;

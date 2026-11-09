@@ -890,3 +890,97 @@ describe('local public/owner API separation', () => {
     expect(resolveWish).toHaveBeenCalledOnce();
   });
 });
+
+it('replaces the authentication IP header with the verified ingress address and ignores spoofed forwarding identities', async () => {
+  const secret = 'fixture-auth-ingress-secret'.repeat(2),
+    seen: string[] = [];
+  const { url } = await start({
+    proxySecret: secret,
+    auth: {
+      handle: async (req, res) => {
+        seen.push(String(req.headers['x-elsewhere-auth-client-ip']));
+        res.setHeader('content-type', 'application/json');
+        res.end('{}');
+      },
+      getAccount: async () => null,
+      isWorldAdmin: async () => false,
+    },
+  });
+  const response = await fetch(url + '/api/auth/get-session', {
+    headers: {
+      'x-elsewhere-proxy-token': secret,
+      'x-vercel-forwarded-for': '203.0.113.9',
+      'x-elsewhere-auth-client-ip': '198.51.100.7',
+      'x-forwarded-for': '198.51.100.8',
+    },
+  });
+  expect(response.status).toBe(200);
+  expect(seen).toEqual(['203.0.113.9']);
+  const denied = await fetch(url + '/api/auth/get-session', {
+    headers: {
+      'x-vercel-forwarded-for': '203.0.113.9',
+      'x-elsewhere-auth-client-ip': '198.51.100.7',
+    },
+  });
+  expect(denied.status).toBe(403);
+  expect(seen).toHaveLength(1);
+});
+
+it('gates owner/world mutations on fresh passkey assurance after opt-in while preserving private bearer recovery', async () => {
+  const account: AccountSummary = {
+    id: 'fixture-owner',
+    name: 'Owner',
+    email: 'owner@example.invalid',
+    emailVerified: true,
+    role: 'admin',
+    isWorldAdmin: true,
+  };
+  const retry = vi.fn(async () => ({ accepted: true })),
+    create = vi.fn(async () => ({ accepted: true })),
+    pause = vi.fn(async () => fixture());
+  const { url } = await start({
+    pause,
+    canManageCharacter: async () => true,
+    retryCharacterProvider: retry,
+    createCreation: create,
+    auth: {
+      handle: async () => {},
+      getAccount: async () => account,
+      isWorldAdmin: async () => true,
+      canUseOwnerControls: async () => false,
+      getSecurityState: async () => ({
+        ownerControlsRequirePasskey: true,
+        ownerControlsUnlocked: false,
+        passkeyVerifiedRecently: false,
+      }),
+    },
+  });
+  const post = (path: string, body: unknown = {}, bearer = false) =>
+    fetch(url + path, {
+      method: 'POST',
+      headers: {
+        origin: 'http://127.0.0.1:5173',
+        'content-type': 'application/json',
+        ...(bearer ? { authorization: 'Bearer ' + token } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  expect((await fetch(url + '/api/account')).status).toBe(200);
+  expect((await post('/api/admin/pause')).status).toBe(403);
+  expect((await post('/api/characters/hubert/provider/retry')).status).toBe(403);
+  expect(
+    (
+      await post('/api/characters/hubert/creations', {
+        title: 'A link',
+        description: '',
+        url: 'https://example.com/item',
+        kind: 'website',
+      })
+    ).status,
+  ).toBe(403);
+  expect(retry).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(pause).not.toHaveBeenCalled();
+  expect((await post('/api/admin/pause', {}, true)).status).toBe(200);
+  expect(pause).toHaveBeenCalledTimes(1);
+});

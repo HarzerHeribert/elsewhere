@@ -166,3 +166,25 @@ it('never exposes an authenticated session token when a link is redeemed without
     emailVerified: true,
   });
 });
+
+it('suppresses duplicate delivery with the same generic response and preserves usable existing links', async () => {
+  const f = await fixture();
+  const owner = await f.auth.createOperatorAccount({
+    name: 'Owner',
+    email: 'owner@example.invalid',
+  });
+  const first = await f.post('sign-in/magic-link', {
+    email: 'owner@example.invalid',
+    callbackURL: origin,
+  });
+  const second = await f.post('sign-in/magic-link', {
+    email: 'owner@example.invalid',
+    callbackURL: origin,
+  });
+  expect(first.status).toBe(200);
+  expect(second.status).toBe(200);
+  expect(await first.json()).toEqual(await second.json());
+  expect(f.links).toHaveLength(1);
+  const verified = await f.auth.webHandler(new Request(f.links[0]));
+  expect((await f.auth.getAccount(cookieRequest(verified)))?.id).toBe(owner);
+});

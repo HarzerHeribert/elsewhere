@@ -16,6 +16,11 @@ export function authOptionsFromEnvironment(
     adminUserIds: environment.AUTH_ADMIN_USER_IDS?.split(',')
       .map((id) => id.trim())
       .filter(Boolean),
+    ...(environment.AUTH_EMAIL_MAX_PER_DAY === undefined
+      ? {}
+      : {
+          emailDeliveryLimits: { maxPerDay: Number(environment.AUTH_EMAIL_MAX_PER_DAY) },
+        }),
     production: environment.NODE_ENV === 'production',
     ...overrides,
   };
