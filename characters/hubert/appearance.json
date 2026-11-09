@@ -1,25 +1,25 @@
 {
   "kind": "An unclassified Elsewhere creature",
-  "description": "A small, soft, lopsided creature with three little paddle feet, two leaf-like feelers and large curious eyes.",
-  "silhouette": "One continuous pear-shaped body; a broad soft base and a tiny off-centre crown.",
+  "description": "An odd, lopsided creature with three oversized paddle feet, mismatched heavy-lidded eyes, crooked feelers and one inconvenient tooth.",
+  "silhouette": "A wonky clay-colored pear, a leaning crown, bent feelers and three broad, splayed feet.",
   "palette": {
-    "body": "#bf7547",
-    "belly": "#fae6af",
-    "moss": "#447c6b",
-    "deepMoss": "#284e48",
-    "ochre": "#eab767",
-    "eyes": "#233a39",
-    "highlight": "#fff9e6",
-    "markings": "#79513d",
-    "blush": "#dc8b6e",
-    "leafTip": "#bfca76"
+    "body": "#c67448",
+    "belly": "#d7aa69",
+    "moss": "#596b42",
+    "deepMoss": "#243b36",
+    "ochre": "#b76b44",
+    "eyes": "#243b36",
+    "highlight": "#f4f0e4",
+    "markings": "#905437",
+    "blush": "#c67448",
+    "leafTip": "#d9ed92"
   },
   "eyeHeight": 0.78,
-  "height": 1.22,
+  "height": 1.35,
   "mannerisms": [
-    "A soft three-footed shuffle when moving.",
-    "A listening feeler that inclines toward something interesting.",
-    "A slight whole-body tilt while watching birds.",
-    "An occasional slow blink; a small settled shape while resting."
+    "An uneven three-footed galumph; the rear foot catches up late.",
+    "One bent feeler seems to receive a different signal than the other.",
+    "A deadpan sideways look followed by a slightly excessive whole-body lean.",
+    "Mismatched slow blinks and a long, unimpressed pause."
   ]
 }

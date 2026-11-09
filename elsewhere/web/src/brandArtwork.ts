@@ -1,0 +1,27 @@
+/** Original, font-independent artwork shared by the UI and exported assets. */
+export const brandColors = {
+  ink: '#243b36',
+  paper: '#f4f0e4',
+  accent: '#99583f',
+};
+export const doorwayArtwork = `<path d="M18 87 22 21 68 12 78 83" fill="none" stroke="currentColor" stroke-width="9" stroke-linejoin="round"/><path d="m30 29 26-6 2 60-31 9Z" fill="currentColor"/><path d="m68 62 18-4-7 15" fill="none" stroke="#99583f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="m59 81 27-23" fill="none" stroke="#99583f" stroke-width="6" stroke-linecap="round"/><circle cx="48" cy="55" r="3" fill="#f4f0e4"/>`;
+export { wordmarkArtwork } from './wordmarkArtwork';
+export const hubertArtwork = `
+<ellipse cx="162" cy="295" rx="104" ry="12" fill="#243b36" opacity=".12"/>
+<g class="hubert-feet" fill="#596b42" stroke="#243b36" stroke-width="3" stroke-linejoin="round">
+<path d="m154 255 29-4 27 27q-24 12-57 2Z"/><path d="m110 257 20 15-5 23-70-3q-6-18 55-35Z"/><path d="m188 257 24-2q46 23 43 40l-75 4Z"/><path d="m77 283 8 9m16-14 7 16m102-11-2 13m19-9 3 9" fill="none" stroke-width="2"/>
+</g><g class="hubert-body">
+<g fill="none" stroke="#243b36" stroke-width="8" stroke-linecap="round"><path d="M139 85q-40-25-48-59"/><path d="m179 79 38-39 29 21"/></g>
+<path class="hubert-feeler" d="M96 37Q52 43 46 13q41-8 50 24Z" fill="#596b42"/><path d="m229 53 30 3-5 24q-27 4-25-27Z" fill="#d9ed92" stroke="#243b36" stroke-width="3"/>
+<path d="M143 64c-31 7-37 41-55 72-24 42-25 99 3 123 24 24 108 26 134 0 20-21 9-72-8-107-15-31-18-77-44-87-11-4-21-3-30-1Z" fill="#c67448" stroke="#243b36" stroke-width="3"/>
+<path d="M113 179c-16 23-18 57-3 72 17 15 69 20 88 2 10-10 12-38-4-60-14-20-60-34-81-14Z" fill="#d7aa69"/>
+<path d="m92 174-21 30 8 17m135-43 21 24-3 17" fill="none" stroke="#243b36" stroke-width="7" stroke-linecap="round"/>
+<g class="hubert-eyes" stroke="#243b36" stroke-width="3">
+<path d="M98 121c-1-28 14-40 31-36 18 3 20 21 17 39-4 29-48 25-48-3Z" fill="#f4f0e4"/><path d="M161 112c0-20 12-27 26-24 20 4 22 20 18 35-7 22-45 16-44-11Z" fill="#f4f0e4"/>
+<path d="M101 106q0-24 25-22 17 1 20 28Z" fill="#a45d3c"/><path d="M164 103q8-23 29-12 10 5 13 21Z" fill="#a45d3c"/>
+<g class="hubert-pupils" fill="#243b36" stroke="none"><ellipse cx="132" cy="123" rx="5" ry="8"/><ellipse cx="178" cy="119" rx="4" ry="6"/></g></g>
+<path d="M147 134q25-12 37 8 7 13-13 16l-31-3" fill="#c67448" stroke="#243b36" stroke-width="3" stroke-linecap="round"/>
+<path d="m130 170 38 3" stroke="#243b36" stroke-width="4" stroke-linecap="round"/><path d="m147 173 10 1-1 10-8-1Z" fill="#f4f0e4" stroke="#243b36" stroke-width="2"/>
+<g fill="#905437"><ellipse cx="136" cy="211" rx="5" ry="3"/><ellipse cx="163" cy="229" rx="4" ry="6"/><ellipse cx="180" cy="211" rx="3" ry="4"/><ellipse cx="119" cy="239" rx="3" ry="4"/></g></g>`;
+export const svgDocument = (viewBox: string, artwork: string, attributes = '') =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" ${attributes}>${artwork}</svg>`;

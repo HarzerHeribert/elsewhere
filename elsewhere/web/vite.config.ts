@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { tsImport } from 'tsx/esm/api';
 
@@ -38,5 +39,13 @@ export default defineConfig({
     },
     proxy: { '/api': `http://127.0.0.1:${process.env.PORT ?? 4000}` },
   },
-  build: { outDir: 'dist' },
+  build: {
+    outDir: 'dist',
+    rollupOptions: {
+      input: {
+        world: fileURLToPath(new URL('./index.html', import.meta.url)),
+        designSystem: fileURLToPath(new URL('./design-system.html', import.meta.url)),
+      },
+    },
+  },
 });

@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import type {
   Place,
   Position,
@@ -39,7 +40,7 @@ export function MapPanel({
   const places = world.places.filter((place) => place.id !== 'meadow');
   return (
     <>
-      <p className="panel-intro">A few places to get wonderfully sidetracked.</p>
+      <p className="panel-intro">Explore the places and objects that residents interact with.</p>
       <WorldMap
         snapshot={snapshot}
         visitor={visitor}
@@ -70,7 +71,7 @@ export function MapPanel({
       </div>
       <WildlifeDirectory entities={snapshot?.world.entities ?? []} onSelect={onSelectObject} />
       <details className="object-directory">
-        <summary>Look around the objects</summary>
+        <summary>Objects in the world</summary>
         <div>
           {world.objects.map((o) => (
             <button key={o.id} onClick={() => onSelectObject(o.id)}>
@@ -103,16 +104,16 @@ export function PlacePanel({
     <>
       <span className="tag">{discovered ? 'In your field journal' : 'Somewhere new'}</span>
       <p className="large-copy">{place.description}</p>
-      <button
-        className="primary-button full-width"
+      <Button
+        className="full-width"
         disabled={!onWalk}
         onClick={() => void onWalk?.(placeCenter(place))}
       >
         <Icon name="walk" />
         Walk toward here
-      </button>
+      </Button>
       <div className="panel-section">
-        <p className="eyebrow">Things to notice</p>
+        <p className="eyebrow">Objects here</p>
         <div className="object-list">
           {objects
             .filter(
@@ -130,9 +131,9 @@ export function PlacePanel({
             ))}
         </div>
       </div>
-      <button className="text-button" onClick={onBack}>
+      <Button variant="quiet" onClick={onBack}>
         ← Back to the map
-      </button>
+      </Button>
     </>
   );
 }
@@ -151,9 +152,9 @@ export function ObjectPanel({
       {entity && (
         <>
           <EntityDetails entity={entity} />
-          <button className="text-button" aria-label="Close wildlife details" onClick={onBack}>
+          <Button variant="quiet" aria-label="Close wildlife details" onClick={onBack}>
             ← Back to exploring
-          </button>
+          </Button>
         </>
       )}
       {object && (
@@ -169,9 +170,9 @@ export function ObjectPanel({
           <p className="muted-copy">
             You can look around freely. Hubert decides how he spends his own time.
           </p>
-          <button className="text-button" aria-label="Close object details" onClick={onBack}>
+          <Button variant="quiet" aria-label="Close object details" onClick={onBack}>
             ← Back to exploring
-          </button>
+          </Button>
         </>
       )}
     </>

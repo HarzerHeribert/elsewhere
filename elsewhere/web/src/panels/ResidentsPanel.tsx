@@ -17,7 +17,7 @@ export function ResidentsPanel({
 }) {
   return (
     <>
-      <p className="panel-intro">A place shared with lives that have their own plans.</p>
+      <p className="panel-intro">Meet the digital characters who inhabit this world.</p>
       {awaitingLiveState && (
         <>
           <div className="resident-row" role="group" aria-label="About Hubert">
@@ -28,8 +28,8 @@ export function ResidentsPanel({
             </span>
           </div>
           <p className="quiet-note">
-            A small, unclassified creature with a particular interest in birds. His position and
-            activity will appear when the live world connects.
+            Hubert is Elsewhere’s first resident. His current activity will appear when the world
+            connects.
           </p>
         </>
       )}

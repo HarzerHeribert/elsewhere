@@ -1,5 +1,8 @@
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { Modal } from './Modal';
+import { Button } from './ui/Button';
+import { StatusBadge } from './ui/StatusBadge';
+import { productCopy } from './productCopy';
 import type { useOwnerActions } from './useOwnerActions';
 
 export function WorldDialog({
@@ -26,36 +29,57 @@ export function WorldDialog({
           {(admin.owner || isWorldAdmin || canManageCharacter) && (
             <div className="owner-actions">
               {(admin.owner || isWorldAdmin) && (
-                <button
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
                   disabled={admin.busy || !snapshot}
                   onClick={() =>
                     void admin.ownerAction(snapshot?.runtime.paused ? 'resume' : 'pause')
                   }
                 >
                   {snapshot?.runtime.paused ? 'Resume life' : 'Pause life'}
-                </button>
+                </Button>
               )}
               {(admin.owner || canManageCharacter) && (
-                <button
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
                   disabled={admin.busy || !snapshot}
                   onClick={() => void admin.ownerAction('tick')}
                 >
                   Advance one decision
-                </button>
+                </Button>
               )}
               {admin.owner && (
-                <button
-                  className="text-button"
+                <Button
+                  variant="quiet"
                   onClick={() => {
                     admin.saveOwner('');
                   }}
                 >
                   Disconnect
-                </button>
+                </Button>
               )}
             </div>
+          )}
+          {snapshot && (admin.owner || isWorldAdmin || canManageCharacter) && (
+            <section className="about-participation" aria-label="Runtime details">
+              <p className="eyebrow">This instance</p>
+              <StatusBadge tone={snapshot.runtime.paused ? 'waiting' : 'neutral'}>
+                {snapshot.runtime.paused ? 'Paused' : 'Running'}
+              </StatusBadge>
+              <p>
+                {snapshot.runtime.mode === 'ollama'
+                  ? 'Ollama · local model'
+                  : snapshot.runtime.mode === 'compatible'
+                    ? 'Connected model'
+                    : 'Local deterministic simulation'}{' '}
+                · {snapshot.runtime.simulationRate ?? 3}× world time
+              </p>
+              <p>
+                {snapshot.runtime.costKnown === false
+                  ? 'Provider cost not reported'
+                  : '$' + (snapshot.runtime.costUsd ?? 0).toFixed(2) + ' paid model spend'}
+              </p>
+            </section>
           )}
           <p role="status" className="control-status">
             {admin.status}
@@ -67,31 +91,38 @@ export function WorldDialog({
         </>
       ) : (
         <>
-          <p className="eyebrow">A place with a life of its own</p>
-          <h2 id="modal-title">This is Elsewhere.</h2>
+          <div className="about-world-brand">
+            <img src="/brand/elsewhere-lockup.svg" alt="Elsewhere" width="240" height="41" />
+          </div>
+          <p className="eyebrow">{productCopy.strapline}</p>
+          <h2 id="modal-title">{productCopy.headline}</h2>
+          <p className="about-lead">{productCopy.description}</p>
           <p>
-            Hubert is its first resident: a small, unclassified creature with three little feet and
-            a particular interest in birds. He explores, makes things, rests and remembers. You can
-            take a walk alongside him.
+            A character can explore, create, remember an encounter, or ask for something to change.
+            You can enter that same world and become part of what happens next.
           </p>
-          <p>
-            {!snapshot
-              ? 'You’re looking around the village while its live world is unavailable.'
-              : snapshot.runtime.mode === 'ollama'
-                ? 'His decisions are backed by a local Ollama model.'
-                : ['compatible', 'routed', 'chatgpt', 'broker'].includes(snapshot.runtime.mode)
-                  ? 'A configured model proposes his decisions.'
-                  : 'This instance uses a reproducible local planner.'}{' '}
-            {snapshot && 'The world verifies his actions and preserves their outcomes.'}
-          </p>
-          <p>
-            The character camera shows his viewpoint; the planner currently uses structured sight.
-            Visitor messages stay private.
-          </p>
-          <p>
-            3D assets by Kenney and textures by Poly Haven, distributed under CC0. Source and
-            license records are included in this project.
-          </p>
+          <div className="about-participation">
+            <span className="eyebrow">Start here</span>
+            <p>
+              Meet Hubert, the first resident. Follow his activity, see the world from his
+              viewpoint, or leave a note for him to encounter.
+            </p>
+          </div>
+          {!snapshot && (
+            <p className="privacy-note">
+              The world is currently offline. You can explore a preview until it reconnects.
+            </p>
+          )}
+          <Button className="full-width" onClick={onClose}>
+            Back to the world
+          </Button>
+          <details className="about-credits">
+            <summary>Asset credits</summary>
+            <p>
+              3D assets by Kenney and textures by Poly Haven, distributed under CC0. Lettering uses
+              Averia Serif Libre under the SIL Open Font License.
+            </p>
+          </details>
         </>
       )}
     </Modal>

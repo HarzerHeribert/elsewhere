@@ -1,0 +1,63 @@
+{
+  "reviewedAt": "2026-11-09",
+  "repository": "https://github.com/shinyobjectz/raea",
+  "reviewedCommit": "9ce80fc134517fec4745b752c4b0de7b6547e05f",
+  "usedRelease": "v0.1.0-rc1",
+  "releaseCommit": "bc052693ac25ec83e8b8ffdebbb2785cc4eff8d5",
+  "archive": "raea-0.1.0-rc1-macos-arm64.tar.gz",
+  "verifiedSHA256": "61f5f1c9b6ddca216d832951bf06d7601a6cbc4851ec5fa9b1e1c01d63a0c728",
+  "reviewers": ["audit_supply_chain", "audit_runtime"],
+  "conclusion": "No clear malware indicators found in the first-party paths reviewed. Bounded static review, not certification of all dependencies or binary equivalence. Release-to-main differences affect only guides and skills, not reviewed runtime/build code.",
+  "findings": [
+    {
+      "severity": "high for untrusted input",
+      "finding": "TSX is executable trusted code, with file/environment access and a subprocess bridge. Offline mode is not an OS sandbox.",
+      "evidence": [
+        "engine/native/src/lib.rs:31-37,112-114",
+        "runtime/calls/src/lib.rs:283-288",
+        "engine/native/src/node.rs:398-414"
+      ]
+    },
+    {
+      "severity": "medium",
+      "finding": "Skill installation changes persistent agent configuration, installs hooks, and registers unpinned uvx mcp-for-blender.",
+      "evidence": ["engine/cli/src/skill.rs:107-143", "apps/tools/src/agent_mcp.rs:8-11,69-73"]
+    },
+    {
+      "severity": "medium",
+      "finding": "Optional model setups download unpinned Git/Hugging Face/Python dependencies.",
+      "evidence": ["tools/tokensynth/setup.sh:35,43,51", "tools/goo/setup.sh:33"]
+    },
+    {
+      "severity": "medium",
+      "finding": "Optional app-host loopback MCP server exposes actions without visible Origin/Host/auth checks.",
+      "evidence": ["engine/page/host/src/mcp.rs:36,42-60,208-246"]
+    },
+    {
+      "severity": "low",
+      "finding": "Release Actions use major tags rather than immutable SHA pins; Cargo/Bun lockfiles and release provenance are positive controls.",
+      "evidence": [".github/workflows/release.yml:51,64,80,112,166"]
+    },
+    {
+      "severity": "low",
+      "finding": "Local logs include command arguments, paths, hardware and errors. No transmission found in trace implementation.",
+      "evidence": ["io/trace/src/lib.rs:112-151"]
+    }
+  ],
+  "limitations": [
+    "Remote curl-to-shell installer not reviewed or used",
+    "No exhaustive transitive dependency audit",
+    "Checksum verified against GitHub API digest; provenance attestation not independently verified",
+    "No guarantee a prebuilt binary matches source"
+  ],
+  "execution": {
+    "globalInstall": false,
+    "agentSkillsOrHooksInstalled": false,
+    "environment": "env -i; RAEA_OFFLINE=1; RAEA_ENV_FILE=/dev/null; RAEA_NO_TREE=1; RAEA_AUDIO_AUTOSETUP=0; RAEA_PAGE_MCP_PORT=0; temporary RAEA_CACHE and RAEA_TRACE_DIR",
+    "sandbox": "macOS sandbox-exec: deny all network, deny reads below /Users/eneas, deny writes except temporary render folders and /dev/null",
+    "input": "Only our own composition and original local SVG artwork",
+    "output": "240 frames, 1280x720, 30fps, 8 seconds, H.264",
+    "runtimeDependencyAdded": false
+  },
+  "license": "FSL-1.1-ALv2; engine remains an external asset-authoring tool"
+}

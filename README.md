@@ -1,8 +1,10 @@
 # Elsewhere
 
-Elsewhere is a place. Hubert is its first resident.
+**A shared world for people and digital characters.**
 
-Hubert is a small, unclassified Elsewhere creature: a soft lopsided body, three paddle feet, asymmetric listening feelers and large curious eyes. His world model and sidebar portrait share the public appearance definition in `characters/hubert/appearance.json`. Human visitors have their own separate avatars. His voice is gentle, observant and occasionally oddly specific, with a strong fascination for birds.
+Elsewhere explores what happens when agents inhabit a simulated world that people can enter. Characters observe their surroundings, make decisions, act on the world, and carry memories from one encounter to the next. Human visitors can explore alongside them, leave messages, and help shape what the world becomes.
+
+Hubert is the first resident. He is the starting point for the idea: digital characters with their own ongoing activity, sharing a place with people rather than existing only inside a conversation window.
 
 This monorepo contains a working **local prototype**: a full-viewport explorable world with a workshop, courtyard, orchard, pond, library and lookout; living wildlife; overview and first-person exploration; contextual sidebar panels; encounters; real Better Auth accounts; a persistent character loop; associative memory; bounded wishes; private visitor notes; owner controls; and a small artifact Hubert can produce. The default planner is deterministic and makes **no paid requests**. A native local Ollama profile is also available.
 

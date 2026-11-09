@@ -1,0 +1,69 @@
+/* Elsewhere design tokens. Public specimen and export sync use this same source. */
+@font-face {
+  font-family: 'Averia Serif Libre';
+  src: url('/brand/fonts/averia-serif-libre-bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+:root {
+  --ew-ink: #243b36;
+  --ew-paper: #f4f0e4;
+  --ew-surface: #fffdf5;
+  --ew-surface-muted: #eae7de;
+  --ew-accent: #99583f;
+  --ew-accent-hover: #804832;
+  --ew-accent-soft: #eddfd4;
+  --ew-text: var(--ew-ink);
+  --ew-text-muted: #606c61;
+  --ew-line: #d6d2c7;
+  --ew-line-strong: #a6a397;
+  --ew-action: var(--ew-accent);
+  --ew-action-hover: var(--ew-accent-hover);
+  --ew-selected: var(--ew-accent-soft);
+  --ew-success: var(--ew-ink);
+  --ew-success-soft: var(--ew-surface-muted);
+  --ew-warning: var(--ew-accent);
+  --ew-warning-soft: var(--ew-accent-soft);
+  --ew-danger: var(--ew-accent);
+  --ew-danger-soft: var(--ew-accent-soft);
+  --ew-focus: var(--ew-accent);
+  --ew-font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ew-font-display: 'Averia Serif Libre', Georgia, serif;
+  --ew-font-mono: 'SFMono-Regular', Consolas, monospace;
+  --ew-text-caption: 0.786rem;
+  --ew-text-small: 0.857rem;
+  --ew-text-body: 1rem;
+  --ew-text-title: 1.857rem;
+  --ew-text-display: clamp(2.6rem, 5vw, 5rem);
+  --ew-leading-body: 1.6;
+  --ew-space-1: 4px;
+  --ew-space-2: 8px;
+  --ew-space-3: 12px;
+  --ew-space-4: 16px;
+  --ew-space-5: 20px;
+  --ew-space-6: 24px;
+  --ew-space-8: 32px;
+  --ew-space-12: 48px;
+  --ew-radius-small: 8px;
+  --ew-radius-control: 12px;
+  --ew-radius-panel: 20px;
+  --ew-radius-pill: 999px;
+  --ew-shadow-rest: 0 1px 2px #243b3608, 0 6px 20px #243b3610;
+  --ew-shadow-float: 0 3px 8px #243b3610, 0 18px 48px #243b361c;
+  --ew-shadow-modal: 0 12px 64px #172a2533;
+  --ew-duration-press: 100ms;
+  --ew-duration-control: 160ms;
+  --ew-duration-panel: 240ms;
+  --ew-duration-character: 600ms;
+  --ew-ease: cubic-bezier(0.22, 0.75, 0.25, 1);
+  --ew-control-size: 44px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ew-duration-press: 0ms;
+    --ew-duration-control: 0ms;
+    --ew-duration-panel: 0ms;
+    --ew-duration-character: 0ms;
+  }
+}

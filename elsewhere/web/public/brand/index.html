@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#243b36" />
+    <title>Elsewhere — Digital lives. Shared worlds.</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="design-tokens.css" />
+    <style>
+      :root {
+        --ink: #243b36;
+        --paper: #f4f0e4;
+        --quiet: #eae7de;
+        --clay: #99583f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      a {
+        color: inherit;
+        text-underline-offset: 5px;
+      }
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+      a:focus-visible,
+      button:focus-visible {
+        outline: 3px solid var(--clay);
+        outline-offset: 5px;
+      }
+      .wrap {
+        max-width: 1440px;
+        margin: auto;
+        padding: 0 60px;
+      }
+      .top {
+        height: 104px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #243b3633;
+      }
+      .top img {
+        width: 180px;
+      }
+      .meta,
+      .eyebrow {
+        font-family: monospace;
+        font-size: 11px;
+        letter-spacing: 1.8px;
+        text-transform: uppercase;
+      }
+      .top a {
+        text-decoration: none;
+        font-size: 13px;
+      }
+      .hero {
+        padding: 75px 0 66px;
+        position: relative;
+      }
+      .hero .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        background: var(--clay);
+        border-radius: 50%;
+      }
+      h1 {
+        font-family: var(--ew-font-display);
+        font-size: clamp(60px, 7.2vw, 106px);
+        font-weight: 700;
+        letter-spacing: -6px;
+        line-height: 0.99;
+        margin: 30px 0 32px;
+        max-width: 900px;
+      }
+      h1 em {
+        font-weight: 700;
+        color: var(--clay);
+      }
+      .intro {
+        font-size: 16px;
+        line-height: 1.7;
+        max-width: 420px;
+        margin: 0;
+      }
+      .hero-note {
+        position: absolute;
+        right: 0;
+        bottom: 72px;
+        width: 180px;
+        font-size: 13px;
+        line-height: 1.6;
+        border-left: 1px solid #243b3633;
+        padding-left: 20px;
+      }
+      .motion {
+        position: relative;
+        background: var(--ink);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .motion video {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16/9;
+      }
+      .motion-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 17px 22px;
+        color: var(--paper);
+        font-size: 11px;
+        letter-spacing: 1.2px;
+      }
+      .motion-controls button {
+        border: 1px solid #f4f0e455;
+        color: var(--paper);
+        background: transparent;
+        border-radius: 20px;
+        padding: 9px 16px;
+        font-size: 11px;
+      }
+      .section-label {
+        display: flex;
+        justify-content: space-between;
+        padding: 55px 0 20px;
+        border-bottom: 1px solid #243b3633;
+        margin-bottom: 26px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+      .tile {
+        border: 1px solid #243b3628;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .art {
+        min-height: 300px;
+        display: grid;
+        place-items: center;
+        padding: 52px;
+      }
+      .art img {
+        width: 100%;
+        max-width: 460px;
+      }
+      .ink {
+        background: var(--ink);
+      }
+      .quiet {
+        background: var(--quiet);
+      }
+      .caption {
+        padding: 20px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        gap: 15px;
+      }
+      .caption a {
+        font-family: monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      .character {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+        margin-top: 22px;
+        background: #e6e5d5;
+        border: 1px solid #243b3628;
+        position: relative;
+        overflow: hidden;
+        border-radius: 4px;
+      }
+      .creature {
+        padding-bottom: 36px;
+        position: relative;
+        display: grid;
+        place-items: center;
+        min-height: 450px;
+        background: radial-gradient(ellipse at center, #ded9cd88, transparent 64%);
+      }
+      .creature > img {
+        width: 360px;
+        max-width: 90%;
+        transform: rotate(-4deg);
+        transition: transform 0.5s;
+      }
+      .creature:hover > img {
+        transform: rotate(5deg);
+      }
+      .scribble {
+        position: absolute;
+        bottom: 16px;
+        left: 30px;
+        font:
+          italic 18px Georgia,
+          serif;
+        transform: rotate(-5deg);
+      }
+      .character-copy {
+        padding: 55px 45px 45px 0;
+        align-self: center;
+      }
+      .character h2 {
+        font-family: var(--ew-font-display);
+        font-size: 60px;
+        font-weight: 700;
+        letter-spacing: -3px;
+        margin: 16px 0;
+      }
+      .character p {
+        font-size: 15px;
+        line-height: 1.7;
+        max-width: 340px;
+      }
+      .traits {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 22px 0 28px;
+      }
+      .traits span {
+        font: 10px monospace;
+        border: 1px solid #243b3655;
+        padding: 8px 10px;
+        border-radius: 20px;
+      }
+      .character a {
+        font-size: 12px;
+      }
+      .extras {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 22px;
+        margin: 22px 0;
+      }
+      .specimen {
+        padding: 30px;
+        border: 1px solid #243b3628;
+        min-height: 220px;
+        border-radius: 4px;
+      }
+      .specimen .meta {
+        display: block;
+        margin-bottom: 30px;
+      }
+      .marks {
+        display: flex;
+        align-items: center;
+        gap: 26px;
+      }
+      .marks img {
+        width: 70px;
+      }
+      .marks img:nth-child(2) {
+        width: 44px;
+      }
+      .marks img:nth-child(3) {
+        width: 24px;
+      }
+      .colors {
+        display: flex;
+        gap: 8px;
+      }
+      .color {
+        height: 60px;
+        width: 33.333%;
+        border-radius: 30px;
+      }
+      .specimen p {
+        font-size: 12px;
+        line-height: 1.6;
+        margin: 20px 0 0;
+      }
+      .specimen .big {
+        font:
+          italic 34px/1.15 Georgia,
+          serif;
+        margin: 0;
+        letter-spacing: -1px;
+      }
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 34px 0 45px;
+        border-top: 1px solid #243b3633;
+        font-size: 11px;
+        margin-top: 60px;
+      }
+      footer img {
+        width: 150px;
+      }
+      .download {
+        display: inline-block;
+        background: var(--ink);
+        color: var(--paper);
+        padding: 14px 20px;
+        border-radius: 28px;
+        text-decoration: none;
+        margin-top: 25px;
+        font-size: 12px;
+      }
+      @media (max-width: 800px) {
+        .wrap {
+          padding: 0 24px;
+        }
+        .top {
+          height: 80px;
+        }
+        .top img {
+          width: 145px;
+        }
+        .hero {
+          padding: 48px 0;
+        }
+        h1 {
+          letter-spacing: -3px;
+        }
+        .hero-note {
+          display: none;
+        }
+        .grid,
+        .character {
+          grid-template-columns: 1fr;
+        }
+        .character-copy {
+          padding: 0 32px 40px;
+        }
+        .creature {
+          min-height: 350px;
+        }
+        .extras {
+          grid-template-columns: 1fr;
+        }
+        .art {
+          min-height: 240px;
+          padding: 40px;
+        }
+        .motion-controls {
+          padding: 14px;
+          font-size: 9px;
+        }
+        .motion-controls > span {
+          max-width: 65%;
+          line-height: 1.5;
+        }
+        footer {
+          gap: 30px;
+        }
+        .top .meta {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+      .model-preview {
+        margin-top: 22px;
+        padding: 24px;
+        border: 1px solid #243b3628;
+        border-radius: 4px;
+      }
+      .model-preview summary {
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .model-preview img {
+        display: block;
+        width: 100%;
+        max-width: 560px;
+        height: auto;
+        margin: 22px auto 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <a href="/" aria-label="Return to Elsewhere"
+          ><img src="elsewhere-lockup.svg" alt="Elsewhere" /></a
+        ><span class="meta">FIELD NOTES / IDENTITY NO. 01</span
+        ><a href="/design-system.html">Design system ↗</a>
+      </header>
+      <main>
+        <section class="hero">
+          <div class="eyebrow"><i class="dot"></i> Digital lives. Shared worlds.</div>
+          <h1>A world<br /><em>we share.</em></h1>
+          <p class="intro">
+            A simulated world where digital characters make choices, build memories, and interact
+            with the people who enter it.
+          </p>
+          <p class="hero-note">
+            Observe. Act. Remember.<br />See what happens<br />when your paths cross.
+          </p>
+        </section>
+        <section class="motion" aria-label="Elsewhere animated identity">
+          <video
+            id="ident"
+            controls
+            playsinline
+            preload="metadata"
+            poster="elsewhere-ident-poster.png"
+            aria-label="Eight-second Elsewhere animation: a crooked doorway arrives, the wordmark slides in, and Hubert wanders over"
+          >
+            <source src="elsewhere-ident.mp4" type="video/mp4" />
+          </video>
+          <div class="motion-controls">
+            <span>01 / THE ARRIVAL &nbsp; · &nbsp; DIGITAL LIVES, IN MOTION</span
+            ><button id="replay" type="button">Play ident ↗</button>
+          </div>
+        </section>
+        <div class="section-label meta">
+          <span>02 / A mark with somewhere to go</span><span>Averia Serif Libre · outlined</span>
+        </div>
+        <section class="grid" aria-label="Logo assets">
+          <article class="tile">
+            <div class="art quiet">
+              <img
+                src="elsewhere-lockup.svg"
+                alt="Dark Elsewhere wordmark and crooked doorway on warm paper"
+              />
+            </div>
+            <div class="caption">
+              <span>The everyday lockup</span
+              ><a href="elsewhere-lockup.svg" download>Download SVG ↗</a>
+            </div>
+          </article>
+          <article class="tile">
+            <div class="art ink">
+              <img
+                src="elsewhere-lockup-light.svg"
+                alt="Light Elsewhere wordmark on dark forest green"
+              />
+            </div>
+            <div class="caption">
+              <span>After hours</span
+              ><a href="elsewhere-lockup-light.svg" download>Download SVG ↗</a>
+            </div>
+          </article>
+        </section>
+        <section class="character">
+          <div class="creature">
+            <img src="hubert.svg" alt="Hubert, the first digital resident of Elsewhere" /><span
+              class="scribble"
+              >a resident, with his own plans.</span
+            >
+          </div>
+          <div class="character-copy">
+            <span class="eyebrow">03 / LOCAL RESIDENT</span>
+            <h2>Meet the first resident.</h2>
+            <p>
+              Hubert explores the world, makes things, and remembers what happens. Follow his
+              decisions, leave a note, or see the world from his viewpoint.
+            </p>
+            <div class="traits">
+              <span>DECISIONS</span><span>MEMORIES</span><span>INTERACTIONS</span>
+            </div>
+            <a href="hubert.svg" download>Download character artwork ↗</a>
+          </div>
+        </section>
+        <details class="model-preview">
+          <summary>Resident model preview</summary>
+          <img
+            src="hubert-3d.png"
+            width="700"
+            height="700"
+            alt="Hubert as he appears in the simulated world"
+            loading="lazy"
+          />
+        </details>
+        <section class="extras" aria-label="Brand details">
+          <article class="specimen">
+            <span class="meta">04 / THE WAY IN</span>
+            <div class="marks">
+              <img src="elsewhere-mark.svg" alt="Doorway mark at large size" /><img
+                src="elsewhere-mark.svg"
+                alt="Doorway mark at medium size"
+              /><img src="elsewhere-mark.svg" alt="Doorway mark at icon size" />
+            </div>
+            <p>An open door into a shared world.</p>
+          </article>
+          <article class="specimen">
+            <span class="meta">05 / FOUND IN THE FIELD</span>
+            <div class="colors" aria-label="Deep ink, warm paper, terracotta accent">
+              <i class="color" style="background: #243b36"></i
+              ><i class="color" style="background: #f4f0e4; border: 1px solid #243b3620"></i
+              ><i class="color" style="background: #99583f"></i>
+            </div>
+            <p>Deep ink · Warm paper<br />One terracotta accent</p>
+          </article>
+          <article class="specimen">
+            <span class="meta">06 / THE GENERAL IDEA</span>
+            <p class="big">People and agents.<br />The same world.</p>
+            <p>
+              Digital characters act on their surroundings.<br />People can enter and take part.
+            </p>
+          </article>
+        </section>
+        <a class="download" href="elsewhere-ident.mp4" download>Download the motion ident ↓</a>
+      </main>
+      <footer>
+        <img src="elsewhere-wordmark.svg" alt="Elsewhere" /><span
+          >Digital lives. Shared worlds.</span
+        ><a href="/">Enter Elsewhere ↗</a>
+      </footer>
+    </div>
+    <script type="module" src="./gallery.js"></script>
+  </body>
+</html>

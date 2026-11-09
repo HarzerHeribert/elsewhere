@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
+import { Button } from './ui/Button';
 import type { useAccountSession } from './useAccountSession';
 
 export function AccountDialog({
@@ -58,13 +59,13 @@ export function AccountDialog({
           {account && (
             <p>You are currently signed in as {account.name}. Continuing switches accounts.</p>
           )}
-          <button
-            className="primary-button full-width"
-            disabled={pending}
+          <Button
+            className="full-width"
+            busy={pending}
             onClick={() => void session.signInWithOperatorLink()}
           >
             {pending ? 'Signing in…' : 'Continue with private sign-in'}
-          </button>
+          </Button>
         </>
       ) : !account && privateLocalAccess ? (
         <p>A private development session is connected for this tab.</p>
@@ -107,15 +108,16 @@ export function AccountDialog({
             Your email stays private. Character email delivery requires verified contact details and
             explicit consent; it is not connected yet.
           </p>
-          <button
-            className="secondary-button full-width"
-            disabled={pending}
+          <Button
+            variant="secondary"
+            className="full-width"
+            busy={pending}
             onClick={async () => {
               if (await session.signOut()) onClose();
             }}
           >
             {pending ? 'One moment…' : 'Sign out'}
-          </button>
+          </Button>
         </>
       ) : !capabilities ? (
         <>
@@ -125,9 +127,13 @@ export function AccountDialog({
               : 'Checking the account service…'}
           </p>
           {error && (
-            <button className="secondary-button full-width" onClick={() => void session.refresh()}>
+            <Button
+              variant="secondary"
+              className="full-width"
+              onClick={() => void session.refresh()}
+            >
               Try again
-            </button>
+            </Button>
           )}
         </>
       ) : !capabilities.enabled || !capabilities.passwordAuthEnabled ? (
@@ -138,15 +144,15 @@ export function AccountDialog({
             Your account was created. Open the verification link sent to{' '}
             <strong>{verificationEmail}</strong>, then sign in to continue.
           </p>
-          <button
-            className="primary-button full-width"
+          <Button
+            className="full-width"
             onClick={() => {
               setMode('signin');
               session.dismissVerification();
             }}
           >
             Back to sign in
-          </button>
+          </Button>
         </>
       ) : (
         <>
@@ -159,6 +165,7 @@ export function AccountDialog({
               <>
                 <label htmlFor="account-name">Display name</label>
                 <input
+                  className="ew-field"
                   data-autofocus
                   id="account-name"
                   name="name"
@@ -171,6 +178,7 @@ export function AccountDialog({
             )}
             <label htmlFor="account-email">Email</label>
             <input
+              className="ew-field"
               data-autofocus={mode === 'signin' ? '' : undefined}
               id="account-email"
               name="email"
@@ -182,6 +190,7 @@ export function AccountDialog({
             />
             <label htmlFor="account-password">Password</label>
             <input
+              className="ew-field"
               id="account-password"
               name="password"
               type="password"
@@ -197,29 +206,29 @@ export function AccountDialog({
                 ? 'Verify your email before your first sign-in.'
                 : 'This local instance does not send verification or password-reset email.'}
             </p>
-            <button className="primary-button full-width" disabled={pending}>
+            <Button type="submit" className="full-width" busy={pending}>
               {pending ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}
-            </button>
+            </Button>
           </form>
           <p className="account-switch">
             {mode === 'signup' ? 'Already have an account?' : 'New to Elsewhere?'}{' '}
-            <button
-              className="text-button"
-              disabled={pending}
+            <Button
+              variant="quiet"
+              busy={pending}
               onClick={() => {
                 session.dismissVerification();
                 setMode(mode === 'signup' ? 'signin' : 'signup');
               }}
             >
               {mode === 'signup' ? 'Sign in instead' : 'Create an account'}
-            </button>
+            </Button>
           </p>
         </>
       )}
       {onOpenManagement && (
-        <button className="secondary-button full-width" onClick={onOpenManagement}>
+        <Button variant="secondary" className="full-width" onClick={onOpenManagement}>
           World settings
-        </button>
+        </Button>
       )}
       <p role="alert" className="auth-error">
         {error}

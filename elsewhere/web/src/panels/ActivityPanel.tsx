@@ -16,11 +16,19 @@ export function ActivityPanel({
 }) {
   return (
     <>
-      <div className="panel-tabs" role="group" aria-label="Activity feed">
-        <button aria-pressed={feed === 'events'} onClick={() => onFeedChange('events')}>
+      <div className="panel-tabs ew-segments" role="group" aria-label="Activity feed">
+        <button
+          className="ew-segment"
+          aria-pressed={feed === 'events'}
+          onClick={() => onFeedChange('events')}
+        >
           Events
         </button>
-        <button aria-pressed={feed === 'memories'} onClick={() => onFeedChange('memories')}>
+        <button
+          className="ew-segment"
+          aria-pressed={feed === 'memories'}
+          onClick={() => onFeedChange('memories')}
+        >
           Memories
         </button>
       </div>
@@ -58,7 +66,7 @@ export function ActivityPanel({
             ))}
       </div>
       {feed === 'memories' && !memories.length && (
-        <p className="empty-state">His first experiences will find a place here.</p>
+        <p className="empty-state">Memories appear as the resident experiences the world.</p>
       )}
     </>
   );

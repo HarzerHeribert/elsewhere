@@ -174,7 +174,7 @@ test('the game fills the viewport and offers contextual object and character ins
   console.log(`Actual scene WebGL renderer: ${actualRenderer}`);
   info.annotations.push({ type: 'WebGL renderer', description: actualRenderer! });
   await openPanel(page, 'Map');
-  await panel(page).getByText('Look around the objects', { exact: true }).click();
+  await panel(page).getByText('Objects in the world', { exact: true }).click();
   await panel(page).getByRole('button', { name: 'The courtyard bench', exact: true }).click();
   await expect(
     panel(page).getByRole('heading', { name: 'The courtyard bench', exact: true }),
@@ -458,7 +458,7 @@ test('an owner fulfills an encoded wish through the sidebar and installs the wor
   const card = panel(page)
     .locator('.wish-card')
     .filter({ has: page.getByRole('heading', { name: wish.title, exact: true }) });
-  await expect(card.locator('.wish-state')).toHaveText('pending');
+  await expect(card.getByText('pending', { exact: true })).toBeVisible();
   const receipt = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -466,7 +466,7 @@ test('an owner fulfills an encoded wish through the sidebar and installs the wor
   );
   await card.getByRole('button', { name: 'Add to Elsewhere', exact: true }).click();
   expect((await receipt).status()).toBe(200);
-  await expect(card.locator('.wish-state')).toHaveText('fulfilled');
+  await expect(card.getByText('fulfilled', { exact: true })).toBeVisible();
   const after = await snapshot(request);
   expect(after.wishes?.find((item) => item.id === wish.id)?.status).toBe('fulfilled');
   expect(after.world.objects.some((object) => object.id === wish.requestedObjectId)).toBe(true);

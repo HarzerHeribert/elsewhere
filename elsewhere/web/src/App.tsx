@@ -1,7 +1,11 @@
+import { Button } from './ui/Button';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { villageScenery } from './scenery';
 import { Scene, type CameraMode, type SceneControls } from './Scene';
 import { HubertPortrait } from './HubertPortrait';
+import { ElsewhereBrand } from './ElsewhereBrand';
+import { productCopy } from './productCopy';
+import { StatusBadge } from './ui/StatusBadge';
 import { useVisitor } from './useVisitor';
 import { AccountDialog } from './AccountDialog';
 import { WorldDialog } from './WorldDialog';
@@ -325,16 +329,13 @@ export function App() {
             setAbout(true);
           }}
         >
-          <span className="brand-symbol">
-            e<span>·</span>
-          </span>
-          <span>
-            elsewhere<small>A little world of its own</small>
-          </span>
+          <ElsewhereBrand />
         </button>
         <div className="world-clock glass">
-          <span className={'connection ' + connection}>
-            <i />
+          <StatusBadge
+            className={'connection ' + connection}
+            tone={connection === 'live' ? 'live' : 'waiting'}
+          >
             {connection === 'live'
               ? snapshot?.runtime.paused
                 ? 'Life, paused'
@@ -344,7 +345,7 @@ export function App() {
                   ? 'Reconnecting'
                   : 'World preview'
                 : 'Arriving'}
-          </span>
+          </StatusBadge>
           <span className="clock-divider" />
           <span>
             Day {day === null ? '—' : String(day).padStart(2, '0')}
@@ -518,7 +519,6 @@ export function App() {
             )}
             {panel === 'controls' && (
               <ControlsPanel
-                runtime={snapshot?.runtime}
                 fullscreen={fullscreen}
                 onEnterWorld={snapshot ? enterWorld : undefined}
                 onToggleFullscreen={toggleFullscreen}
@@ -529,22 +529,14 @@ export function App() {
       )}
       {!visitor.visitor && !panel && connection === 'live' && (
         <section className="arrival-card glass" aria-label="Welcome to Elsewhere">
-          <p className="eyebrow">There’s a whole afternoon here</p>
-          <h1>Take the long way.</h1>
-          <p>
-            Follow a path. Meet a resident.
-            <br />
-            See what’s happening somewhere else.
-          </p>
-          <button
-            className="primary-button"
-            onClick={() => void enterWorld()}
-            disabled={visitor.busy}
-          >
-            {visitor.busy ? 'Opening the gate…' : 'Enter world'}
+          <p className="eyebrow">{productCopy.strapline}</p>
+          <h1>{productCopy.headline}</h1>
+          <p>{productCopy.invitation}</p>
+          <Button onClick={() => void enterWorld()} disabled={visitor.busy}>
+            {visitor.busy ? 'Entering…' : 'Enter world'}
             <Icon name="arrow" />
-          </button>
-          <small>One resident. A few places. Your own footsteps.</small>
+          </Button>
+          <small>Explore freely. Sign in when you want to stay connected.</small>
         </section>
       )}
       {mode === 'visitor' &&
