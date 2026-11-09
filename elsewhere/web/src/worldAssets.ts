@@ -153,9 +153,16 @@ export function worldAssetLoader(
     return { box, size, center };
   }
   function materialFor(source: THREE.Material, path: string, options: AssetPlacement) {
-    // Photogrammetry's bark roughness, leaf normal maps and alpha cutouts are part of the asset.
+    // Keep authored scans. Blended leaf cards need depth-tested cutouts: a whole
+    // instanced grove cannot sort thousands of overlapping transparent leaves.
     const authored = path.includes('/polyhaven/models/');
-    if (authored && options.color === undefined) return source;
+    const leafCutout =
+      authored &&
+      source instanceof THREE.MeshStandardMaterial &&
+      source.transparent &&
+      source.map !== null &&
+      /(?:^|_)leaves$/.test(source.name);
+    if (authored && options.color === undefined && !leafCutout) return source;
     const colorKey =
         options.color === undefined ? 'authored' : new THREE.Color(options.color).getHexString(),
       key = `${path}:${source.uuid}:${colorKey}`;
@@ -165,9 +172,17 @@ export function worldAssetLoader(
     trackMaterial(material);
     if (material instanceof THREE.MeshStandardMaterial) {
       // Old Kenney exports marked organic materials metallic; this compatibility fix is scoped.
-      material.metalness = 0;
-      material.roughness = material.transparent ? 0.3 : 0.86;
-      material.envMapIntensity = 0.65;
+      if (!authored) {
+        material.metalness = 0;
+        material.roughness = material.transparent ? 0.3 : 0.86;
+        material.envMapIntensity = 0.65;
+      }
+      if (leafCutout) {
+        material.transparent = false;
+        material.alphaTest = source.alphaTest || 0.35;
+        material.alphaToCoverage = true;
+        material.depthWrite = true;
+      }
       const name = material.name.toLowerCase();
       if (path.includes('/kenney/nature/')) {
         if (name.includes('leaf')) material.color.set(name.includes('dark') ? 0x4d7049 : 0x6f8d53);

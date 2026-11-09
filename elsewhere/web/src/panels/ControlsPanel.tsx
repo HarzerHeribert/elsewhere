@@ -9,7 +9,7 @@ export function ControlsPanel({
 }: {
   runtime?: PublicRuntimeState;
   fullscreen: boolean;
-  onEnterWorld: () => Promise<void>;
+  onEnterWorld?: () => Promise<void>;
   onToggleFullscreen: () => Promise<void>;
 }) {
   return (
@@ -38,7 +38,11 @@ export function ControlsPanel({
       <p className="muted-copy">
         Drag to look, or capture the mouse while walking. Opening a panel stops your footsteps.
       </p>
-      <button className="primary-button full-width" onClick={() => void onEnterWorld()}>
+      <button
+        className="primary-button full-width"
+        disabled={!onEnterWorld}
+        onClick={() => void onEnterWorld?.()}
+      >
         <Icon name="walk" />
         Enter world
       </button>
@@ -46,22 +50,24 @@ export function ControlsPanel({
         <Icon name="expand" />
         {fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
       </button>
-      <div className="technical-note">
-        <p className="eyebrow">This instance</p>
-        <p>
-          {runtime?.mode === 'ollama'
-            ? 'Ollama · local model'
-            : runtime?.mode === 'compatible'
-              ? 'Connected model'
-              : 'Local deterministic simulation'}{' '}
-          · {runtime?.simulationRate ?? 3}× world time
-        </p>
-        <p>
-          {runtime?.costKnown === false
-            ? 'Provider cost not reported'
-            : '$' + (runtime?.costUsd ?? 0).toFixed(2) + ' paid model spend'}
-        </p>
-      </div>
+      {runtime && (
+        <div className="technical-note">
+          <p className="eyebrow">This instance</p>
+          <p>
+            {runtime?.mode === 'ollama'
+              ? 'Ollama · local model'
+              : runtime?.mode === 'compatible'
+                ? 'Connected model'
+                : 'Local deterministic simulation'}{' '}
+            · {runtime?.simulationRate ?? 3}× world time
+          </p>
+          <p>
+            {runtime?.costKnown === false
+              ? 'Provider cost not reported'
+              : '$' + (runtime?.costUsd ?? 0).toFixed(2) + ' paid model spend'}
+          </p>
+        </div>
+      )}
     </>
   );
 }

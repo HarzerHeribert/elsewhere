@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import type { WorldState } from '@elsewhere/character-interfaces';
+import type { VillageScenery } from './scenery';
 import { WORLD_ASSETS, type AssetInstance, type AttachWorldAsset } from './worldAssets';
 import { ResourceScope } from './sceneResources';
-import { MEADOW_TRAILS } from './landscapeLayout';
+import { MEADOW_TRAILS, TRAIL_LINES } from './landscapeLayout';
 
 /** Ferns and ground cover grow in natural patches and path verges, not a uniform prop grid. */
-export function buildGardens(world: WorldState, scene: THREE.Scene, attach: AttachWorldAsset) {
+export function buildGardens(world: VillageScenery, scene: THREE.Scene, attach: AttachWorldAsset) {
   const resources = new ResourceScope();
   const root = new THREE.Group();
   root.name = 'Layered photo-scanned garden planting';
@@ -76,27 +76,95 @@ export function buildGardens(world: WorldState, scene: THREE.Scene, attach: Atta
       });
     }
   }
-  // Verge planting stays outside the 1.6m walking surfaces and remains soft underfoot.
-  for (const [a, b] of MEADOW_TRAILS) {
-    const dx = b[0] - a[0],
-      dz = b[1] - a[1],
-      length = Math.hypot(dx, dz);
-    for (let distance = 1.7; distance < length; distance += 2.5 + random()) {
-      const sign = random() > 0.5 ? 1 : -1,
-        offset = 1.4 + random() * 0.8,
-        t = distance / length,
-        x = a[0] + dx * t - (dz / length) * offset * sign,
-        z = a[1] + dz * t + (dx / length) * offset * sign;
-      if (clear(x, z))
-        ferns.push({
-          x,
-          y: 0.035,
-          z,
-          height: 0.28 + random() * 0.2,
-          rotationY: random() * Math.PI * 2,
-        });
+  const poppies: AssetInstance[] = [],
+    buttercups: AssetInstance[] = [],
+    groundcover: AssetInstance[] = [],
+    mushrooms: AssetInstance[] = [];
+  const planting = (list: AssetInstance[], x: number, z: number, height: number) =>
+    list.push({ x, y: 0.018, z, height, rotationY: random() * Math.PI * 2 });
+
+  // The same continuous curved centreline guides the beds; arclength carries through each sample.
+  for (const route of TRAIL_LINES) {
+    let along = 0,
+      next = 2.9;
+    for (let i = 1; i < route.length; i++) {
+      const [ax, az] = route[i - 1],
+        [bx, bz] = route[i],
+        dx = bx - ax,
+        dz = bz - az;
+      const length = Math.hypot(dx, dz);
+      while (next < along + length) {
+        const side = random() > 0.5 ? 1 : -1,
+          offset = (1.5 + random() * 0.85) * side;
+        const fraction = (next - along) / length;
+        const x = ax + dx * fraction - (dz / length) * offset,
+          z = az + dz * fraction + (dx / length) * offset;
+        if (clear(x, z) && Math.hypot(x - 3, z - 3) > 3.1) {
+          planting(ferns, x, z, 0.32 + random() * 0.24);
+          for (let n = 0; n < 7; n++) {
+            const px = x + (random() - 0.5) * 1.3,
+              pz = z + (random() - 0.5) * 1.3;
+            if (clear(px, pz)) planting(buttercups, px, pz, 0.33 + random() * 0.15);
+          }
+        }
+        next += 2.8 + random() * 2.5;
+      }
+      along += length;
     }
   }
+  // Perennial borders: each planting ribbon has a taller back, broadleaf underplanting and a flowering edge.
+  for (const [ax, az, bx, bz, side] of [
+    [-8.8, 6.0, -1.7, 6.0, 1],
+    [-10.2, -5.5, -10.3, 4.5, -1],
+    [-27.7, -9.5, -14.4, -9.4, 1],
+    [-11.8, -23.2, -11.7, -19.7, 1],
+    [7.3, -6.1, 8.1, -0.7, 1],
+    [-27.4, 13.3, -21.1, 9.6, 1],
+    [19.0, -23.3, 28.0, -22.8, -1],
+    [28.4, -21.9, 28.5, -13.3, 1],
+    [24.6, 12.5, 24.1, 17.1, -1],
+    [18.1, 18.4, 22.7, 18.8, 1],
+    [-24, 22.5, -17.4, 22.8, 1],
+  ]) {
+    const dx = bx - ax,
+      dz = bz - az,
+      length = Math.hypot(dx, dz);
+    for (let i = 0; i < length * 28; i++) {
+      const t = random(),
+        lateral =
+          (random() - 0.45) * 1.7 * Math.sin(Math.PI * t) ** 0.44 + 0.45 * Math.sin(t * 5.6);
+      const x = ax + dx * t - ((side * dz) / length) * lateral,
+        z = az + dz * t + ((side * dx) / length) * lateral;
+      if (
+        world.obstacles.some(
+          (o) => x > o.minX - 0.16 && x < o.maxX + 0.16 && z > o.minZ - 0.16 && z < o.maxZ + 0.16,
+        ) ||
+        MEADOW_TRAILS.some(([a, b]) => segmentDistance(x, z, a, b) < 1.08)
+      )
+        continue;
+      const mix = random();
+      if (mix < 0.045) planting(shrubs, x, z, 0.54 + random() * 0.35);
+      else if (mix < 0.19) planting(groundcover, x, z, 0.38 + random() * 0.22);
+      else if (mix < 0.25) planting(ferns, x, z, 0.42 + random() * 0.19);
+      else planting(Math.sin(t * 8 + ax) > 0 ? poppies : buttercups, x, z, 0.37 + random() * 0.28);
+    }
+  }
+  for (const [x, z] of [
+    [-23.4, 18.4],
+    [-28, 7.2],
+    [-16.7, 20.2],
+  ])
+    planting(mushrooms, x, z, 0.3);
+  for (const [id, list] of [
+    ['flower_redA', poppies],
+    ['flower_yellowA', buttercups],
+    ['grass_leafsLarge', groundcover],
+    ['mushroom_redGroup', mushrooms],
+  ] as const)
+    attach.instances(root, '/assets/kenney/nature/' + id + '.glb', list, {
+      maxDistance: 120,
+      shadow: false,
+    });
   for (const [x, z, height] of [
     [-29, 4, 0.85],
     [-30, 10, 0.75],
@@ -134,14 +202,14 @@ export function buildGardens(world: WorldState, scene: THREE.Scene, attach: Atta
       { maxDistance: 88, shadow: false },
     );
   }
-  const stem = new THREE.CylinderGeometry(0.012, 0.023, 0.75, 5),
+  const stem = new THREE.CylinderGeometry(0.014, 0.023, 0.75, 5),
     reedMaterial = new THREE.MeshStandardMaterial({ color: 0x7a8050, roughness: 1 }),
     reeds = new THREE.InstancedMesh(stem, reedMaterial, 65),
     matrix = new THREE.Matrix4(),
     quaternion = new THREE.Quaternion();
   for (let i = 0; i < 65; i++) {
-    const a = i * 2.4,
-      r = 4.1 + (i % 4) * 0.13,
+    const a = [0.42, 1.8, 3.6, 4.35][i % 4] + (random() - 0.5) * 0.58,
+      r = 3.67 + random() * 0.64,
       scale = 0.6 + (i % 5) * 0.13;
     quaternion.setFromEuler(new THREE.Euler(Math.sin(a) * 0.08, a, Math.cos(a) * 0.08));
     matrix.compose(

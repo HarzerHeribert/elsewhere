@@ -3,13 +3,16 @@
   "description": "A small, soft, lopsided creature with three little paddle feet, two leaf-like feelers and large curious eyes.",
   "silhouette": "One continuous pear-shaped body; a broad soft base and a tiny off-centre crown.",
   "palette": {
-    "body": "#dbe3bf",
-    "belly": "#eff0d6",
-    "moss": "#668168",
-    "deepMoss": "#354f48",
-    "ochre": "#d4aa68",
-    "eyes": "#243e3b",
-    "highlight": "#fffbea"
+    "body": "#bf7547",
+    "belly": "#fae6af",
+    "moss": "#447c6b",
+    "deepMoss": "#284e48",
+    "ochre": "#eab767",
+    "eyes": "#233a39",
+    "highlight": "#fff9e6",
+    "markings": "#79513d",
+    "blush": "#dc8b6e",
+    "leafTip": "#bfca76"
   },
   "eyeHeight": 0.78,
   "height": 1.22,

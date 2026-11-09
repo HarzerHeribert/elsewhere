@@ -11,7 +11,82 @@ export interface CreaturePose {
   gaze?: THREE.Vector3;
 }
 
-/** Hubert is an original, unclassified little creature. Its anchor stays owned by the world. */
+const { palette } = appearance;
+const smooth = THREE.MathUtils.smoothstep;
+const axisY = new THREE.Vector3(0, 1, 0);
+
+// A single soft body, with the cream face, russet cheeks and seed markings painted into its coat.
+function seedBody() {
+  const geometry = new THREE.SphereGeometry(1, 80, 56);
+  const positions = geometry.getAttribute('position');
+  const colors = [];
+  const coat = new THREE.Color(palette.body);
+  const gold = new THREE.Color(palette.ochre);
+  const cream = new THREE.Color(palette.belly);
+  const cheek = new THREE.Color(palette.blush);
+  const umber = new THREE.Color(palette.markings);
+  const color = new THREE.Color();
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i),
+      y = positions.getY(i),
+      z = positions.getZ(i);
+    const t = (y + 1) / 2;
+    const width = 0.455 * (1.13 - 0.28 * t);
+    positions.setXYZ(i, x * width - 0.035 * t * t, 0.098 + t * 0.93, z * width * 0.87);
+    const face = smooth(z + 0.14 * y - 0.16 * Math.cos(x * 6), 0.48, 0.59);
+    color
+      .copy(coat)
+      .lerp(gold, smooth(y, -0.2, 1) * 0.65)
+      .lerp(cream, face);
+    const cheeks = Math.hypot((Math.abs(x) - 0.66) / 0.25, (y - 0.14) / 0.18);
+    if (z > 0) color.lerp(cheek, (1 - smooth(cheeks, 0.15, 1)) * 0.82);
+    // Three little ovals echo the broken nape markings on the cream breast.
+    const breast = Math.hypot((Math.abs(x) - 0.27) / 0.09, (y + 0.22 + Math.abs(x) * 0.24) / 0.05);
+    const bib = Math.hypot(x / 0.085, (y + 0.39) / 0.065);
+    if (z > 0.7) color.lerp(gold, (1 - smooth(Math.min(breast, bib), 0.1, 1)) * 0.85);
+    // Paired broken stripes on the nape remain visible from the overhead camera.
+    const stripe = Math.cos((y + 0.15 * Math.abs(x)) * 22);
+    const nape = smooth(-z + 0.4 * y, 0.5, 1.15) * smooth(y, -0.35, 0.15);
+    color.lerp(umber, nape * smooth(stripe, 0.55, 0.96) * 0.78);
+    colors.push(color.r, color.g, color.b);
+  }
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+// The listening feelers resemble winged seeds. A curved midrib folds each blade into a cupped sail.
+function listeningLeaf(side: number, length: number, lift: number) {
+  const geometry = new THREE.SphereGeometry(1, 40, 28);
+  const positions = geometry.getAttribute('position');
+  const colors = [];
+  const green = new THREE.Color(palette.moss);
+  const midrib = new THREE.Color(palette.deepMoss);
+  const tip = new THREE.Color(palette.leafTip);
+  const color = new THREE.Color();
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i),
+      y = positions.getY(i),
+      z = positions.getZ(i);
+    const t = (y + 1) / 2;
+    positions.setXYZ(
+      i,
+      side * length * t,
+      lift * t + 0.08 * Math.sin(t * Math.PI) + side * x * 0.095 + z * 0.03,
+      -0.09 * t + side * x * 0.13 - 0.028 * x * x - z * 0.021,
+    );
+    const flank = Math.abs(x);
+    color.copy(green).lerp(tip, smooth(t, 0.52, 0.9));
+    const ribs = Math.cos((t - flank * 0.33) * Math.PI * 9);
+    color.lerp(midrib, 0.29 * smooth(ribs, 0.4, 1) * smooth(flank, 0, 0.35));
+    color.lerp(tip, 0.75 * (1 - smooth(flank, 0.02, 0.075)));
+    colors.push(color.r, color.g, color.b);
+  }
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function createHubertCreature() {
   const root = new THREE.Group();
   root.name = 'Hubert — unclassified Elsewhere creature';
@@ -19,274 +94,197 @@ export function createHubertCreature() {
   root.userData.modelKind = 'elsewhere-creature';
   root.userData.stepPhase = 0;
   const resources = new ResourceScope();
-  const palette = appearance.palette;
   const bodyPose = new THREE.Group();
   root.add(bodyPose);
-  const material = (color: THREE.ColorRepresentation, roughness = 0.86) => {
-    const result = new THREE.MeshStandardMaterial({ color, roughness, metalness: 0 });
-    resources.own(result);
-    return result;
-  };
-  const moss = material(palette.moss, 0.78),
-    ochre = material(palette.ochre, 0.8);
-  const leafMaterial = material(palette.moss, 0.72);
-  const eyeMaterial = new THREE.MeshPhysicalMaterial({
-    color: palette.eyes,
-    roughness: 0.16,
-    metalness: 0,
-    clearcoat: 0.7,
-    clearcoatRoughness: 0.13,
-  });
-  resources.own(eyeMaterial);
-  const glintMaterial = new THREE.MeshBasicMaterial({ color: palette.highlight });
-  resources.own(glintMaterial);
-  function ellipsoid(
+
+  const round = resources.own(new THREE.SphereGeometry(1, 24, 16));
+  const painted = resources.own(
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 }),
+  );
+  const leafMaterial = resources.own(
+    new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.74,
+      emissive: palette.moss,
+      emissiveIntensity: 0.15,
+    }),
+  );
+  const material = (color: string, roughness = 0.84) =>
+    resources.own(new THREE.MeshStandardMaterial({ color, roughness }));
+  const bark = material(palette.markings);
+  const moss = material(palette.moss);
+  const eyeRim = material(palette.ochre);
+  const eye = resources.own(
+    new THREE.MeshPhysicalMaterial({
+      color: palette.eyes,
+      roughness: 0.25,
+      clearcoat: 0.72,
+      clearcoatRoughness: 0.19,
+    }),
+  );
+  const glint = resources.own(new THREE.MeshBasicMaterial({ color: palette.highlight }));
+  function mesh(parent: THREE.Object3D, geometry: THREE.BufferGeometry, mat: THREE.Material) {
+    const part = new THREE.Mesh(geometry, mat);
+    part.castShadow = part.receiveShadow = true;
+    parent.add(part);
+    return part;
+  }
+  function oval(
     parent: THREE.Object3D,
     mat: THREE.Material,
     size: [number, number, number],
-    position: [number, number, number],
+    center: [number, number, number],
   ) {
-    const geometry = new THREE.SphereGeometry(1, 24, 16);
-    resources.own(geometry);
-    const mesh = new THREE.Mesh(geometry, mat);
-    mesh.scale.set(...size);
-    mesh.position.set(...position);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    parent.add(mesh);
-    return mesh;
+    const part = mesh(parent, round, mat);
+    part.scale.set(...size);
+    part.position.set(...center);
+    return part;
   }
+  mesh(bodyPose, resources.own(seedBody()), painted);
 
-  // Paint is a skin pattern on one continuous body, not a separate head, garment or torso.
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 1024;
-  const context = canvas.getContext('2d')!;
-  context.fillStyle = palette.body;
-  context.fillRect(0, 0, 1024, 1024);
-  context.save();
-  context.translate(256, 620);
-  context.scale(0.76, 1.12);
-  const belly = context.createRadialGradient(0, 0, 25, 0, 0, 260);
-  belly.addColorStop(0, palette.belly);
-  belly.addColorStop(0.62, palette.belly);
-  belly.addColorStop(1, 'rgba(239,240,214,0)');
-  context.fillStyle = belly;
-  context.fillRect(-280, -280, 560, 560);
-  context.restore();
-  context.save();
-  context.translate(745, 520);
-  context.scale(1, 0.8);
-  const back = context.createRadialGradient(0, 0, 10, 0, 0, 170);
-  back.addColorStop(0, 'rgba(102,129,104,.28)');
-  back.addColorStop(1, 'rgba(102,129,104,0)');
-  context.fillStyle = back;
-  context.fillRect(-180, -180, 360, 360);
-  context.restore();
-  let seed = 1907;
-  const random = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  for (let i = 0; i < 26; i++) {
-    const x = 120 + random() * 260,
-      y = 400 + random() * 260;
-    context.fillStyle = i % 4 ? 'rgba(102,129,104,.26)' : 'rgba(212,170,104,.46)';
-    context.beginPath();
-    context.ellipse(x, y, 2 + random() * 4, 2 + random() * 3, random(), 0, Math.PI * 2);
-    context.fill();
+  // The sun's village-wide shadow map cannot resolve contact under the tiny paddles.
+  const contactGeometry = resources.own(new THREE.CircleGeometry(1, 40));
+  const contactColors = new Float32Array(contactGeometry.getAttribute('position').count * 4);
+  const shade = new THREE.Color(0x3d3024);
+  for (let i = 0; i < contactColors.length / 4; i++) {
+    contactColors.set([shade.r, shade.g, shade.b, i === 0 ? 0.53 : 0], i * 4);
   }
-  const skin = new THREE.CanvasTexture(canvas);
-  skin.colorSpace = THREE.SRGBColorSpace;
-  skin.anisotropy = 4;
-  resources.own(skin);
-  const bodyMaterial = new THREE.MeshStandardMaterial({
-    map: skin,
-    roughness: 0.9,
-    metalness: 0,
-    envMapIntensity: 0.55,
-  });
-  resources.own(bodyMaterial);
-  const bodyGeometry = new THREE.SphereGeometry(1, 40, 28);
-  resources.own(bodyGeometry);
-  const positions = bodyGeometry.getAttribute('position');
-  for (let i = 0; i < positions.count; i++) {
-    const x = positions.getX(i),
-      y = positions.getY(i),
-      z = positions.getZ(i),
-      t = (y + 1) / 2;
-    const radius = 0.34 * (1.05 - 0.5 * t);
-    positions.setXYZ(
-      i,
-      x * radius - 0.065 * t * t,
-      0.08 + Math.pow(t, 1.25) * 0.96,
-      z * radius * 0.82 + 0.014 * t,
-    );
-  }
-  positions.needsUpdate = true;
-  bodyGeometry.computeVertexNormals();
-  const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-  body.castShadow = true;
-  body.receiveShadow = true;
-  bodyPose.add(body);
+  contactGeometry.setAttribute('color', new THREE.BufferAttribute(contactColors, 4));
+  const contact = new THREE.Mesh(
+    contactGeometry,
+    resources.own(
+      new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    ),
+  );
+  contact.rotation.x = -Math.PI / 2;
+  contact.position.set(0, 0.058, 0.015);
+  contact.scale.set(0.55, 0.46, 1);
+  contact.renderOrder = 1;
+  contact.raycast = () => {};
+  root.add(contact);
 
-  // Three broad, small paddles give it a distinctive shuffling silhouette.
   const feet: THREE.Group[] = [];
   const footOrigins = [
-    new THREE.Vector3(-0.17, 0.085, 0.13),
-    new THREE.Vector3(0.17, 0.085, 0.13),
-    new THREE.Vector3(0.015, 0.08, -0.17),
+    new THREE.Vector3(-0.21, 0.093, 0.138),
+    new THREE.Vector3(0.21, 0.093, 0.138),
+    new THREE.Vector3(0.018, 0.093, -0.205),
   ];
   footOrigins.forEach((position, index) => {
     const foot = new THREE.Group();
     foot.position.copy(position);
+    foot.rotation.y = [-0.29, 0.29, Math.PI][index]!;
     root.add(foot);
-    ellipsoid(
-      foot,
-      index === 2 ? ochre : moss,
-      [index === 1 ? 0.095 : 0.088, 0.053, 0.14],
-      [0, 0, 0.015],
-    );
-    foot.rotation.y = index === 0 ? -0.18 : index === 1 ? 0.15 : Math.PI;
+    oval(foot, moss, [0.133, 0.086, 0.167], [0, 0, 0.022]);
     feet.push(foot);
   });
 
-  // Soft, deliberately unequal eyes are embedded directly into the bean-shaped body.
-  const eyes: Array<{ group: THREE.Group; restScale: number }> = [];
-  for (const [x, y, z, size] of [
-    [-0.14, appearance.eyeHeight, 0.171, 1],
-    [0.075, appearance.eyeHeight + 0.012, 0.177, 1.08],
-  ] as const) {
-    const group = new THREE.Group();
-    group.position.set(x, y, z);
-    bodyPose.add(group);
-    ellipsoid(group, eyeMaterial, [0.082 * size, 0.108 * size, 0.047], [0, 0, 0]);
-    ellipsoid(group, glintMaterial, [0.014, 0.019, 0.007], [-0.022, 0.037, 0.043]);
-    ellipsoid(group, glintMaterial, [0.006, 0.007, 0.004], [0.025, -0.027, 0.046]);
-    eyes.push({ group, restScale: 1 });
+  const eyes: THREE.Group[] = [];
+  for (const side of [-1, 1]) {
+    const eyeGroup = new THREE.Group();
+    eyeGroup.position.set(-0.017 + side * 0.147, appearance.eyeHeight + side * 0.009, 0.259);
+    eyeGroup.rotation.y = side * 0.33;
+    eyeGroup.rotation.x = -0.24;
+    bodyPose.add(eyeGroup);
+    oval(eyeGroup, eyeRim, [0.103, 0.121, 0.081], [0, 0, 0]);
+    oval(eyeGroup, eye, [0.088, 0.101, 0.075], [0, 0, 0.025]);
+    const highlight = oval(eyeGroup, glint, [0.014, 0.019, 0.008], [-0.022, 0.033, 0.092]);
+    highlight.castShadow = false;
+    eyes.push(eyeGroup);
+    for (const [dx, dy, dz, radius] of [
+      [0.248, 0.659, 0.3, 0.01],
+      [0.273, 0.638, 0.29, 0.007],
+      [0.228, 0.631, 0.328, 0.008],
+    ] as const) {
+      const freckle = oval(
+        bodyPose,
+        bark,
+        [radius, radius, radius * 0.55],
+        [side * dx - 0.014, dy, dz],
+      );
+      freckle.rotation.y = side * 0.5;
+      freckle.castShadow = false;
+    }
   }
-  const smileCurve = new THREE.QuadraticBezierCurve3(
-    new THREE.Vector3(-0.035, 0.59, 0.22),
-    new THREE.Vector3(-0.005, 0.578, 0.224),
-    new THREE.Vector3(0.025, 0.588, 0.22),
+  const mouth = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(-0.059, 0.641, 0.371),
+    new THREE.Vector3(-0.013, 0.607, 0.379),
+    new THREE.Vector3(0.031, 0.646, 0.368),
   );
-  const smileGeometry = new THREE.TubeGeometry(smileCurve, 12, 0.0038, 5, false);
-  resources.own(smileGeometry);
-  bodyPose.add(new THREE.Mesh(smileGeometry, material(palette.deepMoss)));
-
-  // Leaf-like feelers are attached to the off-centre crown, with no human ears or hat.
-  const feelers: Array<{ group: THREE.Group; angle: number }> = [];
-  for (const [x, y, length, angle] of [
-    [-0.075, 1.015, 0.205, 0.35],
-    [0.012, 0.993, 0.145, -0.58],
-  ] as const) {
+  mesh(bodyPose, resources.own(new THREE.TubeGeometry(mouth, 12, 0.007, 7, false)), bark);
+  const feelers: THREE.Group[] = [];
+  for (const side of [-1, 1]) {
     const group = new THREE.Group();
-    group.position.set(x, y, -0.01);
-    group.rotation.z = angle;
+    group.position.set(side * 0.1 - 0.028, 0.968, -0.038);
+    group.scale.y = 0.85;
     bodyPose.add(group);
-    const shape = new THREE.Shape();
-    shape.moveTo(0, 0);
-    shape.bezierCurveTo(0.06, length * 0.25, 0.065, length * 0.72, 0, length);
-    shape.bezierCurveTo(-0.065, length * 0.72, -0.05, length * 0.23, 0, 0);
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: 0.018,
-      bevelEnabled: true,
-      bevelSize: 0.006,
-      bevelThickness: 0.004,
-      bevelSegments: 2,
-      steps: 1,
-    });
-    resources.own(geometry);
-    const leaf = new THREE.Mesh(geometry, leafMaterial);
-    leaf.position.z = -0.009;
-    leaf.castShadow = true;
-    group.add(leaf);
-    const veinCurve = new THREE.QuadraticBezierCurve3(
-      new THREE.Vector3(0, 0.018, 0.015),
-      new THREE.Vector3(0.01, length * 0.55, 0.017),
-      new THREE.Vector3(0, length - 0.014, 0.015),
+    mesh(
+      group,
+      resources.own(listeningLeaf(side, side < 0 ? 0.44 : 0.344, side < 0 ? 0.2 : 0.148)),
+      leafMaterial,
     );
-    const veinGeometry = new THREE.TubeGeometry(veinCurve, 10, 0.0025, 4, false);
-    resources.own(veinGeometry);
-    group.add(new THREE.Mesh(veinGeometry, material(palette.ochre)));
-    feelers.push({ group, angle });
+    feelers.push(group);
   }
 
   let previousPosition: THREE.Vector3 | null = null,
     step = 0,
     movement = 0;
-  const localGaze = new THREE.Vector3();
-  const feelerSway = [0, 0];
+  const direction = new THREE.Vector3();
   function update({ dt, worldTime, paused, resting, gaze }: CreaturePose) {
     if (!previousPosition) previousPosition = root.position.clone();
     const distance = root.position.distanceTo(previousPosition);
     previousPosition.copy(root.position);
-    if (!paused) {
-      step += distance * 19;
-      movement = THREE.MathUtils.lerp(
-        movement,
-        Math.min(1, distance / Math.max(dt, 0.001) / 1.5),
-        Math.min(1, dt * 12),
-      );
-    }
+    if (paused) return;
     const seconds = worldTime / 1000;
-    const settling = resting ? 0.92 : 1;
-    const motionWeight = resting ? 0 : movement;
-    const smoothing = paused ? 1 : Math.min(1, dt * 5);
-    const squash = 1 - Math.abs(Math.sin(step)) * motionWeight * 0.025;
-    bodyPose.scale.set(
-      1 + (1 - settling) * 0.22 + motionWeight * 0.008,
-      settling * squash,
-      1 + (1 - settling) * 0.15,
+    const smoothing = 1 - Math.exp(-dt * 8);
+    step += Math.min(distance, 0.3) * 16;
+    movement = THREE.MathUtils.lerp(
+      movement,
+      resting ? 0 : Math.min(1, distance / Math.max(dt, 0.001)),
+      smoothing,
     );
-    bodyPose.position.y = Math.abs(Math.sin(step)) * motionWeight * 0.012;
-    const birdAttention = Boolean(gaze);
     if (gaze)
-      localGaze
-        .copy(gaze)
-        .sub(root.position)
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), -root.rotation.y)
-        .normalize();
-    else localGaze.set(0, 0, 0);
+      direction.copy(gaze).sub(root.position).applyAxisAngle(axisY, -root.rotation.y).normalize();
+    else direction.set(0, 0, 0);
+    const sway = Math.sin(step) * movement;
+    const breath = Math.sin(seconds * 1.8) * (resting ? 0.008 : 0.012);
+    const height = (resting ? 0.91 : 1) + breath - Math.abs(sway) * 0.024;
+    bodyPose.scale.set(1 + (1 - height) * 0.34, height, 1 + (1 - height) * 0.23);
+    bodyPose.position.y = Math.abs(sway) * 0.012;
     bodyPose.rotation.z = THREE.MathUtils.lerp(
       bodyPose.rotation.z,
-      birdAttention
-        ? THREE.MathUtils.clamp(-localGaze.x * 0.07, -0.07, 0.07)
-        : Math.sin(step) * motionWeight * 0.018,
+      -direction.x * 0.1 + sway * 0.047,
       smoothing,
     );
     bodyPose.rotation.x = THREE.MathUtils.lerp(
       bodyPose.rotation.x,
-      resting
-        ? 0.035
-        : birdAttention
-          ? THREE.MathUtils.clamp(-localGaze.y * 0.055, -0.045, 0.045)
-          : motionWeight * 0.025,
+      (resting ? 0.045 : movement * 0.055) - direction.y * 0.1,
       smoothing,
     );
-    if (!paused)
-      feet.forEach((foot, index) => {
-        const wave = Math.sin(step + (index * Math.PI * 2) / 3),
-          origin = footOrigins[index]!;
-        foot.position.set(
-          origin.x,
-          origin.y + Math.max(0, wave) * motionWeight * 0.035,
-          origin.z + wave * motionWeight * 0.028,
-        );
-        foot.rotation.x = wave * motionWeight * 0.13;
-      });
-    const blinkPhase = (seconds + 3.4) % 11.7,
-      blink = blinkPhase < 0.24 ? Math.sin((blinkPhase / 0.24) * Math.PI) : 0;
-    if (!paused) for (const eye of eyes) eye.group.scale.y = eye.restScale * (1 - blink * 0.94);
-    feelers.forEach((feeler, index) => {
-      if (!paused) feelerSway[index] = Math.sin(seconds * 0.8 + index) * 0.018;
-      feeler.group.rotation.z =
-        feeler.angle +
-        (feelerSway[index] ?? 0) +
-        (resting ? (index ? -0.15 : 0.15) : 0) +
-        (birdAttention ? -localGaze.x * 0.07 : 0);
-      feeler.group.rotation.x = birdAttention
-        ? THREE.MathUtils.clamp(-localGaze.y * 0.12, -0.1, 0.1)
-        : motionWeight * 0.035;
+    feet.forEach((foot, index) => {
+      const wave = Math.sin(step + (index * Math.PI * 2) / 3);
+      const origin = footOrigins[index]!;
+      foot.position.set(
+        origin.x,
+        origin.y + Math.max(0, wave) * movement * 0.052,
+        origin.z + wave * movement * 0.048,
+      );
+      foot.rotation.x = wave * movement * 0.16;
+    });
+    const blinkPhase = (seconds + 3.4) % 7.3;
+    const blink = blinkPhase < 0.24 ? Math.sin((blinkPhase / 0.24) * Math.PI) : 0;
+    for (const group of eyes) group.scale.y = (resting ? 0.73 : 1) * (1 - blink * 0.94);
+    feelers.forEach((group, index) => {
+      const side = index === 0 ? -1 : 1;
+      group.rotation.z =
+        side *
+          ((resting ? -0.2 : 0) + Math.sin(seconds * 1.65 + index * 1.9) * 0.044 + sway * 0.1) -
+        direction.x * 0.13;
+      group.rotation.x = direction.y * 0.15 + Math.sin(seconds * 1.32 + index) * 0.052;
     });
   }
   return {

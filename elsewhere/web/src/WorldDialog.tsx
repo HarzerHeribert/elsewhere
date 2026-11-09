@@ -95,12 +95,14 @@ export function WorldDialog({
             take a walk alongside him.
           </p>
           <p>
-            {snapshot?.runtime.mode === 'ollama'
-              ? 'His decisions are backed by a local Ollama model.'
-              : snapshot?.runtime.mode === 'compatible'
-                ? 'A configured model proposes his decisions.'
-                : 'This instance uses a reproducible local planner.'}{' '}
-            The world verifies his actions and preserves their outcomes.
+            {!snapshot
+              ? 'You’re looking around the village while its live world is unavailable.'
+              : snapshot.runtime.mode === 'ollama'
+                ? 'His decisions are backed by a local Ollama model.'
+                : ['compatible', 'routed', 'chatgpt', 'broker'].includes(snapshot.runtime.mode)
+                  ? 'A configured model proposes his decisions.'
+                  : 'This instance uses a reproducible local planner.'}{' '}
+            {snapshot && 'The world verifies his actions and preserves their outcomes.'}
           </p>
           <p>
             The character camera shows his viewpoint; the planner currently uses structured sight.

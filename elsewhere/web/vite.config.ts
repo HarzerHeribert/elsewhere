@@ -1,7 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { tsImport } from 'tsx/esm/api';
+
+const { createInitialWorld, publicWorld } = (await tsImport(
+  '../server/src/world.ts',
+  import.meta.url,
+)) as typeof import('../server/src/world');
+
+const { bounds, places, obstacles, objects } = publicWorld(createInitialWorld(0));
 export default defineConfig({
   plugins: [react()],
+  // Only the public, authored scenery is bundled. Residents and runtime always come from the API.
+  define: { __ELSEWHERE_SCENERY__: JSON.stringify({ bounds, places, obstacles, objects }) },
   server: {
     host: '127.0.0.1',
     port: Number(process.env.VITE_PORT ?? 5173),

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { villageScenery } from './scenery';
 import { Scene, type CameraMode, type SceneControls } from './Scene';
 import { HubertPortrait } from './HubertPortrait';
 import { useVisitor } from './useVisitor';
@@ -87,10 +88,15 @@ export function App() {
   const visitor = useVisitor(),
     character = snapshot?.character,
     resident = snapshot?.world.residents.find((r) => r.id === character?.id);
-  const mode: CameraMode = cameraMode === 'visitor' && !visitor.visitor ? 'overview' : cameraMode;
+  const mode: CameraMode =
+    (cameraMode === 'visitor' && (!visitor.visitor || !snapshot)) ||
+    (cameraMode === 'hubert' && !resident)
+      ? 'overview'
+      : cameraMode;
+  const scenery = snapshot?.world ?? villageScenery;
   const entity = snapshot?.world.entities?.find((item) => item.id === selected);
-  const object = snapshot?.world.objects.find((o) => o.id === selected),
-    place = snapshot?.world.places.find((p) => p.id === placeId);
+  const object = scenery.objects.find((o) => o.id === selected),
+    place = scenery.places.find((p) => p.id === placeId);
   const position = visitor.visitor?.position ?? resident?.position;
   const currentPlace = snapshot?.world.places.find(
     (p) =>
@@ -221,6 +227,7 @@ export function App() {
     setPanel('place');
   }
   async function enterWorld() {
+    if (!snapshot) return;
     release();
     if (await visitor.enter()) {
       setPanel(null);
@@ -229,6 +236,7 @@ export function App() {
     }
   }
   async function walkTo(p: Position) {
+    if (!snapshot) return;
     if (await visitor.enter()) {
       setPanel(null);
       setMode('visitor');
@@ -274,7 +282,7 @@ export function App() {
   }
   const day = snapshot
     ? Math.floor((snapshot.runtime.simulatedAt - snapshot.runtime.startedAt) / 86400000) + 1
-    : 1;
+    : null;
 
   return (
     <main
@@ -326,12 +334,14 @@ export function App() {
                 ? 'Life, paused'
                 : 'Life, unfolding'
               : connection === 'offline'
-                ? 'Reconnecting'
+                ? snapshot
+                  ? 'Reconnecting'
+                  : 'World preview'
                 : 'Arriving'}
           </span>
           <span className="clock-divider" />
           <span>
-            Day {String(day).padStart(2, '0')}
+            Day {day === null ? '—' : String(day).padStart(2, '0')}
             <small>{snapshot ? formatTime(snapshot.runtime.simulatedAt) : '—:—'}</small>
           </span>
         </div>
@@ -344,12 +354,16 @@ export function App() {
             <button
               onClick={() => camera('visitor')}
               aria-pressed={mode === 'visitor'}
-              disabled={visitor.busy}
+              disabled={visitor.busy || !snapshot}
             >
               <Icon name="walk" />
               <span>Walk</span>
             </button>
-            <button onClick={() => camera('hubert')} aria-pressed={mode === 'hubert'}>
+            <button
+              onClick={() => camera('hubert')}
+              aria-pressed={mode === 'hubert'}
+              disabled={!resident}
+            >
               <Icon name="eye" />
               <span>Hubert’s eyes</span>
             </button>
@@ -428,8 +442,9 @@ export function App() {
             {panel === 'residents' && (
               <ResidentsPanel
                 residents={snapshot?.world.residents ?? []}
+                awaitingLiveState={!snapshot}
                 characterActivity={character?.activity}
-                visitorCount={snapshot?.world.visitors?.length ?? 0}
+                visitorCount={snapshot ? (snapshot.world.visitors?.length ?? 0) : undefined}
                 onSelect={pickCharacter}
               />
             )}
@@ -460,9 +475,9 @@ export function App() {
             {panel === 'place' && place && (
               <PlacePanel
                 place={place}
-                objects={snapshot?.world.objects ?? []}
+                objects={scenery.objects}
                 discovered={discovered.includes(place.id)}
-                onWalk={walkTo}
+                onWalk={snapshot ? walkTo : undefined}
                 onSelectObject={pickObject}
                 onBack={() => openPanel('map')}
               />
@@ -482,7 +497,13 @@ export function App() {
                 onSubmit={sendMessage}
               />
             )}
-            {panel === 'activity' && (
+            {!snapshot && (panel === 'activity' || panel === 'wishes') && (
+              <p className="panel-intro">
+                Hubert’s live {panel === 'wishes' ? 'wishes' : 'activity and memories'} will appear
+                when the world connects.
+              </p>
+            )}
+            {panel === 'activity' && snapshot && (
               <ActivityPanel
                 events={snapshot?.events ?? []}
                 memories={snapshot?.memories ?? []}
@@ -491,7 +512,7 @@ export function App() {
                 onFeedChange={setFeed}
               />
             )}
-            {panel === 'wishes' && (
+            {panel === 'wishes' && snapshot && (
               <WishesPanel
                 wishes={snapshot?.wishes ?? []}
                 canDecide={Boolean(owner || canManageCharacter)}
@@ -504,7 +525,7 @@ export function App() {
               <ControlsPanel
                 runtime={snapshot?.runtime}
                 fullscreen={fullscreen}
-                onEnterWorld={enterWorld}
+                onEnterWorld={snapshot ? enterWorld : undefined}
                 onToggleFullscreen={toggleFullscreen}
               />
             )}
@@ -616,7 +637,9 @@ export function App() {
       </div>
       {connection === 'offline' && (
         <p className="connection-toast glass" role="status">
-          Reconnecting to Elsewhere. Showing the last known world.
+          {snapshot
+            ? 'Reconnecting to Elsewhere. Showing the last known world.'
+            : 'Village preview · Waiting for the live world.'}
         </p>
       )}
       {visitor.status && (

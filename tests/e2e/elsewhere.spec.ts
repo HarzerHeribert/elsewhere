@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import type { PublicSnapshot, VisitorSessionView } from '@elsewhere/character-interfaces';
+import { createInitialWorld } from '../../elsewhere/server/src/world';
 
 // Explicitly nonsecret and scoped to the isolated test database and local ports.
 const TEST_OWNER = 'elsewhere-e2e-local-test-credential-only-2026';
@@ -616,7 +617,8 @@ test('real branched trees, scanned planting, PBR architecture and the HDR enviro
     '/assets/kenney/furniture/pottedPlant.glb',
     '/assets/kenney/furniture/lampRoundFloor.glb',
     '/assets/kenney/town/lantern.glb',
-    '/assets/kenney/town/stall-green.glb',
+    '/assets/kenney/nature/flower_redA.glb',
+    '/assets/kenney/nature/flower_yellowA.glb',
   ];
   const requiredTextures = [
     ...['leafy_grass', 'grass_path_2'].flatMap((name) =>
@@ -850,7 +852,7 @@ test('a stalled world response times out and polling reconnects without a reload
   try {
     await page.goto('/');
     await expect(
-      page.getByText('Reconnecting to Elsewhere. Showing the last known world.', { exact: true }),
+      page.getByText('Village preview · Waiting for the live world.', { exact: true }),
     ).toBeVisible({ timeout: 10000 });
     holding = false;
     release();
@@ -858,7 +860,7 @@ test('a stalled world response times out and polling reconnects without a reload
       timeout: 10000,
     });
     await expect(
-      page.getByText('Reconnecting to Elsewhere. Showing the last known world.', { exact: true }),
+      page.getByText('Village preview · Waiting for the live world.', { exact: true }),
     ).not.toBeVisible();
   } finally {
     release();
@@ -1072,4 +1074,190 @@ test('a restored visitor has a consistent overview and can re-enter the actual f
       return camera ? Math.hypot(camera.x - view.position.x, camera.z - view.position.z) : Infinity;
     })
     .toBeLessThan(0.35);
+});
+
+for (const failure of ['HTML', '503'] as const) {
+  test(`cold start with ${failure} world response renders the village and recovers live state`, async ({
+    page,
+    request,
+  }) => {
+    const state = await snapshot(request);
+    const canonicalCount = createInitialWorld(0).objects.length;
+    // Saved lives can have fulfilled wishes/keepsakes beyond the authored preview.
+    state.world.objects.push({
+      ...state.world.objects[0],
+      id: 'restored-keepsake',
+      position: { x: 11, z: 11 },
+    });
+    // The second recovery uses a restored world with different static and movable scenery.
+    if (failure === '503') {
+      state.world.obstacles.push({
+        id: 'restored-wall',
+        minX: 5,
+        minZ: 5,
+        maxX: 6,
+        maxZ: 6,
+        height: 1,
+      });
+      state.world.objects = state.world.objects.filter((object) => object.id !== 'bench');
+    }
+    let available = false;
+    await page.route('**/api/world', (route) =>
+      route.fulfill(
+        available
+          ? { json: state }
+          : failure === 'HTML'
+            ? {
+                status: 200,
+                contentType: 'text/html',
+                body: '<!DOCTYPE html><title>Elsewhere</title>',
+              }
+            : { status: 503, json: { error: 'unavailable' } },
+      ),
+    );
+    await page.goto('/');
+    const scene = page.locator('.scene-canvas');
+    const canvas = scene.locator('canvas');
+    const status = page.getByText('Village preview · Waiting for the live world.', { exact: true });
+    await expect(status).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hubert’s eyes', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Walk', exact: true })).toBeDisabled();
+    await openPanel(page, 'Residents');
+    await expect(panel(page).getByRole('group', { name: 'About Hubert' })).toBeVisible();
+    await expect(panel(page).getByText('0 visitors exploring', { exact: true })).not.toBeVisible();
+    await closePanel(page);
+    await expect(scene).toHaveAttribute('data-assets-loaded', /kenney\/furniture\/bench\.glb/, {
+      timeout: 25000,
+    });
+    await expect(scene).toHaveAttribute('data-textures-loaded', /roof_tiles_14_diff_2k\.jpg/, {
+      timeout: 25000,
+    });
+    const renderStats = () =>
+      canvas.evaluate((element) => JSON.parse(element.dataset.renderStats ?? '{}'));
+    await expect
+      .poll(renderStats)
+      .toMatchObject({ buildings: 3, objects: canonicalCount, residentVisible: false });
+    await canvas.evaluate((element) => {
+      element.dataset.previewCanvas = 'yes';
+    });
+    await openPanel(page, 'Map');
+    await panel(page)
+      .getByRole('button', { name: /The little library/ })
+      .click();
+    await expect(panel(page).getByRole('button', { name: 'Walk toward here' })).toBeDisabled();
+    await closePanel(page);
+    await page.getByRole('button', { name: 'Reset camera' }).click();
+    available = true;
+    await expect(status).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hubert’s eyes', exact: true })).toBeEnabled();
+    await expect
+      .poll(renderStats)
+      .toMatchObject({ buildings: 3, objects: state.world.objects.length, residentVisible: true });
+    await expect(canvas).toHaveCount(1);
+    if (failure === 'HTML') await expect(canvas).toHaveAttribute('data-preview-canvas', 'yes');
+    else await expect(canvas).not.toHaveAttribute('data-preview-canvas', 'yes');
+    available = false;
+    await expect(
+      page.getByText('Reconnecting to Elsewhere. Showing the last known world.', { exact: true }),
+    ).toBeVisible();
+  });
+}
+
+test('a restored visitor cannot submit movement from the cold village preview', async ({
+  page,
+}) => {
+  await visit(page);
+  await enterWorld(page);
+  await page.route('**/api/world', (route) =>
+    route.fulfill({ status: 503, json: { error: 'offline' } }),
+  );
+  const restored = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).pathname.startsWith('/api/visitors/'),
+  );
+  let moves = 0;
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      request.url().includes('/api/visitors/') &&
+      request.postDataJSON()?.type === 'move'
+    )
+      moves++;
+  });
+  await page.reload();
+  await restored;
+  await expect(
+    page.getByText('Village preview · Waiting for the live world.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Walk', exact: true })).toBeDisabled();
+  await openPanel(page, 'Map');
+  const map = panel(page).locator('.world-map svg');
+  const rect = await map.boundingBox();
+  expect(rect).not.toBeNull();
+  await map.click({ position: { x: rect!.width - 4, y: rect!.height - 4 } });
+  await closePanel(page);
+  // Also cover the scene's click-to-walk path for a visitor restored independently of the world.
+  await page.locator('.scene-canvas canvas').click({ position: { x: 1100, y: 800 } });
+  await expect(page.getByRole('button', { name: 'Walk', exact: true })).toBeDisabled();
+  // Allow the visitor command queue to dispatch if a click incorrectly enqueued movement.
+  await page.waitForTimeout(350);
+  expect(moves).toBe(0);
+});
+
+test('rebuilding scenery does not replay old controls or substitute another resident for Hubert', async ({
+  page,
+  request,
+}) => {
+  const state = await snapshot(request);
+  await page.route('**/api/world', (route) => route.fulfill({ json: state }));
+  await visit(page);
+  await enterWorld(page);
+  const turned = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      response.url().includes('/api/visitors/') &&
+      response.request().postDataJSON()?.type === 'look',
+  );
+  await page.getByRole('button', { name: 'Turn left', exact: true }).click();
+  await turned;
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  let replayed = 0;
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      request.url().includes('/api/visitors/') &&
+      ['move', 'look'].includes(request.postDataJSON()?.type)
+    )
+      replayed++;
+  });
+  const canvas = page.locator('.scene-canvas canvas');
+  await canvas.evaluate((element) => {
+    element.dataset.beforeLayoutChange = 'yes';
+  });
+  state.world.obstacles.push({
+    id: 'scenery-test-rock',
+    minX: 5,
+    maxX: 6,
+    minZ: 5,
+    maxZ: 6,
+    height: 0.5,
+  });
+  await expect(canvas).not.toHaveAttribute('data-before-layout-change', 'yes');
+  await page.waitForTimeout(350);
+  expect(replayed).toBe(0);
+  await page.getByRole('button', { name: 'Hubert’s eyes', exact: true }).click();
+  await expect(page.locator('.scene-canvas')).toHaveAttribute('data-camera-mode', 'hubert');
+  state.world.residents = state.world.residents.map((resident) => ({
+    ...resident,
+    id: 'another-resident',
+    name: 'Another resident',
+  }));
+  await expect(page.locator('.scene-canvas')).toHaveAttribute('data-camera-mode', 'overview');
+  await expect
+    .poll(() =>
+      canvas.evaluate((element) => JSON.parse(element.dataset.renderStats ?? '{}').residentVisible),
+    )
+    .toBe(false);
+  await expect(page.getByRole('button', { name: 'Hubert’s eyes', exact: true })).toBeDisabled();
 });
