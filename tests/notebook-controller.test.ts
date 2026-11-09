@@ -11,7 +11,7 @@ import {
   createInitialWorld,
   executeWorldCommand,
 } from '../elsewhere/server/src/world';
-import { advanceHubert, createInitialHubert } from '../characters/hubert/src/index';
+import { advanceHubert, createInitialHubert, workingContext } from '../characters/hubert/src/index';
 
 const epoch = Date.UTC(2026, 10, 9, 12);
 class MemoryStore implements SnapshotStore<ControllerState> {
@@ -237,4 +237,40 @@ it('does not reopen a full note day after future unchanged facts and a clock rol
   } finally {
     await next.close();
   }
+});
+
+it('brings only the latest authored questions back into planning without treating them as executed outcomes', () => {
+  const state = createInitialHubert(epoch);
+  state.notebook = {
+    day: '2026-11-09',
+    calls: 3,
+    latestAtReal: epoch,
+    lastAtReal: epoch,
+    sourceIds: [],
+    entries: [
+      { id: 'old-note', at: epoch, text: 'An old question.', sourceIds: ['source'] },
+      { id: 'note-two', at: epoch, text: 'I wonder how that fin turns.', sourceIds: ['source'] },
+      {
+        id: 'note-three',
+        at: epoch,
+        text: 'I might read about small mechanisms.',
+        sourceIds: ['source'],
+      },
+    ],
+  };
+  const observation = {
+    characterId: 'hubert',
+    observedAt: epoch,
+    placeId: 'courtyard',
+    position: { x: 2, z: 3 },
+    facing: 0,
+    visibleObjects: [],
+    visibleEntities: [],
+    events: [],
+  };
+  const context = workingContext(state, observation);
+  expect(context.state.recentNotebook).toHaveLength(2);
+  expect(JSON.stringify(context.state.recentNotebook)).toContain('small mechanisms');
+  expect(JSON.stringify(context.state.recentNotebook)).not.toContain('An old question.');
+  expect(state.memories).toEqual([]);
 });
