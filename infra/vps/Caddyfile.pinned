@@ -1,0 +1,20 @@
+{
+    admin off
+    persist_config off
+    auto_https off
+    servers {
+        protocols h1 h2
+        strict_sni_host on
+    }
+}
+
+https://{$HUBERT_INFERENCE_HOST}:9443 {
+    tls /etc/hubert-tls/cert.pem /etc/hubert-tls/key.pem
+    @hubert_routes path /v1/decision /v1/reflection /readyz
+    handle @hubert_routes {
+        reverse_proxy 127.0.0.1:4100
+    }
+    handle {
+        respond "Not found" 404
+    }
+}

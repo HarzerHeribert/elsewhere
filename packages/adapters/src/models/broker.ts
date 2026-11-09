@@ -12,6 +12,7 @@ import {
   type InferenceWorkload,
 } from '../../../inference/src/contracts';
 import type { ModelUsage } from '../../../models/src/contracts';
+import { pinnedHttpsFetch } from '../../../inference/src/pinned-https';
 import {
   validateReflectionProposal,
   type ReflectionInput,
@@ -21,6 +22,7 @@ import {
 export interface BrokerModelOptions {
   baseUrl: string;
   token: string;
+  caCertificate?: string;
   expectedBinding: InferenceBinding;
   timeoutMs?: number;
   /** Explicit opt-in for a deployment's private service DNS/RFC1918 network only. */
@@ -57,6 +59,7 @@ export class BrokerModelClient {
   private readonly timeoutMs: number;
   private readonly bindingAssertion: string;
   private pausedUntil = 0;
+  private readonly fetcher: typeof fetch;
   constructor(private readonly options: BrokerModelOptions) {
     try {
       this.base = new URL(options.baseUrl);
@@ -81,6 +84,10 @@ export class BrokerModelClient {
       this.timeoutMs > 60000
     )
       throw new BrokerModelError('invalid_configuration');
+    if (options.caCertificate && this.base.protocol !== 'https:')
+      throw new BrokerModelError('invalid_configuration');
+    this.fetcher =
+      options.fetcher ?? (options.caCertificate ? pinnedHttpsFetch(options.caCertificate) : fetch);
   }
   isAvailable() {
     return (this.options.now ?? Date.now)() >= this.pausedUntil;
@@ -90,20 +97,17 @@ export class BrokerModelClient {
     const encoded = JSON.stringify(body);
     if (Buffer.byteLength(encoded) > 96000) throw new BrokerModelError('context_too_large');
     try {
-      const response = await (this.options.fetcher ?? fetch)(
-        new URL(`/v1/${workload}`, this.base),
-        {
-          method: 'POST',
-          redirect: 'error',
-          signal: AbortSignal.timeout(this.timeoutMs),
-          headers: {
-            authorization: `Bearer ${this.options.token}`,
-            'x-elsewhere-inference-binding': this.bindingAssertion,
-            'content-type': 'application/json',
-          },
-          body: encoded,
+      const response = await this.fetcher(new URL(`/v1/${workload}`, this.base), {
+        method: 'POST',
+        redirect: 'error',
+        signal: AbortSignal.timeout(this.timeoutMs),
+        headers: {
+          authorization: `Bearer ${this.options.token}`,
+          'x-elsewhere-inference-binding': this.bindingAssertion,
+          'content-type': 'application/json',
         },
-      );
+        body: encoded,
+      });
       const reader = response.body?.getReader();
       if (!reader) throw new BrokerModelError('empty_response');
       const chunks: Uint8Array[] = [];

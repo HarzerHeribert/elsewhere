@@ -18,18 +18,23 @@ async function main() {
   if (
     !root ||
     !isAbsolute(root) ||
-    !owner?.match(/^[a-zA-Z0-9_-]{1,128}$/) ||
-    owner === 'local-owner' ||
     (values.profile !== undefined && values.profile !== profile) ||
     positionals.length !== 1
   )
     throw new ChatGPTError('invalid_broker_operator_configuration');
   const store = new ChatGPTStore(root, profile);
   if (positionals[0] === 'status') {
-    console.log(JSON.stringify(chatGPTTransferStatus(store)));
+    console.log(
+      JSON.stringify({
+        ...chatGPTTransferStatus(store),
+        ownershipConfigured: Boolean(owner && owner !== 'local-owner'),
+      }),
+    );
     return;
   }
   if (positionals[0] !== 'import') throw new ChatGPTError('choose_import_or_status');
+  if (!owner?.match(/^[a-zA-Z0-9_-]{1,128}$/) || owner === 'local-owner')
+    throw new ChatGPTError('owner_binding_required_before_transfer');
   let size = 0;
   const chunks: Buffer[] = [];
   const timeout = setTimeout(() => process.stdin.destroy(new Error('input_timeout')), 15_000);
