@@ -484,6 +484,7 @@ export function App() {
                 character={character}
                 recalledMemory={snapshot?.recalledMemory}
                 artifacts={snapshot?.artifacts}
+                creations={snapshot?.creations}
                 notebook={snapshot?.notebook}
                 onNotebook={() => {
                   setFeed('notebook');
@@ -674,6 +675,10 @@ export function App() {
       {accountOpen && (
         <AccountDialog
           session={accountSession}
+          creations={snapshot?.creations}
+          onCreationsChanged={async () => {
+            await refresh();
+          }}
           privateLocalAccess={import.meta.env.DEV && Boolean(owner)}
           onOpenManagement={
             canOpenManagement

@@ -196,13 +196,17 @@ describe('authoritative controller lifecycle', () => {
         },
         close: () => backing.close(),
       };
+      // Existing lives may retain an old prototype download; it is never automatically pinned.
+      await new ElsewhereController(backing, { now: () => epoch }).init();
+      const legacy = (await backing.load())!;
+      legacy.value.artifactCreatedAt = epoch;
+      legacy.value.artifactSamples = [{ at: epoch, temperature: 19, wind: 3 }];
+      await backing.save(legacy.value, legacy.version);
       const controller = await new ElsewhereController(store, {
         now: () => epoch,
         modelProvider: simulationProvider(store),
       }).init();
       active.add(controller);
-      for (let i = 0; i < 160 && !controller.getArtifact('weather-study'); i++)
-        await controller.step();
       const before = controller.getSnapshot();
       const artifact = controller.getArtifact('weather-study');
       expect(artifact).not.toBeNull();
@@ -525,35 +529,26 @@ describe('authoritative controller lifecycle', () => {
     expect(controller.getSnapshot().runtime.paused).toBe(true);
   });
 
-  it('produces a real inspectable artifact from verified work and survives a restart', async () => {
-    const file = databaseFile();
-    const { controller } = await create({}, file);
+  it('does not invent or automatically publish a creation after verified work', async () => {
+    const { controller, store } = await create();
+    for (let i = 0; i < 160; i++) await controller.step();
+    expect((await store.load())!.value.hubert.project.completed).toBe(true);
+    expect(controller.getSnapshot().artifacts).toEqual([]);
+    expect(controller.getSnapshot().creations).toEqual([]);
+    expect(controller.getSnapshot().events.some((event) => event.type === 'artifact_created')).toBe(
+      false,
+    );
     expect(controller.getArtifact('weather-study')).toBeNull();
     expect(controller.getArtifact('../owner-token')).toBeNull();
-    for (let i = 0; i < 160 && !controller.getSnapshot().artifacts?.length; i++)
-      await controller.step();
-    const artifact = controller.getArtifact('weather-study');
-    expect(controller.getSnapshot().artifacts?.[0]?.id).toBe('weather-study');
-    expect(artifact?.contentType).toBe('image/svg+xml');
-    expect(artifact?.body).toContain('<svg');
-    expect(artifact?.body).toContain('local simulated observations');
-    expect(artifact?.body).not.toContain('NaN');
-    const body = artifact!.body;
-    for (let i = 0; i < 5; i++) await controller.step();
-    expect(controller.getArtifact('weather-study')?.body).toBe(body);
-    await stop(controller);
-    const reopened = await create({}, file);
-    expect(reopened.controller.getArtifact('weather-study')?.body).toBe(body);
   });
 
   it('freezes legacy artifact samples once without changing the lived state or future weather', async () => {
     const file = databaseFile();
     const first = await create({}, file);
-    for (let i = 0; i < 160 && !first.controller.getArtifact('weather-study'); i++)
-      await first.controller.step();
-    expect(first.controller.getArtifact('weather-study')).not.toBeNull();
     const saved = (await first.store.load())!;
     const legacy = structuredClone(saved.value);
+    legacy.artifactCreatedAt = epoch;
+    legacy.weatherSamples = [{ at: epoch, temperature: 19, wind: 3 }];
     delete legacy.artifactSamples;
     await stop(first.controller);
     const legacyStore = new SqliteSnapshotStore<ControllerState>(file);
@@ -567,7 +562,7 @@ describe('authoritative controller lifecycle', () => {
     const artifact = migrated.controller.getArtifact('weather-study');
     for (let i = 0; i < 5; i++) await migrated.controller.step();
     const advanced = (await migrated.store.load())!;
-    expect(advanced.value.weatherSamples).not.toEqual(legacy.weatherSamples);
+    expect(advanced.value.weatherSamples).toEqual(legacy.weatherSamples);
     expect(advanced.value.artifactSamples).toEqual(legacy.weatherSamples);
     expect(migrated.controller.getArtifact('weather-study')).toEqual(artifact);
     await stop(migrated.controller);

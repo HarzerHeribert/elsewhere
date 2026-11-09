@@ -6,7 +6,7 @@ Elsewhere owns the authoritative environment. Hubert owns his interpretation, pr
 
 `app/main.ts` loads explicit environment configuration, selects a persistence adapter, initializes the controller and starts the loopback API. `app/controller.ts` serializes mutations in one lane. Each simulation tick advances time, movement and physiological variables, samples a small simulated weather service, and decides whether the current activity needs another decision.
 
-The controller does not replan while Hubert is walking. Decisions are either deterministic local proposals or validated external-model proposals. Trusted policy checks the proposal before the world executor validates location, line of sight, proximity and available interactions. Hubert receives the verified outcome. State, memories and artifact availability are then committed together.
+The controller does not replan while Hubert is walking. Live decisions require validated model proposals; provider failures stop new choices and persist owner-only recovery notices. Trusted policy checks the proposal before the world executor validates location, line of sight, proximity and available interactions. Hubert receives the verified outcome. State, memories and artifact availability are then committed together.
 
 World ticks and character decisions have separate rates. `DECISION_INTERVAL_MS` defaults to 90,000 simulated milliseconds; production uses a 1:1 clock. Successful activities also have persisted minimum dwell windows: inspection/interaction one minute, reflection 90 seconds, work three minutes, and rest its requested duration. Ordinary decisions wait for both that window and the decision interval, as well as path completion. Movement, wildlife, needs and dream processing continue between decisions. An explicit operator step can bypass the dwell/interval for debugging, but does not interrupt an active path. Neither browser animation callbacks nor viewer presence control the simulation. These windows pace the current synchronous world operations; they do not add asynchronous external jobs.
 
@@ -14,7 +14,7 @@ The local fallback is a deterministic planner with preset intent text. It can ex
 
 If an optional provider is used, the attempted request is first recorded durably using a wall-clock daily allowance. External call failure cannot refund the attempt through a simulated reset. Output has no authority to change policy, model allowance or owner credentials.
 
-Mandatory rest is decided before reserving a model attempt. Public reads project the last successfully committed state, including while a provider/save is pending. Shutdown stops HTTP admission, drains current handlers and accepted controller work, then closes storage. Completed legacy artifacts freeze their available measurement samples during migration.
+Rest is a model choice, with natural energy recovery during an actual rest; no deterministic planner overrides the provider. Public reads project the last successfully committed state, including while a provider/save is pending. Shutdown stops HTTP admission, drains current handlers and accepted controller work, then closes storage. Completed legacy artifacts freeze their available measurement samples during migration.
 
 ## State and perception
 

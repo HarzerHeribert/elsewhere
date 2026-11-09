@@ -1,3 +1,5 @@
+import type { PublicCreation } from '@elsewhere/character-interfaces';
+import { CreationManager } from './CreationManager';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
 import { Button } from './ui/Button';
@@ -5,11 +7,15 @@ import type { useAccountSession } from './useAccountSession';
 
 export function AccountDialog({
   session,
+  creations,
+  onCreationsChanged,
   onClose,
   onOpenManagement,
   privateLocalAccess = false,
 }: {
   session: ReturnType<typeof useAccountSession>;
+  creations?: PublicCreation[];
+  onCreationsChanged?: () => void | Promise<void>;
   onClose: () => void;
   onOpenManagement?: () => void;
   privateLocalAccess?: boolean;
@@ -105,6 +111,14 @@ export function AccountDialog({
               </dd>
             </div>
           </dl>
+          {capabilities?.managedCharacterIds.map((characterId) => (
+            <CreationManager
+              key={characterId}
+              characterId={characterId}
+              creations={creations}
+              onChanged={onCreationsChanged}
+            />
+          ))}
           {session.characterIssues.length > 0 && (
             <section aria-label="Character provider notices">
               <h3>Your characters</h3>

@@ -9,6 +9,12 @@ import {
   type ProviderIssue,
 } from '@elsewhere/character-interfaces';
 import { publicWorld } from './world.js';
+import {
+  CreateCreationSchema,
+  PinCreationSchema,
+  type CreateCreationInput,
+} from '../../../characters/interfaces/src/creations';
+import { CreationError, publicCreations } from '../../../packages/creations/src/index';
 import { VisitorError, VisitorRegistry } from './visitors.js';
 import {
   AdmissionPool,
@@ -42,6 +48,8 @@ export interface ApiDependencies {
   canManageCharacter?(userId: string, characterId: string): boolean | Promise<boolean>;
   getCharacterIssues?(): ProviderIssue[] | Promise<ProviderIssue[]>;
   retryCharacterProvider?(): Promise<unknown>;
+  createCreation?(input: CreateCreationInput): Promise<unknown>;
+  pinCreation?(creationId: string, pinned: boolean): Promise<unknown>;
   getSnapshot(): PublicSnapshot | Promise<PublicSnapshot>;
   tick(): Promise<PublicSnapshot>;
   pause(): Promise<PublicSnapshot>;
@@ -74,6 +82,7 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
   });
   return {
     world: publicWorld(snapshot.world),
+    creations: publicCreations(snapshot.creations ?? [], character.id),
     ...(snapshot.notebook
       ? {
           notebook: {
@@ -462,8 +471,13 @@ export function createApiServer(deps: ApiDependencies) {
       const owner = authenticated(req, deps.adminToken);
       const providerRetry =
         /^\/api\/characters\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/provider\/retry$/.exec(pathname);
+      const creationRoute =
+        /^\/api\/characters\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/creations(?:\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/pin)?$/.exec(
+          pathname,
+        );
       const controlRoute =
-        req.method === 'POST' && (pathname.startsWith('/api/admin/') || !!providerRetry);
+        req.method === 'POST' &&
+        (pathname.startsWith('/api/admin/') || !!providerRetry || !!creationRoute);
       const visitorRoute = /^\/api\/visitors\/(visitor-[a-f0-9-]{36})(\/action)?$/.exec(pathname);
       const visitorRequest =
         visitorRoute &&
@@ -616,6 +630,50 @@ export function createApiServer(deps: ApiDependencies) {
               }
             : {}),
         });
+        return;
+      }
+      if (req.method === 'POST' && creationRoute) {
+        const account = deps.auth ? await deps.auth.getAccount(req) : null;
+        if (!account)
+          throw new HttpError(401, 'Sign in as the character owner to manage creations.');
+        const characterId = creationRoute[1];
+        const managesCharacter = async () =>
+          characterId === (await deps.getSnapshot()).character.id &&
+          (await deps.canManageCharacter?.(account.id, characterId)) === true;
+        if (!(await managesCharacter()))
+          throw new HttpError(403, 'Character ownership is required.');
+        if (!origin || !origins.has(origin))
+          throw new HttpError(
+            403,
+            'A trusted origin is required for session-authenticated changes.',
+          );
+        if (!owner) {
+          releaseVerification?.();
+          enter(controls, `user:${account.id}`);
+        }
+        if (!consume(`creation-write:${account.id}`, 30, Date.now(), controlLimits))
+          throw new HttpError(429, 'Please wait before changing creations again.');
+        const body = await readJson(req, bodyTimeoutMs);
+        const input = creationRoute[2]
+          ? PinCreationSchema.safeParse(body)
+          : CreateCreationSchema.safeParse(body);
+        if (!input.success) throw new HttpError(400, 'Creation details are invalid.');
+        if (!(await managesCharacter()))
+          throw new HttpError(403, 'Character ownership is required.');
+        try {
+          if (creationRoute[2]) {
+            if (!deps.pinCreation) throw new HttpError(503, 'Creation pinning is unavailable.');
+            const pin = PinCreationSchema.parse(input.data);
+            send(200, await deps.pinCreation(creationRoute[2], pin.pinned));
+          } else {
+            if (!deps.createCreation)
+              throw new HttpError(503, 'Creation registration is unavailable.');
+            send(201, await deps.createCreation(CreateCreationSchema.parse(input.data)));
+          }
+        } catch (error) {
+          if (error instanceof CreationError) throw new HttpError(400, error.message);
+          throw error;
+        }
         return;
       }
       if (req.method === 'POST' && providerRetry) {

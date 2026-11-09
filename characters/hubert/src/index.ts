@@ -1,3 +1,4 @@
+import type { PublicCreation } from '@elsewhere/character-interfaces';
 import { availableInterestChoices, type HubertInterestChoiceState } from './interestChoices';
 import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
 import type { HubertNotebookState } from './notebook';
@@ -1020,11 +1021,24 @@ export function workingContext(
   observation: Observation,
   nowReal = observation.observedAt,
   researchEnabled = false,
+  creations: readonly PublicCreation[] = [],
 ): DecisionContext {
   return buildWorkingContext({
     identity: HUBERT_IDENTITY,
     state: {
       ...planningSummary(state, observation, nowReal),
+      creations: creations
+        .filter((creation) => creation.characterId === state.id)
+        .slice(-32)
+        .map(({ id, title, description, url, kind, pinnedAt, provenance }) => ({
+          id,
+          title,
+          description,
+          url,
+          kind,
+          pinned: pinnedAt !== undefined,
+          provenance,
+        })),
       research: researchContext(state, observation, nowReal, researchEnabled),
       interestChoices: availableInterestChoices(state, nowReal).map((choice) => ({ ...choice })),
     },
@@ -1090,11 +1104,12 @@ export async function chooseActionWithProvider(
   provider: DecisionProvider,
   nowReal = now,
   researchEnabled = false,
+  creations: readonly PublicCreation[] = [],
 ): Promise<HubertDecision> {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
   const result = await provider.propose(
-    workingContext(state, observation, nowReal, researchEnabled),
+    workingContext(state, observation, nowReal, researchEnabled, creations),
   );
   const parsed = CharacterCommandSchema.safeParse(result);
   if (!parsed.success)

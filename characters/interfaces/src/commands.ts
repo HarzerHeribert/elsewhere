@@ -45,6 +45,13 @@ const definitions = [
       'work: targetId is required and must offer work; respect project completion and cooldown.',
   },
   {
+    schema: z
+      .object({ type: z.literal('pin_creation'), creationId: targetId, pinned: z.boolean() })
+      .strict(),
+    instruction:
+      'pin_creation: choose a creationId from state.creations, and pinned true or false to curate your public Creations shelf. Only existing recorded links can be pinned; this does not create a project or publish new content.',
+  },
+  {
     schema: z.object({ type: z.literal('reflect') }).strict(),
     instruction: 'reflect: no additional fields.',
   },

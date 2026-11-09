@@ -1,4 +1,5 @@
 import { NotebookPanel } from './NotebookPanel';
+import { CreationsPanel } from './CreationsPanel';
 import { Button } from '../ui/Button';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { HubertPortrait } from '../HubertPortrait';
@@ -9,7 +10,7 @@ import { Meter } from '../Meter';
 export function CharacterPanel({
   character,
   recalledMemory,
-  artifacts,
+  creations,
   notebook,
   onNotebook,
   onMessage,
@@ -20,6 +21,7 @@ export function CharacterPanel({
   character: PublicSnapshot['character'];
   recalledMemory?: PublicSnapshot['recalledMemory'];
   artifacts?: PublicSnapshot['artifacts'];
+  creations?: PublicSnapshot['creations'];
   notebook?: PublicSnapshot['notebook'];
   onNotebook: () => void;
   onMessage: () => void;
@@ -58,7 +60,7 @@ export function CharacterPanel({
       <div className="panel-actions">
         <Button onClick={onMessage}>
           <Icon name="mail" />
-          Message Hubert
+          Message {character.name}
         </Button>
         <Button variant="secondary" onClick={onViewpoint}>
           <Icon name="eye" />
@@ -76,29 +78,11 @@ export function CharacterPanel({
           Wishes <Icon name="arrow" />
         </button>
       </div>
-      {Boolean(artifacts?.length) && (
-        <div className="panel-section">
-          <p className="eyebrow">Creations</p>
-          {artifacts
-            ?.filter((a) => /^\/api\/artifacts\/[a-z\d_-]+$/i.test(a.url))
-            .map((a) => (
-              <a
-                className="artifact-link"
-                key={a.id}
-                href={a.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span>◈</span>
-                <div>
-                  <strong>{a.name}</strong>
-                  <small>{a.description}</small>
-                </div>
-                <Icon name="arrow" />
-              </a>
-            ))}
-        </div>
-      )}
+      <CreationsPanel
+        characterId={character.id}
+        characterName={character.name}
+        creations={creations}
+      />
     </>
   );
 }
