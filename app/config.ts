@@ -25,6 +25,13 @@ const schema = z.object({
   INFERENCE_BROKER_TOKEN: z.string().min(32).max(512).optional(),
   INFERENCE_BROKER_CA_PEM: z.string().min(100).max(20000).optional(),
   INFERENCE_BROKER_ALLOW_PRIVATE_HTTP: z.enum(['true', 'false']).default('false'),
+  RESEARCH_BROKER_URL: z.string().url().optional(),
+  RESEARCH_BROKER_TOKEN: z
+    .string()
+    .regex(/^[a-zA-Z0-9_-]{32,512}$/)
+    .optional(),
+  RESEARCH_BROKER_CA_PEM: z.string().min(100).max(20000).optional(),
+  RESEARCH_BROKER_ALLOW_PRIVATE_HTTP: z.enum(['true', 'false']).default('false'),
   CHATGPT_PROFILE: z
     .string()
     .regex(/^[a-z][a-z0-9-]{0,47}$/)
@@ -40,6 +47,20 @@ export function appConfig(environment: NodeJS.ProcessEnv) {
   if (!result.success)
     throw new Error('Application settings are invalid; check variable names and bounds.');
   const config = result.data;
+  if (Boolean(config.RESEARCH_BROKER_URL) !== Boolean(config.RESEARCH_BROKER_TOKEN))
+    throw Error('Research requires both its endpoint and separate service credential.');
+  if (
+    config.RESEARCH_BROKER_TOKEN &&
+    [
+      config.INFERENCE_BROKER_TOKEN,
+      environment.ADMIN_TOKEN,
+      environment.BETTER_AUTH_SECRET,
+      environment.API_PROXY_SECRET,
+    ].includes(config.RESEARCH_BROKER_TOKEN)
+  )
+    throw Error('Research needs a separate service credential.');
+  if (environment.TAVILY_API_KEY)
+    throw Error('Search provider credentials belong only in the private research service.');
   if (config.INFERENCE_BROKER_HOSTPORT) {
     if (config.INFERENCE_BROKER_URL || config.INFERENCE_BROKER_ALLOW_PRIVATE_HTTP !== 'true')
       throw new Error(

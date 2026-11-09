@@ -11,7 +11,8 @@ export interface EpisodicMemory {
   createdAt: number;
   summary: string;
   sourceEventId: string;
-  source: 'world-outcome' | 'external-message';
+  source: 'world-outcome' | 'external-message' | 'web-reading';
+  reference?: { url: string; title: string; retrievedAt: number; excerpt: string };
   verified: boolean;
   cues: MemoryCue[];
   emotionalContext: { mood: number; frustration: number };

@@ -14,6 +14,7 @@ import { runtimeProviders } from './providers';
 import { hubertResourceRegistry } from './residency';
 import { authOptionsFromEnvironment, createLocalAuth } from '../packages/auth/src/index';
 import { verificationSenderFromEnvironment } from '../packages/auth/src/verification-mail';
+import { ResearchClient } from '../packages/research/src/client';
 
 const config = appConfig(process.env);
 const directory = resolve(config.DATA_DIR);
@@ -101,6 +102,20 @@ async function initialize() {
     modelProvider: providers.model,
     reflectionProvider: providers.reflection,
     modelMaximum: config.MODEL_MAX_CALLS_PER_DAY,
+    research: config.RESEARCH_BROKER_URL
+      ? new ResearchClient({
+          url: config.RESEARCH_BROKER_URL,
+          token: config.RESEARCH_BROKER_TOKEN!,
+          binding: {
+            worldId: 'elsewhere',
+            ownerUserId: config.HUBERT_OWNER_USER_ID,
+            characterId: 'hubert',
+            connectionId: 'hubert-web',
+          },
+          caCertificate: config.RESEARCH_BROKER_CA_PEM?.replace(/\\n/g, '\n'),
+          allowPrivateHttp: config.RESEARCH_BROKER_ALLOW_PRIVATE_HTTP === 'true',
+        })
+      : undefined,
   }).init();
   ready = !lifetime.signal.aborted;
 }

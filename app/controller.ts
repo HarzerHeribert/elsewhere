@@ -44,6 +44,9 @@ import {
 } from '../characters/hubert/src/dreams';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
 import { hubertActivityDurationMs } from '../characters/hubert/src/pacing';
+import { researchTargets, rememberResearch } from '../characters/hubert/src/research';
+import { settleHubertAttention } from '../characters/hubert/src/attention';
+import type { CharacterResearchPort } from '../characters/interfaces/src/research';
 import type { ReflectionProvider } from '../packages/adapters/src/models/reflection';
 import {
   assertRoutingLedger,
@@ -100,6 +103,7 @@ export interface ControllerOptions {
   modelMaximum?: number;
   modelProvider?: DecisionProvider;
   reflectionProvider?: ReflectionProvider;
+  research?: CharacterResearchPort;
 }
 
 /** Character definitions supply their body dimensions; the shared world stays species-agnostic. */
@@ -167,6 +171,11 @@ export class ElsewhereController {
       this.lastCommitted = structuredClone(saved.value);
       const upgraded = withResidentAppearance(upgradeWorldLayout(this.state.world));
       const upgradedHubert = upgradeHubertState(this.state.hubert);
+      if (upgradedHubert.research?.pending) {
+        delete upgradedHubert.research.pending;
+        upgradedHubert.intent =
+          'An interrupted research request has been deferred. Its allowance remains charged.';
+      }
       // Never resume an in-flight creative call or count offline time as observed rest.
       upgradedHubert.dreams = abandonDreamConsolidation(upgradedHubert.dreams);
       const interruptedRest = this.state.runtime.dreamRest !== undefined;
@@ -435,6 +444,7 @@ export class ElsewhereController {
               now,
               this.options.modelProvider,
               this.wallNow(),
+              Boolean(this.options.research),
             );
             s.runtime.modelStatus =
               this.options.modelProvider.id === 'routed'
@@ -455,18 +465,22 @@ export class ElsewhereController {
       const policy = authorizeCommand(decision.action);
       delete s.runtime.activityUntil;
       if (policy.allowed) {
-        const result = executeWorldCommand(s.world, 'hubert', policy.command, now);
-        s.world = result.world;
-        const duration = hubertActivityDurationMs(policy.command);
-        if (result.outcome.status !== 'rejected' && duration > 0)
-          s.runtime.activityUntil = now + duration;
-        s.hubert = applyOutcome(
-          s.hubert,
-          result.outcome,
-          observeWorld(s.world, 'hubert', now),
-          now,
-          this.wallNow(),
-        );
+        if (policy.command.type === 'research' || policy.command.type === 'read') {
+          await this.researchActivity(policy.command, observation, now);
+        } else {
+          const result = executeWorldCommand(s.world, 'hubert', policy.command, now);
+          s.world = result.world;
+          const duration = hubertActivityDurationMs(policy.command);
+          if (result.outcome.status !== 'rejected' && duration > 0)
+            s.runtime.activityUntil = now + duration;
+          s.hubert = applyOutcome(
+            s.hubert,
+            result.outcome,
+            observeWorld(s.world, 'hubert', now),
+            now,
+            this.wallNow(),
+          );
+        }
       } else {
         s.hubert.intent = policy.reason;
         // Denied operations never reach an executor and never receive a success reward.
@@ -494,6 +508,122 @@ export class ElsewhereController {
     }
     await this.commit();
     return this.getSnapshot();
+  }
+  private async researchActivity(
+    command: Extract<
+      import('@elsewhere/character-interfaces').CharacterCommand,
+      { type: 'research' | 'read' }
+    >,
+    observation: import('@elsewhere/character-interfaces').Observation,
+    now: number,
+  ) {
+    const s = this.state,
+      port = this.options.research,
+      at = this.wallNow();
+    const existing = s.hubert.research;
+    if (!port || (existing && at - existing.lastAtReal < 120_000)) {
+      s.hubert.intent = 'Web research is unavailable or cooling down. I can return to it later.';
+      s.runtime.activityUntil = now + 90_000;
+      return;
+    }
+    const target =
+      command.type === 'research'
+        ? researchTargets(s.hubert, observation, at).find((x) => x.id === command.targetId)
+        : undefined;
+    const source =
+      command.type === 'read'
+        ? existing?.search?.result.sources.find(
+            (x) => x.id === command.sourceId && !existing.readIds.includes(x.id),
+          )
+        : undefined;
+    if (command.type === 'research' ? !target : !source) {
+      s.hubert.intent = 'That research offer is no longer available.';
+      s.runtime.activityUntil = now + 90_000;
+      return;
+    }
+    const research = (s.hubert.research ??= { lastAtReal: 0, topics: {}, readIds: [] });
+    const id = 'research-' + randomUUID();
+    research.lastAtReal = at;
+    research.pending = { id, kind: command.type === 'research' ? 'search' : 'read' };
+    if (target) {
+      research.topics[target.id] = at;
+      research.topics = Object.fromEntries(Object.entries(research.topics).slice(-64));
+    }
+    await this.commit();
+    try {
+      const result =
+        command.type === 'research'
+          ? await port.search({ requestId: id, query: target!.query })
+          : await port.read({ requestId: id, sourceId: source!.id });
+      if (result.kind === 'search')
+        research.search = {
+          targetId: target!.id,
+          label: target!.label,
+          placeId: observation.placeId,
+          result,
+        };
+      rememberResearch(s.hubert, result, now);
+      const label =
+        result.kind === 'search' ? target!.label : (research.search?.label ?? 'a topic');
+      s.hubert.activity = {
+        kind: command.type,
+        label: result.kind === 'search' ? `Researching ${label}` : `Reading about ${label}`,
+        startedAt: now,
+      };
+      s.hubert.intent =
+        result.kind === 'search'
+          ? 'I have found web sources I can choose to read.'
+          : 'I have read an external source; its claims remain separate from my lived experiences.';
+      s.hubert.stats.energy = Math.max(0, s.hubert.stats.energy - 1);
+      s.world.events.push({
+        id: result.receiptId,
+        at: now,
+        type: result.kind === 'search' ? 'web_search' : 'web_read',
+        characterId: 'hubert',
+        placeId: observation.placeId,
+        message:
+          result.kind === 'search'
+            ? `Hubert researched ${label} using ${result.provider}${result.cached ? ' (cached results)' : ''}; ${result.sources.length} sources were returned.`
+            : `Hubert read “${result.title}”, an external web source.`,
+      });
+      s.world.events = s.world.events.slice(-100);
+      s.world.version++;
+      settleHubertAttention(
+        s.hubert,
+        {
+          id: result.receiptId,
+          command,
+          status: 'completed',
+          summary: 'External research receipt recorded.',
+          at: now,
+          evidence: result.receiptId,
+        },
+        now,
+        at,
+      );
+    } catch {
+      if (this.halted) throw Error('Research stopped after persistence failure.');
+      s.hubert.activity = { kind: 'research', label: 'Leaving research for later', startedAt: now };
+      s.hubert.intent = 'That web source is unavailable. I can leave it for later.';
+      s.world.events.push({
+        id,
+        at: now,
+        type: 'research_deferred',
+        characterId: 'hubert',
+        placeId: observation.placeId,
+        message: 'Hubert deferred an unavailable web research request.',
+      });
+      s.world.events = s.world.events.slice(-100);
+      settleHubertAttention(
+        s.hubert,
+        { id, command, status: 'rejected', summary: 'Research unavailable.', at: now },
+        now,
+        at,
+      );
+    } finally {
+      delete research.pending;
+    }
+    s.runtime.activityUntil = now + 120_000;
   }
   pause() {
     return this.serialize(async () => {

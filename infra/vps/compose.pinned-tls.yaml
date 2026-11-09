@@ -9,6 +9,7 @@ services:
     environment:
       HUBERT_INFERENCE_HOST: '${HUBERT_INFERENCE_HOST:?set the VPS hostname}'
       INFERENCE_BROKER_TOKEN: '${INFERENCE_BROKER_TOKEN:?set the dedicated broker service token}'
+      RESEARCH_BROKER_TOKEN: '${RESEARCH_BROKER_TOKEN:-research-disabled}'
     volumes:
       - './Caddyfile.pinned:/etc/caddy/Caddyfile:ro'
       - './tls:/etc/hubert-tls:ro'

@@ -10,6 +10,7 @@ const name = 'elsewhere-proxy-fixture-' + randomUUID().slice(0, 8),
   proxy = name + '-tls';
 const image = 'caddy@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9';
 const token = 'fixture-service-token-for-proxy-security-check-only-2026';
+const researchToken = 'fixture-research-gateway-token-only-2026';
 const fixtureUser = `${process.getuid()}:${process.getgid()}`;
 function run(args, allow = false) {
   const r = spawnSync('docker', args, { encoding: 'utf8', timeout: 30000 });
@@ -55,7 +56,7 @@ try {
   fs.chmodSync(key, 0o600);
   fs.writeFileSync(
     path.join(dir, 'server.mjs'),
-    `import http from 'node:http';let hits=0;http.createServer(async(req,res)=>{if(req.url==='/metrics'){res.end(JSON.stringify({hits}));return;}try{for await(const chunk of req){}hits++;res.setHeader('content-type','application/json');res.end(JSON.stringify({ready:true}));}catch{res.destroy();}}).listen(4100,'0.0.0.0');`,
+    `import http from 'node:http';let hits=0;const handler=async(req,res)=>{if(req.url==='/metrics'){res.end(JSON.stringify({hits}));return;}try{for await(const chunk of req){}hits++;res.setHeader('content-type','application/json');res.end(JSON.stringify({ready:true}));}catch{res.destroy();}};http.createServer(handler).listen(4100,'0.0.0.0');http.createServer(handler).listen(4120,'0.0.0.0');`,
     { mode: 0o600 },
   );
   run(['network', 'create', name]);
@@ -105,6 +106,8 @@ try {
     'HUBERT_INFERENCE_HOST=localhost',
     '-e',
     'INFERENCE_BROKER_TOKEN=' + token,
+    '-e',
+    'RESEARCH_BROKER_TOKEN=' + researchToken,
     '--mount',
     `type=bind,src=${process.cwd()}/infra/vps/Caddyfile.pinned,dst=/etc/caddy/Caddyfile,readonly`,
     '--mount',
@@ -177,7 +180,35 @@ try {
     (await (await fetch('http://127.0.0.1:' + upstreamPort + '/metrics')).json()).hits,
     1,
   );
+  assert.equal((await request('/v1/research/ready')).status, 401);
+  assert.equal(
+    (await request('/v1/research/ready', { authorization: 'Bearer ' + token })).status,
+    401,
+  );
+  assert.equal(
+    (await request('/readyz', { authorization: 'Bearer ' + researchToken })).status,
+    401,
+  );
+  assert.equal(
+    (await request('/v1/research/ready', { authorization: 'Bearer ' + researchToken })).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        '/v1/research/search',
+        { authorization: 'Bearer ' + researchToken, 'content-type': 'application/json' },
+        'x'.repeat(10000),
+      )
+    ).status,
+    413,
+  );
+  assert.equal(
+    (await (await fetch('http://127.0.0.1:' + upstreamPort + '/metrics')).json()).hits,
+    2,
+  );
   result = {
+    researchCredentialSeparated: true,
     proxyFixturePassed: true,
     unauthorizedRejectedBeforeUpstream: true,
     validRpcForwarded: true,
