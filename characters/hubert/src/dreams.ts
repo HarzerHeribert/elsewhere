@@ -21,7 +21,7 @@ export function hubertDreamActions(
   nowReal: number,
   sources = hubertDreamSources(state),
 ): DreamAction[] {
-  const actions: DreamAction[] = [];
+  const offers: DreamAction[][] = [];
   for (const object of observation.visibleObjects) {
     const related = sources.filter((source) =>
       source.cues.some(
@@ -37,46 +37,54 @@ export function hubertDreamActions(
         object.position.z - observation.position.z,
       ) <=
       object.radius + 1;
-    const action = !close
-      ? 'move'
-      : !state.inspections[object.id] && object.affordances.includes('inspect')
-        ? 'inspect'
-        : object.affordances.includes('work') && !state.project.completed
-          ? 'work'
-          : object.affordances.includes('interact')
-            ? 'interact'
-            : object.affordances.includes('inspect')
-              ? 'inspect'
-              : null;
-    if (!action) continue;
-    if (
-      ['work', 'interact'].includes(action) &&
-      observation.observedAt - (state.lastObjectUse[object.id] ?? -Infinity) < 90_000
-    )
-      continue;
-    actions.push({
-      id: `${action}:${object.id}`,
-      description: `Try one ${action} step with ${object.name.toLowerCase()}.`,
-      sourceIds: related.slice(-3).map((source) => source.id),
-      targetId: object.id,
-      action,
-      expiresAtReal: nowReal + 12 * 3_600_000,
-      retryCondition:
-        'Only while the target remains visible, reachable, permitted and off cooldown; otherwise defer.',
-    });
+    const choices = !close
+      ? ['move']
+      : [
+          ...(!state.inspections[object.id] && object.affordances.includes('inspect')
+            ? ['inspect']
+            : []),
+          ...(object.affordances.includes('interact') ? ['interact'] : []),
+          ...(object.affordances.includes('work') && !state.project.completed ? ['work'] : []),
+          ...(state.inspections[object.id] && object.affordances.includes('inspect')
+            ? ['inspect']
+            : []),
+        ];
+    offers.push(
+      choices
+        .filter(
+          (action) =>
+            !['work', 'interact'].includes(action) ||
+            observation.observedAt - (state.lastObjectUse[object.id] ?? -Infinity) >= 90_000,
+        )
+        .map((action) => ({
+          id: `${action}:${object.id}`,
+          description:
+            action === 'move'
+              ? `Go nearer to ${object.name.toLowerCase()}.`
+              : action === 'inspect'
+                ? `Look more closely at ${object.name.toLowerCase()}.`
+                : action === 'work'
+                  ? `Continue the experiment at ${object.name.toLowerCase()}.`
+                  : `Spend a moment with ${object.name.toLowerCase()}.`,
+          sourceIds: related.slice(-3).map((source) => source.id),
+          targetId: object.id,
+          action,
+          expiresAtReal: nowReal + 12 * 3_600_000,
+          retryCondition:
+            'Only while the target remains visible, reachable, permitted and off cooldown; otherwise defer.',
+        })),
+    );
   }
-  return actions.slice(0, 6);
+  // Give each object room before offering alternatives for the same object.
+  return [0, 1, 2].flatMap((index) => offers.flatMap((group) => group[index] ?? [])).slice(0, 6);
 }
 
 /** Fiction is deliberately labeled and never inserted into an episode or reward stream. */
-export function hubertDreamFallback(actions: DreamAction[]): DreamProposal {
+export function hubertDreamFallback(_actions: DreamAction[]): DreamProposal {
   return {
     vignette:
-      'An imagined dream: a duck directed sparrows toward a teacup runway. Hubert woke curious about one small thing, without mistaking it for a sighting.',
-    impulses: actions.slice(0, 2).map((action) => ({
-      affordanceId: action.id,
-      reason: 'Perhaps try a small, familiar experiment after resting.',
-    })),
+      'Hubert dreamed that a path folded into a small square, then opened again farther away.',
+    impulses: [],
   };
 }
 
@@ -102,9 +110,9 @@ export function hubertDreamInterpretations(sources: DreamSource[]) {
       sourceIds: contrary && uncomfortable ? [memory.id, contrary.id] : [memory.id],
       text: uncomfortable
         ? contrary
-          ? 'This action was rejected once; a later verified attempt with the same target completed. Current permission, hazards and resources still need checking.'
-          : 'This experience felt difficult. Its cause remains unresolved; it does not establish that every future attempt will fail.'
-        : 'A remembered experience worth revisiting, without treating it as a guarantee of future success.',
+          ? 'One attempt was difficult; a later attempt with the same target went through. Hubert wonders what changed.'
+          : 'This experience felt difficult. Hubert is still unsure what made it difficult.'
+        : 'A remembered experience that might be interesting to return to.',
       status: uncomfortable && !contrary ? ('unresolved' as const) : ('active' as const),
       retrievalOffset: uncomfortable ? (contrary ? -0.15 : 0) : 0.1,
     };

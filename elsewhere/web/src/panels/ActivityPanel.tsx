@@ -1,18 +1,21 @@
+import { NotebookPanel } from './NotebookPanel';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { formatTime } from '../formatTime';
 
 export function ActivityPanel({
   events,
   memories,
+  notebook,
   notices,
   feed,
   onFeedChange,
 }: {
   events: PublicSnapshot['events'];
   memories: PublicSnapshot['memories'];
+  notebook?: PublicSnapshot['notebook'];
   notices: ReadonlyArray<{ id: string; title: string; text: string }>;
-  feed: 'events' | 'memories';
-  onFeedChange: (feed: 'events' | 'memories') => void;
+  feed: 'events' | 'memories' | 'notebook';
+  onFeedChange: (feed: 'events' | 'memories' | 'notebook') => void;
 }) {
   return (
     <>
@@ -31,7 +34,15 @@ export function ActivityPanel({
         >
           Memories
         </button>
+        <button
+          className="ew-segment"
+          aria-pressed={feed === 'notebook'}
+          onClick={() => onFeedChange('notebook')}
+        >
+          Notebook
+        </button>
       </div>
+      {feed === 'notebook' && <NotebookPanel notebook={notebook} />}
       {feed === 'events' && notices.length > 0 && (
         <div className="notification-list">
           <p className="eyebrow">On your visit</p>
@@ -57,23 +68,25 @@ export function ActivityPanel({
                   <p>{e.message}</p>
                 </article>
               ))
-          : [...(memories ?? [])].reverse().map((m) => (
-              <article className="memory-row" key={m.id}>
-                <time>{formatTime(m.at)}</time>
-                <p>{m.summary}</p>
-                <small>{m.placeId?.replace(/-/g, ' ')}</small>
-                {m.sourceUrl && (
-                  <a
-                    href={m.sourceUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-button"
-                  >
-                    {m.sourceTitle ?? 'External source'} ↗
-                  </a>
-                )}
-              </article>
-            ))}
+          : feed === 'memories'
+            ? [...(memories ?? [])].reverse().map((m) => (
+                <article className="memory-row" key={m.id}>
+                  <time>{formatTime(m.at)}</time>
+                  <p>{m.summary}</p>
+                  <small>{m.placeId?.replace(/-/g, ' ')}</small>
+                  {m.sourceUrl && (
+                    <a
+                      href={m.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-button"
+                    >
+                      {m.sourceTitle ?? 'External source'} ↗
+                    </a>
+                  )}
+                </article>
+              ))
+            : null}
       </div>
       {feed === 'memories' && !memories.length && (
         <p className="empty-state">Memories appear as the resident experiences the world.</p>

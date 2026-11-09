@@ -1,4 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { applyInterestChoice } from '../characters/hubert/src/interestChoices';
+import { displayMemorySummary } from '../characters/hubert/src/memoryQuality';
+import { notebookInput } from '../characters/hubert/src/notebook';
+import {
+  validatePublicExpression,
+  type ExpressionProvider,
+} from '../packages/adapters/src/models/expression';
+import { randomUUID, createHash } from 'node:crypto';
 import hubertAppearance from '../characters/hubert/appearance.json' with { type: 'json' };
 import type { PublicSnapshot, WorldState } from '@elsewhere/character-interfaces';
 import {
@@ -107,6 +114,7 @@ export interface ControllerOptions {
   modelMaximum?: number;
   modelProvider?: DecisionProvider;
   reflectionProvider?: ReflectionProvider;
+  expressionProvider?: ExpressionProvider;
   research?: CharacterResearchPort;
 }
 
@@ -153,6 +161,7 @@ export class ElsewhereController {
   private closePromise: Promise<void> | undefined;
   private lastCommitted: ControllerState | undefined;
   private modelDispatchActive = false;
+  private publicDraft?: { id: string; at: number; text: string };
   private readonly wallNow: () => number;
   constructor(
     private readonly store: SnapshotStore<ControllerState>,
@@ -180,6 +189,7 @@ export class ElsewhereController {
         upgradedHubert.intent =
           'An interrupted research request has been deferred. Its allowance remains charged.';
       }
+      if (upgradedHubert.notebook?.pending) delete upgradedHubert.notebook.pending;
       // Never resume an in-flight creative call or count offline time as observed rest.
       upgradedHubert.dreams = abandonDreamConsolidation(upgradedHubert.dreams);
       const interruptedRest = this.state.runtime.dreamRest !== undefined;
@@ -227,9 +237,22 @@ export class ElsewhereController {
     const s = this.lastCommitted;
     if (!s) throw new Error('Controller has no committed state.');
     return structuredClone({
-      world: publicWorld(s.world),
+      world: {
+        ...publicWorld(s.world),
+        events: s.world.events.map((event) => ({
+          ...event,
+          message: displayMemorySummary(event.message),
+        })),
+      },
       character: publicCharacter(s.hubert),
-      events: s.world.events.slice(-35),
+      notebook: {
+        enabled: Boolean(this.options.expressionProvider),
+        entries: s.hubert.notebook?.entries ?? [],
+        ...(this.publicDraft ? { draft: this.publicDraft } : {}),
+      },
+      events: s.world.events
+        .slice(-35)
+        .map((event) => ({ ...event, message: displayMemorySummary(event.message) })),
       memories: publicMemories(s.hubert),
       recalledMemory: recalledMemory(s.hubert, s.runtime.simulatedAt),
       wishes: publicWishes(s.hubert),
@@ -256,9 +279,11 @@ export class ElsewhereController {
         startedAt: s.runtime.startedAt,
         simulatedAt: s.runtime.simulatedAt,
         costUsd: 0,
-        costKnown: [this.options.modelProvider, this.options.reflectionProvider].every(
-          (provider) => !provider || provider.id === 'ollama' || provider.localOnly === true,
-        ),
+        costKnown: [
+          this.options.modelProvider,
+          this.options.reflectionProvider,
+          this.options.expressionProvider,
+        ].every((provider) => !provider || provider.id === 'ollama' || provider.localOnly === true),
         modelCalls: s.modelAllowance.calls,
         modelStatus: this.halted
           ? 'Controller halted after a persistence failure. Check storage and restart.'
@@ -469,7 +494,61 @@ export class ElsewhereController {
       const policy = authorizeCommand(decision.action);
       delete s.runtime.activityUntil;
       if (policy.allowed) {
-        if (policy.command.type === 'research' || policy.command.type === 'read') {
+        if (policy.command.type === 'reconsider') {
+          const choice = policy.command;
+          const result = applyInterestChoice(s.hubert, policy.command, this.wallNow());
+          s.hubert = result.state;
+          s.hubert.activity = {
+            kind: 'reconsider',
+            label: 'Reconsidering an interest',
+            startedAt: now,
+          };
+          s.hubert.intent =
+            result.status === 'changed'
+              ? 'I can choose where my attention goes next.'
+              : 'I can leave that preference as it is for now.';
+          s.hubert.lastOutcome = {
+            id: 'preference-' + randomUUID(),
+            at: now,
+            action: 'reconsider',
+            status: result.status === 'changed' ? 'completed' : 'rejected',
+            summary:
+              result.status === 'changed'
+                ? `Interest ${choice.interestId}: ${choice.disposition}.`
+                : (result.reason ?? 'No preference changed.'),
+          };
+          if (result.status === 'changed') {
+            const interest = [...s.hubert.interests, ...s.hubert.dormantInterests].find(
+              (item) => item.id === choice.interestId,
+            );
+            s.world.events.push({
+              id: s.hubert.lastOutcome.id,
+              at: now,
+              type: 'interest_changed',
+              characterId: 'hubert',
+              message:
+                choice.disposition === 'set-aside'
+                  ? `Hubert set aside ${interest?.name.toLowerCase() ?? 'an interest'} for now.`
+                  : `Hubert returned to ${interest?.name.toLowerCase() ?? 'an old interest'}.`,
+            });
+            s.world.events = s.world.events.slice(-100);
+            s.world.version++;
+          }
+          settleHubertAttention(
+            s.hubert,
+            {
+              id: s.hubert.lastOutcome.id,
+              at: now,
+              command: choice,
+              status: result.status === 'changed' ? 'completed' : 'rejected',
+              summary: s.hubert.lastOutcome.summary,
+              ...(result.status === 'changed' ? { evidence: s.hubert.lastOutcome.id } : {}),
+            },
+            now,
+            this.wallNow(),
+          );
+          s.runtime.activityUntil = now + 90_000;
+        } else if (policy.command.type === 'research' || policy.command.type === 'read') {
           await this.researchActivity(policy.command, observation, now);
         } else {
           const result = executeWorldCommand(s.world, 'hubert', policy.command, now);
@@ -511,7 +590,85 @@ export class ElsewhereController {
       });
     }
     await this.commit();
+    await this.writeNotebook();
     return this.getSnapshot();
+  }
+  private async writeNotebook() {
+    const provider = this.options.expressionProvider;
+    if (!provider || provider.isAvailable?.() === false || this.halted || this.state.runtime.paused)
+      return;
+    const input = notebookInput(this.getSnapshot());
+    if (!input.facts.length) return;
+    const sourceId =
+      'public-' +
+      createHash('sha256')
+        .update(JSON.stringify({ facts: input.facts, interests: input.interests }))
+        .digest('hex');
+    const now = Math.max(this.wallNow(), this.state.hubert.notebook?.latestAtReal ?? 0);
+    const day = new Date(now).toISOString().slice(0, 10);
+    const book = (this.state.hubert.notebook ??= {
+      day,
+      calls: 0,
+      latestAtReal: now,
+      lastAtReal: 0,
+      sourceIds: [],
+      entries: [],
+    });
+    const calls = day > book.day ? 0 : book.calls;
+    if (
+      book.pending ||
+      calls >= 8 ||
+      book.sourceIds.includes(sourceId) ||
+      (book.sourceIds.length > 0 && now - book.lastAtReal < 20 * 60_000)
+    )
+      return;
+    const allowance = reserveModelCall(
+      this.state.modelAllowance,
+      now,
+      this.options.modelMaximum ?? 100,
+    );
+    if (!allowance) return;
+    this.state.modelAllowance = allowance;
+    book.day = day;
+    book.latestAtReal = now;
+    book.lastAtReal = now;
+    book.calls = calls + 1;
+    book.sourceIds = [...book.sourceIds, sourceId].slice(-64);
+    const id = 'note-' + randomUUID();
+    book.pending = { id, sourceId };
+    await this.commit(); // One durable request reservation; abandoned drafts are never replayed.
+    this.publicDraft = { id, at: this.state.runtime.simulatedAt, text: '' };
+    this.modelDispatchActive = true;
+    let draft = '',
+      invalidDraft = false;
+    try {
+      const text = validatePublicExpression(
+        await provider.express(input, (delta) => {
+          if (typeof delta !== 'string' || draft.length + delta.length > 360) {
+            invalidDraft = true;
+            return;
+          }
+          draft += delta;
+          if (this.publicDraft?.id === id)
+            this.publicDraft.text = draft.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+        }),
+      );
+      if (invalidDraft || (draft && validatePublicExpression(draft) !== text))
+        throw Error('Notebook draft did not match its completed note.');
+      if (text)
+        book.entries = [
+          ...book.entries,
+          { id, at: this.state.runtime.simulatedAt, text, sourceIds: input.facts.map((f) => f.id) },
+        ].slice(-32);
+    } catch {
+      if (this.halted) throw Error('Notebook stopped after persistence failure.');
+      // A failed draft is not published and does not become a memory or a fictional success.
+    } finally {
+      this.publicDraft = undefined;
+      this.modelDispatchActive = false;
+      delete book.pending;
+    }
+    await this.commit();
   }
   private async researchActivity(
     command: Extract<
@@ -664,6 +821,15 @@ export class ElsewhereController {
       if (routing) this.state.modelRouting = routing;
       this.state.hubert = preserveWishLedger(this.state.hubert, previous);
       this.state.hubert.dreams = pruneDreamState(previous.dreams, []);
+      if (previous.interestChoices)
+        this.state.hubert.interestChoices = structuredClone(previous.interestChoices);
+      if (previous.notebook)
+        this.state.hubert.notebook = {
+          ...structuredClone(previous.notebook),
+          entries: [],
+          pending: undefined,
+        };
+      this.publicDraft = undefined;
       this.state.world.version = Math.max(this.state.world.version, worldVersion + 1);
       for (const wish of this.state.hubert.wishes ?? []) {
         if (wish.status === 'fulfilled')

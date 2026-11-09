@@ -19,12 +19,14 @@ const interestName = (id: string) =>
     ? 'Birdwatching'
     : id.replace(/[-_]/g, ' ').replace(/^./, (value) => value.toUpperCase());
 
+export const INITIAL_BIRD_INTEREST_STRENGTH = 0.35;
+
 /** Existing interests can be set aside, but their evidence counts are retained separately. */
 function makeRoom(state: HubertState, protectedIds: readonly string[] = []): void {
   if (state.interests.length < 8) return;
   const candidates = state.interests
     .map((interest, index) => ({ interest, index }))
-    .filter(({ interest }) => interest.id !== 'birds' && !protectedIds.includes(interest.id));
+    .filter(({ interest }) => !protectedIds.includes(interest.id));
   candidates.sort(
     (a, b) =>
       a.interest.strength - b.interest.strength ||
@@ -36,25 +38,21 @@ function makeRoom(state: HubertState, protectedIds: readonly string[] = []): voi
   if (removed && !state.dormantInterests.some((item) => item.id === removed.id))
     state.dormantInterests.push(removed);
   // Archived statistics are derived summaries; the original source episodes remain in memory.
-  if (state.dormantInterests.length > 64)
-    state.dormantInterests = state.dormantInterests.slice(-64);
+  if (state.dormantInterests.length > 72)
+    state.dormantInterests = state.dormantInterests.slice(-72);
 }
 
 export function seedBirdInterest(state: HubertState): void {
-  if (state.interestSchemaVersion === 1) return;
-  const current = state.interests.find((interest) => interest.id === 'birds');
-  if (current) {
-    current.name = 'Birdwatching';
-    current.strength = Math.max(0.82, Math.min(1, current.strength));
-  } else {
-    const archived = state.dormantInterests.find((item) => item.id === 'birds');
-    makeRoom(state);
-    state.interests.unshift(
-      archived
-        ? { ...archived, name: 'Birdwatching', strength: Math.max(0.82, archived.strength) }
-        : { id: 'birds', name: 'Birdwatching', strength: 0.82, encounters: 0 },
-    );
-    state.dormantInterests = state.dormantInterests.filter((item) => item.id !== 'birds');
+  if (state.interestPolicyVersion !== 2) {
+    const existing =
+      state.interests.find((interest) => interest.id === 'birds') ??
+      state.dormantInterests.find((interest) => interest.id === 'birds');
+    if (existing) {
+      // The owner lowered the authored prior from .82 to .35. Remove that difference
+      // once, retaining earned encounters, evidence, other interests and archive status.
+      existing.strength = Math.max(0.2, existing.strength - 0.47);
+    }
+    state.interestPolicyVersion = 2;
   }
   state.interestSchemaVersion = 1;
 }
@@ -86,9 +84,16 @@ export function developInterests(
     let interest = state.interests.find((item) => item.id === id);
     if (!interest) {
       const archived = state.dormantInterests.find((item) => item.id === id);
+      if (archived && state.interestChoices?.lastDispositions[id] === 'set-aside') {
+        // Another encounter can add evidence without overruling Hubert's deliberate preference.
+        const novelty = 1 / (1 + archived.encounters * 0.35);
+        archived.strength = Math.min(0.97, archived.strength + 0.08 * novelty);
+        archived.encounters++;
+        continue;
+      }
       makeRoom(state, meaningful);
       interest = archived
-        ? { ...archived }
+        ? { ...archived, strength: Math.max(0.2, archived.strength) }
         : { id, name: interestName(id), strength: 0.22, encounters: 0 };
       state.dormantInterests = state.dormantInterests.filter((item) => item.id !== id);
       state.interests.push(interest);
@@ -98,4 +103,24 @@ export function developInterests(
     interest.encounters += 1;
   }
   return true;
+}
+
+/** Attention can fade; episodes and earned encounter counts remain as a personal history. */
+export function relaxInterests(state: HubertState, elapsedMs: number): void {
+  const hours = Math.max(0, Math.min(6 * 3600000, elapsedMs)) / 3600000;
+  if (!hours) return;
+  const attended = state.activity.objectId
+    ? (state.knownObjects[state.activity.objectId] ?? state.knownEntities[state.activity.objectId])
+    : undefined;
+  for (const interest of state.interests) {
+    if (!attended?.tags.includes(interest.id)) interest.strength *= Math.exp(-hours / 336);
+  }
+  const fading = state.interests.filter((interest) => interest.strength < 0.12);
+  state.interests = state.interests.filter((interest) => interest.strength >= 0.12);
+  for (const interest of fading) {
+    const existing = state.dormantInterests.findIndex((item) => item.id === interest.id);
+    if (existing >= 0) state.dormantInterests[existing] = interest;
+    else state.dormantInterests.push(interest);
+  }
+  state.dormantInterests = state.dormantInterests.slice(-72);
 }

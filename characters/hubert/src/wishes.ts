@@ -1,5 +1,6 @@
 import type { Observation, PublicWish, WorldState } from '@elsewhere/character-interfaces';
 import type { HubertState } from './index';
+import { isPublicMemoryEpisode } from './memoryQuality';
 
 export type WishStatus = 'pending' | 'fulfilled' | 'declined';
 export interface CharacterWish {
@@ -40,45 +41,44 @@ export const WISH_CATALOG: readonly WishCatalogEntry[] = [
     title: 'A little weather station',
     description:
       'It might be interesting to leave an instrument running and compare its readings later.',
-    reason:
-      'My small weather study has left me with questions I cannot answer with a sketch alone.',
+    reason: 'I would like to compare weather readings with the sketch I worked on.',
     interests: ['weather', 'patterns', 'making'],
   },
   {
     id: 'magnifying-glass',
     title: 'A magnifying glass',
-    description: 'I would like to look more closely at the tiny mechanisms I keep finding.',
-    reason: 'Looking at small details has been more interesting than I expected.',
+    description: 'I would like a closer look at the details of a small mechanism.',
+    reason: 'A closer look might reveal details I have not noticed yet.',
     interests: ['mechanism', 'unfamiliar', 'making'],
   },
   {
     id: 'painting-kit',
     title: 'Some painting materials',
-    description: 'Perhaps I could try recording something in colour instead of only describing it.',
+    description: 'Perhaps I could try recording something in colour.',
     reason: 'Making something slowly, with room for mistakes, seems worth trying.',
-    interests: ['making', 'light', 'projects'],
+    interests: ['making', 'light', 'color', 'colour', 'projects'],
   },
   {
     id: 'telescope',
     title: 'A small telescope',
     description: 'I wonder what I might notice if I could look farther from the courtyard.',
     reason: 'There seem to be patterns here that reward a longer look.',
-    interests: ['patterns', 'light', 'quiet'],
+    interests: ['patterns', 'light', 'quiet', 'sky'],
   },
   {
     id: 'seed-library',
     title: 'A few unfamiliar seeds',
     description:
       'I would like to see how a small collection of different plants changes over time.',
-    reason: 'Returning to the garden keeps raising new questions.',
+    reason: 'I wonder how unfamiliar seeds would grow here.',
     interests: ['nature', 'patterns', 'courtyard'],
   },
   {
     id: 'music-box',
     title: 'Something that makes music',
     description: 'I am curious whether a quiet corner would feel different with a little music.',
-    reason: 'I have been finding reasons to pause, listen and stay somewhere for a while.',
-    interests: ['quiet', 'rest'],
+    reason: 'A small tune might be worth listening to here.',
+    interests: ['sound', 'music', 'quiet', 'rest'],
   },
 ];
 
@@ -97,6 +97,35 @@ function normalize(input: HubertState): HubertState {
   return state;
 }
 
+/** A broad taste alone cannot manufacture the experience described by a particular wish. */
+function supportsWish(
+  state: HubertState,
+  candidate: WishCatalogEntry,
+  memory: HubertState['memories'][number],
+): boolean {
+  const experience = memory.experience;
+  if (!experience || experience.status !== 'completed') return false;
+  const work = experience.action === 'work' && experience.targetId === 'workbench';
+  if (candidate.id === 'weather-station') return state.project.verifiedWorkSessions > 0 && work;
+  const ids = new Set([
+    ...(experience.targetId ? [experience.targetId] : []),
+    ...memory.cues
+      .filter((cue) => cue.kind === 'object' || cue.kind === 'entity')
+      .map((cue) => cue.value),
+  ]);
+  const targets = [...ids].flatMap((id) => state.knownObjects[id] ?? state.knownEntities[id] ?? []);
+  const tagged = (...tags: string[]) =>
+    targets.some((target) => target.tags.some((tag) => tags.includes(tag)));
+  if (candidate.id === 'magnifying-glass') return tagged('mechanism');
+  if (candidate.id === 'painting-kit') return work || tagged('making', 'light', 'color', 'colour');
+  if (candidate.id === 'telescope')
+    return tagged('sky') || targets.some((target) => ['window', 'telescope'].includes(target.kind));
+  if (candidate.id === 'seed-library')
+    return targets.some((target) => ['garden', 'tree', 'plant', 'seed'].includes(target.kind));
+  if (candidate.id === 'music-box') return tagged('sound', 'music');
+  return false;
+}
+
 /**
  * Called by the trusted host using REAL wall-clock time, never simulated world time.
  * Wishes express possibilities. They neither install objects nor change budgets or permissions.
@@ -111,9 +140,17 @@ export function considerWish(
   if (observation.characterId !== input.id)
     throw new Error('Wish observation belongs to another character');
   const state = normalize(input);
-  const evidence = state.memories.filter(
-    (memory) => memory.verified && memory.source === 'world-outcome',
-  );
+  const seenSources = new Set<string>();
+  const evidence = state.memories.filter((memory) => {
+    const source = JSON.stringify([memory.source, memory.sourceEventId]);
+    if (seenSources.has(source)) return false;
+    seenSources.add(source);
+    return (
+      memory.source === 'world-outcome' &&
+      isPublicMemoryEpisode(memory) &&
+      (!memory.experience || memory.experience.status === 'completed')
+    );
+  });
   if (evidence.length < 3) return state;
   if (state.wishes.filter((wish) => wish.status === 'pending').length >= 3) return state;
   if (state.wishes.filter((wish) => wallNow - wish.createdAt < WEEK_MS).length >= 3) return state;
@@ -124,26 +161,35 @@ export function considerWish(
   const ranked = WISH_CATALOG.filter(
     (candidate) => !available.has(candidate.id) && !alreadyAsked.has(candidate.id),
   )
-    .map((candidate, index) => {
-      const interestScore = candidate.interests.reduce(
-        (sum, id) => sum + (state.interests.find((interest) => interest.id === id)?.strength ?? 0),
-        0,
+    .flatMap((candidate) => {
+      const interests = state.interests.filter(
+        (interest) =>
+          candidate.interests.includes(interest.id) &&
+          Number.isFinite(interest.strength) &&
+          interest.strength > 0,
       );
-      const projectScore =
-        candidate.id === 'weather-station' && state.project.verifiedWorkSessions > 0 ? 3 : 0;
-      return { candidate, score: interestScore + projectScore, index };
+      if (!interests.length) return [];
+      const relevant = evidence.filter((memory) => supportsWish(state, candidate, memory));
+      if (!relevant.length) return [];
+      return [
+        {
+          candidate,
+          relevant,
+          score: Math.max(...interests.map((interest) => interest.strength)),
+          latestAt: Math.max(...relevant.map((memory) => memory.createdAt)),
+        },
+      ];
     })
-    .sort((a, b) => b.score - a.score || a.index - b.index);
-  const candidate = ranked[0]?.candidate;
-  if (!candidate) return state;
-  const relevant = evidence.filter((memory) =>
-    memory.cues.some(
-      (cue) =>
-        cue.kind === 'object' &&
-        state.knownObjects[cue.value]?.tags.some((tag) => candidate.interests.includes(tag)),
-    ),
-  );
-  const sources = (relevant.length ? relevant : evidence).slice(-3).map((memory) => memory.id);
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.latestAt - a.latestAt ||
+        a.candidate.id.localeCompare(b.candidate.id),
+    );
+  const selected = ranked[0];
+  if (!selected) return state;
+  const { candidate, relevant } = selected;
+  const sources = relevant.slice(-3).map((memory) => memory.id);
   state.wishes.push({
     id: `wish:${state.id}:${wallNow}:${candidate.id}`,
     title: candidate.title.slice(0, 100),

@@ -191,9 +191,7 @@ describe('dreaming in the authoritative life loop', () => {
     const state = (await store.load())!.value;
     expect(state.modelAllowance.calls).toBe(3);
     expect(state.hubert.activity.kind).not.toBe('reflect');
-    expect(state.hubert.progress.intentions.some((item) => item.disposition === 'deferred')).toBe(
-      true,
-    );
+    expect(state.hubert.progress.outcomes.some((outcome) => outcome.evidence)).toBe(true);
     expect(state.world.events.at(-1)?.type).not.toBe('reflect');
   });
 });

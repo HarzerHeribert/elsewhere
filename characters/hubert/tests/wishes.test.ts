@@ -16,16 +16,30 @@ const epoch = Date.UTC(2026, 10, 8, 12);
 function experienced(): HubertState {
   const state = createInitialHubert(epoch);
   state.project.verifiedWorkSessions = 1;
-  state.memories = Array.from({ length: 3 }, (_, index) => ({
+  state.interests = [
+    { id: 'weather', name: 'Weather', strength: 0.9, encounters: 1 },
+    { id: 'mechanism', name: 'Mechanisms', strength: 0.7, encounters: 1 },
+    { id: 'making', name: 'Making', strength: 0.65, encounters: 1 },
+    { id: 'nature', name: 'Nature', strength: 0.6, encounters: 1 },
+  ];
+  const world = createInitialWorld(epoch);
+  for (const id of ['workbench', 'artifact', 'garden'])
+    state.knownObjects[id] = world.objects.find((object) => object.id === id)!;
+  state.memories = ['workbench', 'artifact', 'garden'].map((targetId, index) => ({
     id: `memory:${index}`,
-    createdAt: epoch + index * 10_000,
-    summary: 'A verified experience in the courtyard.',
+    createdAt: epoch - (3 - index) * 10_000,
+    summary: index === 0 ? 'Sketched a weather-vane experiment.' : `Inspected the ${targetId}.`,
     sourceEventId: `world-event:${index}`,
     source: 'world-outcome' as const,
     verified: true,
-    cues: [{ kind: 'place' as const, value: 'courtyard' }],
+    cues: [{ kind: 'object' as const, value: targetId }],
     emotionalContext: { mood: 65, frustration: 10 },
     salience: 0.5,
+    experience: {
+      action: index === 0 ? 'work' : 'inspect',
+      targetId,
+      status: 'completed' as const,
+    },
   }));
   return state;
 }
@@ -44,7 +58,7 @@ describe('bounded wishes with actual owner fulfillment', () => {
     expect(JSON.stringify(projected)).not.toMatch(
       /sourceMemoryIds|baselineObjectIds|requestedAtWorldVersion|privateNotes|not-for-publication/,
     );
-    expect(state.wishes[0].sourceMemoryIds).toHaveLength(3);
+    expect(state.wishes[0].sourceMemoryIds).toEqual(['memory:0']);
     expect(state.wishes[0].baselineObjectIds.length).toBeGreaterThan(0);
   });
   it('waits for lived experiences and makes a contextual request without promising or installing anything', () => {
@@ -55,7 +69,7 @@ describe('bounded wishes with actual owner fulfillment', () => {
     expect(state.wishes).toHaveLength(1);
     expect(state.wishes[0].requestedObjectId).toBe('weather-station');
     expect(state.wishes[0].status).toBe('pending');
-    expect(state.wishes[0].sourceMemoryIds).toEqual(before.memories.map((memory) => memory.id));
+    expect(state.wishes[0].sourceMemoryIds).toEqual(['memory:0']);
     expect(state.stats).toEqual(before.stats);
     expect(world.objects.some((object) => object.id === 'weather-station')).toBe(false);
     expect(publicWishes(state)[0]).not.toHaveProperty('baselineObjectIds');

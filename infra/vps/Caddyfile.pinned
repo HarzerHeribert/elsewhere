@@ -33,7 +33,7 @@ https://{$HUBERT_INFERENCE_HOST}:9443 {
 			reverse_proxy 127.0.0.1:4120
 		}
 	}
-	@hubert_routes path /v1/decision /v1/reflection /readyz
+	@hubert_routes path /v1/decision /v1/reflection /v1/expression /readyz
 	handle @hubert_routes {
 		request_body {
 			max_size 96KB

@@ -10,6 +10,12 @@ import {
   type ReflectionProvider,
 } from './reflection';
 import type { ModelUsage } from '../../../models/src/contracts';
+import {
+  expressionMessages,
+  validatePublicExpression,
+  type ExpressionProvider,
+  type PublicExpressionInput,
+} from './expression';
 
 interface ChatGPTOptions {
   model?: string;
@@ -28,6 +34,7 @@ function envelope(value: unknown): Envelope | undefined {
 export async function readChatGPTStream(
   response: Response,
   usage: (value: ModelUsage | undefined) => void,
+  onDelta?: (text: string) => void,
 ): Promise<string> {
   if (!response.ok) {
     const payload = await boundedChatGPTJson(response);
@@ -78,6 +85,7 @@ export async function readChatGPTStream(
           if (typeof event.delta !== 'string') throw new ChatGPTError('invalid_stream_event');
           deltaText += event.delta;
           if (Buffer.byteLength(deltaText) > 16000) throw new ChatGPTError('output_too_large');
+          if (event.delta) onDelta?.(event.delta);
         }
         if (
           event.type === 'response.completed' ||
@@ -125,7 +133,11 @@ export async function readChatGPTStream(
               });
             })
             .join('');
-          if (!text || Buffer.byteLength(text) > 16000 || (deltaText && text !== deltaText))
+          if (
+            (!text && !onDelta) ||
+            Buffer.byteLength(text) > 16000 ||
+            (deltaText && text !== deltaText)
+          )
             throw new ChatGPTError('invalid_completed_output');
           return text;
         }
@@ -190,7 +202,11 @@ export class ChatGPTClient {
     this.catalog = models.map((model) => model.slug);
     return models;
   }
-  async text(messages: ReturnType<typeof decisionMessages>, signal?: AbortSignal): Promise<string> {
+  async text(
+    messages: ReturnType<typeof decisionMessages>,
+    signal?: AbortSignal,
+    onDelta?: (text: string) => void,
+  ): Promise<string> {
     try {
       if (!this.catalog) await this.models();
       if (!this.catalog!.includes(this.model))
@@ -217,10 +233,14 @@ export class ChatGPTClient {
           ...(this.model === 'gpt-6-luna' ? { reasoning: { effort: 'none' } } : {}),
         }),
       });
-      return await readChatGPTStream(response, (usage) => {
-        if (usage) this.options.onUsage?.(usage.inputTokens, usage.outputTokens);
-        this.options.onUsageDetails?.(usage);
-      });
+      return await readChatGPTStream(
+        response,
+        (usage) => {
+          if (usage) this.options.onUsage?.(usage.inputTokens, usage.outputTokens);
+          this.options.onUsageDetails?.(usage);
+        },
+        onDelta,
+      );
     } catch (error) {
       const failure =
         error instanceof ChatGPTError ? error : new ChatGPTError('network_or_stream_unavailable');
@@ -258,6 +278,27 @@ export class ChatGPTReflectionProvider implements ReflectionProvider {
           .replace(/\s*```$/, ''),
       ),
       input,
+    );
+  }
+}
+
+export class ChatGPTExpressionProvider implements ExpressionProvider {
+  readonly id = 'chatgpt';
+  constructor(
+    readonly client: ChatGPTClient,
+    readonly identity: string,
+  ) {}
+  isAvailable() {
+    return this.client.isAvailable();
+  }
+  async express(input: PublicExpressionInput, onDelta?: (text: string) => void) {
+    let length = 0;
+    return validatePublicExpression(
+      await this.client.text(expressionMessages(this.identity, input), undefined, (text) => {
+        length += text.length;
+        if (length > 360) return; // Consume the bounded terminal event so known usage is retained.
+        onDelta?.(text);
+      }),
     );
   }
 }

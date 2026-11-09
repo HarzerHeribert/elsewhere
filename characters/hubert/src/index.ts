@@ -1,3 +1,5 @@
+import { availableInterestChoices, type HubertInterestChoiceState } from './interestChoices';
+import type { HubertNotebookState } from './notebook';
 import { HUBERT_IDENTITY, bodyLanguage } from './persona';
 import { hubertDreamActions, hubertDreamSources } from './dreams';
 import {
@@ -6,7 +8,26 @@ import {
   trackHubertIntent,
   wakeImpulseDecision,
 } from './attention';
-import { developInterests, seedBirdInterest, type InterestEvidence } from './interests';
+import {
+  developInterests,
+  seedBirdInterest,
+  relaxInterests,
+  type InterestEvidence,
+} from './interests';
+import {
+  appendNovelMemory,
+  displayMemorySummary,
+  isPublicMemoryEpisode,
+  publicMemoryEpisodes,
+  selectQualityMemory,
+} from './memoryQuality';
+import {
+  actionOutcomeFeedback,
+  assessHubertSpatialAction,
+  canInspectObservedEntity,
+  hubertActionOffers,
+  type ActionOutcomeFeedback,
+} from './actionOffers';
 import { researchContext, type HubertResearchState } from './research';
 import type { CharacterWish, WishReceipt } from './wishes';
 export {
@@ -31,7 +52,6 @@ import {
 import {
   buildWorkingContext,
   cleanOutsideText,
-  selectAssociativeMemory,
   createDreamState,
   dreamRankingOffsets,
   pruneDreamState,
@@ -87,6 +107,7 @@ export interface HubertState {
   entityObservations: Record<string, EntityObservationLedger>;
   watchAttention: { lastAt: number | null; times: number[] };
   interestSchemaVersion: 1;
+  interestPolicyVersion?: 2;
   dormantInterests: HubertInterest[];
   interestEvidence: Record<string, InterestEvidence>;
   inspections: Record<string, number>;
@@ -114,7 +135,11 @@ export interface HubertState {
   progressGuidance: ProgressGuidance | null;
   progressDecision: { id: string; intentionKey: string } | null;
   activeWakeImpulse: string | null;
+  lastOutcome?: ActionOutcomeFeedback;
+  lastProposal?: { at: number; type: string; targetId?: string; adjustment: string };
   research?: HubertResearchState;
+  notebook?: HubertNotebookState;
+  interestChoices?: HubertInterestChoiceState;
 }
 export interface OutsideEvent {
   id: string;
@@ -155,11 +180,7 @@ export function createInitialHubert(now: number, ownerId = 'local-owner'): Huber
     stats: { mood: 66, energy: 82, boredom: 24, frustration: 8, socialAppetite: 35 },
     activity: { kind: 'arriving', label: 'Taking in Elsewhere', startedAt: now },
     intent: 'Find out what is here. I would like to make something of my own.',
-    interests: [
-      { id: 'birds', name: 'Birdwatching', strength: 0.82, encounters: 0 },
-      { id: 'making', name: 'Making small things', strength: 0.55, encounters: 0 },
-      { id: 'patterns', name: 'Patterns and little mysteries', strength: 0.4, encounters: 0 },
-    ],
+    interests: [],
     memories: [],
     recallHistory: {},
     lastRecallAt: null,
@@ -169,6 +190,7 @@ export function createInitialHubert(now: number, ownerId = 'local-owner'): Huber
     entityObservations: {},
     watchAttention: { lastAt: null, times: [] },
     interestSchemaVersion: 1,
+    interestPolicyVersion: 2,
     dormantInterests: [],
     interestEvidence: {},
     inspections: {},
@@ -223,6 +245,7 @@ export function advanceHubert(input: HubertState, now: number): HubertState {
   const state = upgradeHubertState(input);
   const elapsed = Math.min(Math.max(0, now - state.updatedAt), 6 * 60 * 60 * 1_000);
   const hours = elapsed / 3_600_000;
+  relaxInterests(state, elapsed);
   const resting = state.activity.kind === 'rest';
   state.stats.mood += (62 - state.stats.mood) * (1 - Math.exp(-hours * 0.12));
   state.stats.energy += hours * (resting ? 120 : -1.5);
@@ -258,7 +281,7 @@ function rememberObservation(state: HubertState, observation: Observation, now: 
       ...(entity.species ? [{ kind: 'phrase' as const, value: entity.species }] : []),
     ]),
   ];
-  const memory = selectAssociativeMemory(state.memories, cues, {
+  const memory = selectQualityMemory(state.memories, cues, {
     now,
     mood: state.stats.mood,
     frustration: state.stats.frustration,
@@ -282,9 +305,10 @@ function recordIntent(
   action: CharacterCommand,
   explanation: string,
   now: number,
+  observation?: Observation,
 ): HubertDecision {
   state.turn += 1;
-  trackHubertIntent(state, action, now);
+  trackHubertIntent(state, action, now, observation);
   state.lastDecisionAt = now;
   state.intent = explanation;
   state.activity = {
@@ -312,8 +336,15 @@ function recordWatchIntent(
   entity: WorldEntity,
   explanation: string,
   now: number,
+  observation?: Observation,
 ): HubertDecision {
-  const decision = recordIntent(state, { type: 'inspect', targetId: entity.id }, explanation, now);
+  const decision = recordIntent(
+    state,
+    { type: 'inspect', targetId: entity.id },
+    explanation,
+    now,
+    observation,
+  );
   decision.state.activity = {
     kind: 'watch',
     label: `Watching ${entity.species?.toLowerCase() ?? entity.name.toLowerCase()}`,
@@ -338,23 +369,7 @@ function canWatch(
   observation: Observation,
   now: number,
 ): boolean {
-  if (
-    Math.hypot(
-      entity.position.x - observation.position.x,
-      entity.position.z - observation.position.z,
-    ) > 8
-  )
-    return false;
-  if (state.watchAttention.lastAt !== null && now - state.watchAttention.lastAt < 120_000)
-    return false;
-  if (state.watchAttention.times.filter((at) => now - at < 900_000).length >= 3) return false;
-  const previous = state.entityObservations[entity.id];
-  if (!previous) return true;
-  const familiar = previous.signatures.includes(entitySignature(entity));
-  return (
-    entity.observationVersion > previous.lastVersion &&
-    now - previous.lastAt >= (familiar ? 6 * 3_600_000 : 180_000)
-  );
+  return canInspectObservedEntity(state, entity, observation, now);
 }
 function chooseVisibleEntity(
   state: HubertState,
@@ -377,9 +392,16 @@ function chooseVisibleEntity(
           (newSpecies ? 4 : 0) +
           (state.entityObservations[entity.id] ? 1 : 3) +
           (novelBehavior ? 2 : 0) +
-          (entity.kind === 'bird'
-            ? (state.interests.find((interest) => interest.id === 'birds')?.strength ?? 0)
-            : 0) -
+          Math.min(
+            1,
+            entity.tags.reduce(
+              (score, topic) =>
+                score +
+                (state.interests.find((interest) => interest.id === topic)?.strength ?? 0) /
+                  Math.max(1, entity.tags.length),
+              0,
+            ),
+          ) -
           Math.hypot(
             entity.position.x - observation.position.x,
             entity.position.z - observation.position.z,
@@ -400,8 +422,20 @@ export function chooseAction(
 ): HubertDecision {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
+  const recordObservedIntent = (
+    s: HubertState,
+    action: CharacterCommand,
+    explanation: string,
+    at: number,
+  ) => recordIntent(s, action, explanation, at, observation);
+  const recordObservedWatch = (
+    s: HubertState,
+    entity: WorldEntity,
+    explanation: string,
+    at: number,
+  ) => recordWatchIntent(s, entity, explanation, at, observation);
   if (needsRest(state)) {
-    return recordIntent(
+    return recordObservedIntent(
       state,
       { type: 'rest', durationMs: 60_000 },
       'I will settle down and tuck my feelers in for a while. The unfinished things can wait.',
@@ -409,15 +443,15 @@ export function chooseAction(
     );
   }
   const recovery = followThrough(state, observation, now, {
-    recordIntent,
-    recordWatchIntent,
+    recordIntent: recordObservedIntent,
+    recordWatchIntent: recordObservedWatch,
     chooseVisibleEntity,
   });
   if (recovery) return recovery;
-  const impulse = wakeImpulseDecision(state, observation, now, nowReal, recordIntent);
+  const impulse = wakeImpulseDecision(state, observation, now, nowReal, recordObservedIntent);
   if (impulse) return impulse;
   if (state.turn > 0 && state.turn % 11 === 0) {
-    return recordIntent(
+    return recordObservedIntent(
       state,
       { type: 'reflect' },
       'I want to put a few observations together before starting anything else.',
@@ -438,8 +472,9 @@ export function chooseAction(
         projectBench.position.x - observation.position.x,
         projectBench.position.z - observation.position.z,
       ) <=
-      projectBench.radius + 1;
-    return recordIntent(
+        projectBench.radius + 1 &&
+      observation.visibleObjects.some((object) => object.id === projectBench.id);
+    return recordObservedIntent(
       state,
       close ? { type: 'work', targetId: 'workbench' } : { type: 'move', targetId: 'workbench' },
       'There are more places to explore, but I would like to follow through on my little weather study first.',
@@ -447,8 +482,11 @@ export function chooseAction(
     );
   }
   const entity = chooseVisibleEntity(state, observation, now);
-  if (entity) {
-    return recordWatchIntent(
+  const hasFreshObject = observation.visibleObjects.some(
+    (object) => !state.inspections[object.id] && object.affordances.includes('inspect'),
+  );
+  if (entity && (!hasFreshObject || state.activity.kind !== 'watch')) {
+    return recordObservedWatch(
       state,
       entity,
       `I noticed ${entity.name.toLowerCase()} ${entity.behavior}. I want to lean a little closer and watch what it does.`,
@@ -474,8 +512,8 @@ export function chooseAction(
         target.position.x - observation.position.x,
         target.position.z - observation.position.z,
       ) <=
-      target.radius + 1;
-    return recordIntent(
+        target.radius + 1 && observation.visibleObjects.some((object) => object.id === target.id);
+    return recordObservedIntent(
       state,
       close ? { type: 'inspect', targetId: target.id } : { type: 'move', targetId: target.id },
       `I noticed ${target.name.toLowerCase()}. I would like to see what it is like up close.`,
@@ -504,7 +542,7 @@ export function chooseAction(
         : undefined;
   if (nextPlace) {
     state.explorationStep += 1;
-    return recordIntent(
+    return recordObservedIntent(
       state,
       { type: 'move', targetId: nextPlace.id },
       unexplored.includes(nextPlace)
@@ -516,7 +554,11 @@ export function chooseAction(
   const useful = objects.filter(
     (object) =>
       (object.id !== 'bench' || state.stats.energy < 58) &&
-      object.affordances.some((value) => ['work', 'interact', 'tend', 'sit'].includes(value)) &&
+      object.affordances.some(
+        (value) =>
+          ['interact', 'tend', 'sit'].includes(value) ||
+          (value === 'work' && !state.project.completed),
+      ) &&
       now - (state.lastObjectUse[object.id] ?? -Infinity) >= 90_000,
   );
   useful.sort(
@@ -530,15 +572,15 @@ export function chooseAction(
         target.position.x - observation.position.x,
         target.position.z - observation.position.z,
       ) <=
-      target.radius + 1;
+        target.radius + 1 && observation.visibleObjects.some((object) => object.id === target.id);
     const command: CharacterCommand = close
-      ? target.affordances.includes('work')
+      ? target.affordances.includes('work') && !state.project.completed
         ? { type: 'work', targetId: target.id }
         : target.id === 'bench'
           ? { type: 'rest', durationMs: 30_000 }
           : { type: 'interact', targetId: target.id }
       : { type: 'move', targetId: target.id };
-    return recordIntent(
+    return recordObservedIntent(
       state,
       command,
       target.affordances.includes('work')
@@ -559,7 +601,7 @@ export function chooseAction(
   ];
   const destination = walks[state.explorationStep % walks.length];
   state.explorationStep += 1;
-  return recordIntent(
+  return recordObservedIntent(
     state,
     { type: 'move', position: destination },
     'I have been in one spot for a while. I will take a walk and see what catches my attention.',
@@ -626,7 +668,7 @@ function applyEntityObservation(
   ];
   if (visible.species) cues.push({ kind: 'phrase', value: visible.species });
   const summary = cleanOutsideText(outcome.summary, 500);
-  state.memories.push({
+  appendNovelMemory(state.memories, {
     id: `memory:${outcome.id}`,
     createdAt: now,
     summary,
@@ -663,6 +705,7 @@ export function applyOutcome(
   state.processedOutcomeIds.push(outcome.id);
   // Recent receipts cover retries; retained source episodes also prevent old accomplishments being replayed.
   state.processedOutcomeIds = state.processedOutcomeIds.slice(-2_000);
+  state.lastOutcome = actionOutcomeFeedback(outcome);
   settleHubertAttention(state, outcome, now, nowReal);
   if (outcome.status === 'started') return state;
   const targetId =
@@ -673,7 +716,7 @@ export function applyOutcome(
     state.intent = 'That did not work. I will reconsider rather than pretend it succeeded.';
     if (targetId) state.lastObjectUse[targetId] = now;
     state.stats = normalizeStats(state.stats);
-    state.memories.push({
+    appendNovelMemory(state.memories, {
       id: `memory:${outcome.id}`,
       createdAt: now,
       summary: cleanOutsideText(outcome.summary, 500),
@@ -685,7 +728,7 @@ export function applyOutcome(
         ...(targetId ? [{ kind: 'object' as const, value: targetId }] : []),
       ],
       emotionalContext: { mood: state.stats.mood, frustration: state.stats.frustration },
-      salience: 0.55,
+      salience: 0.15,
       experience: {
         action: outcome.command.type,
         ...(targetId ? { targetId } : {}),
@@ -763,11 +806,12 @@ export function applyOutcome(
       : 'I am still getting to know this place. I do not need to decide what I like yet.';
   }
   state.stats = normalizeStats(state.stats);
+  let rememberedNewEpisode = false;
   const shouldRemember = ['inspect', 'work', 'interact'].includes(outcome.command.type);
   if (shouldRemember) {
     const cues: MemoryCue[] = [{ kind: 'place', value: outcome.placeId ?? observation.placeId }];
     if (targetId) cues.push({ kind: 'object', value: targetId });
-    state.memories.push({
+    rememberedNewEpisode = appendNovelMemory(state.memories, {
       id: `memory:${outcome.id}`,
       createdAt: now,
       summary: cleanOutsideText(outcome.summary, 500),
@@ -784,7 +828,7 @@ export function applyOutcome(
       },
     });
   }
-  if (shouldRemember || outcome.command.type === 'reflect') {
+  if (rememberedNewEpisode || outcome.command.type === 'reflect') {
     state.journal.push({
       id: outcome.id,
       at: now,
@@ -862,14 +906,12 @@ export function publicCharacter(state: HubertState): PublicCharacterState {
       strength,
       encounters,
     })),
-    currentThought: state.intent,
-    ...(state.lastReflection ? { lastReflection: state.lastReflection } : {}),
   };
 }
 const toPublicMemory = (memory: EpisodicMemory): PublicMemory => ({
   id: memory.id,
   at: memory.createdAt,
-  summary: memory.summary,
+  summary: displayMemorySummary(memory.summary),
   cues: memory.cues.map((cue) => `${cue.kind}:${cue.value}`),
   placeId: memory.cues.find((cue) => cue.kind === 'place')?.value,
   objectId: memory.cues.find((cue) => cue.kind === 'object')?.value,
@@ -881,22 +923,12 @@ const toPublicMemory = (memory: EpisodicMemory): PublicMemory => ({
     : {}),
 });
 export function publicMemories(state: HubertState): PublicMemory[] {
-  return state.memories
-    .filter(
-      (memory) =>
-        (memory.source === 'web-reading' && Boolean(memory.reference)) ||
-        (memory.verified && memory.source === 'world-outcome'),
-    )
-    .slice(-12)
-    .map(toPublicMemory);
+  return publicMemoryEpisodes(state.memories).map(toPublicMemory);
 }
 export function recalledMemory(state: HubertState, now: number): PublicMemory | null {
   if (!state.activeRecall || now - state.activeRecall.at > 90_000) return null;
   const memory = state.memories.find(
-    (item) =>
-      item.id === state.activeRecall?.memoryId &&
-      ((item.source === 'web-reading' && Boolean(item.reference)) ||
-        (item.verified && item.source === 'world-outcome')),
+    (item) => item.id === state.activeRecall?.memoryId && isPublicMemoryEpisode(item),
   );
   return memory ? toPublicMemory(memory) : null;
 }
@@ -921,7 +953,14 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
     activity: { ...state.activity },
     bodyLanguage: bodyLanguage(state, observation),
     interests: state.interests.map((interest) => ({ ...interest })),
-    project: { ...state.project },
+    project: {
+      ...state.project,
+      status: state.project.completed
+        ? 'completed'
+        : state.project.verifiedWorkSessions > 0
+          ? 'underway'
+          : 'available experiment',
+    },
     knownObjects: objects.map((object) => ({
       id: object.id,
       name: object.name,
@@ -954,6 +993,9 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
         action,
         retryCondition,
       })),
+    actionOffers: hubertActionOffers(state, observation, now).map((offer) => ({ ...offer })),
+    lastOutcome: state.lastOutcome ? { ...state.lastOutcome } : null,
+    lastProposal: state.lastProposal ? { ...state.lastProposal } : null,
     progressAdvice: state.progressGuidance
       ? {
           kind: state.progressGuidance.kind,
@@ -976,8 +1018,14 @@ export function workingContext(
     state: {
       ...planningSummary(state, observation, nowReal),
       research: researchContext(state, observation, nowReal, researchEnabled),
+      interestChoices: availableInterestChoices(state, nowReal).map((choice) => ({ ...choice })),
     },
-    intentions: [state.intent, state.project.name],
+    intentions: [
+      state.intent,
+      ...(!state.project.completed && state.project.verifiedWorkSessions > 0
+        ? [state.project.name]
+        : []),
+    ],
     memories: state.activeRecall
       ? state.memories
           .filter((memory) => memory.id === state.activeRecall?.memoryId)
@@ -1043,26 +1091,21 @@ export async function chooseActionWithProvider(
     workingContext(state, observation, nowReal, researchEnabled),
   );
   const action = CharacterCommandSchema.parse(result);
-  if (
-    action.type === 'move' &&
-    action.targetId &&
-    !observation.visibleEntities?.some((entity) => entity.id === action.targetId) &&
-    !state.knownObjects[action.targetId] &&
-    !observation.knownPlaces?.some((place) => place.id === action.targetId)
-  )
-    return chooseAction(input, observation, now, nowReal);
-  if ('targetId' in action && action.targetId && state.knownEntities[action.targetId]) {
-    const current = observation.visibleEntities?.find((entity) => entity.id === action.targetId);
-    if (!current || (action.type === 'inspect' && !canWatch(state, current, observation, now)))
-      return chooseAction(input, observation, now, nowReal);
+  const assessment = assessHubertSpatialAction(state, observation, action, now);
+  if (assessment.status === 'approach' || assessment.status === 'unavailable') {
+    const fallback =
+      assessment.status === 'approach'
+        ? recordIntent(state, assessment.command, assessment.reason, now, observation)
+        : chooseAction(state, observation, now, nowReal);
+    fallback.state.lastProposal = {
+      at: now,
+      type: action.type,
+      ...('targetId' in action && action.targetId ? { targetId: action.targetId } : {}),
+      adjustment: assessment.reason,
+    };
+    return fallback;
   }
-  if (
-    'targetId' in action &&
-    action.targetId &&
-    ['work', 'interact'].includes(action.type) &&
-    now - (state.lastObjectUse[action.targetId] ?? -Infinity) < 90_000
-  )
-    return chooseAction(input, observation, now, nowReal);
+  delete state.lastProposal;
   const explanation = 'I have chosen a next step from what I can currently observe.';
   const offered = wakingDreamImpulses(state.dreams, nowReal).find(
     (impulse) =>
@@ -1079,7 +1122,7 @@ export async function chooseActionWithProvider(
     observation.visibleEntities?.some((entity) => entity.id === action.targetId)
   ) {
     const entity = observation.visibleEntities.find((entity) => entity.id === action.targetId)!;
-    return recordWatchIntent(state, entity, explanation, now);
+    return recordWatchIntent(state, entity, explanation, now, observation);
   }
-  return recordIntent(state, action, explanation, now);
+  return recordIntent(state, action, explanation, now, observation);
 }

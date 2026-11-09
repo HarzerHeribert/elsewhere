@@ -1,3 +1,4 @@
+import { NotebookPanel } from './NotebookPanel';
 import { Button } from '../ui/Button';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { HubertPortrait } from '../HubertPortrait';
@@ -9,6 +10,8 @@ export function CharacterPanel({
   character,
   recalledMemory,
   artifacts,
+  notebook,
+  onNotebook,
   onMessage,
   onViewpoint,
   onMemories,
@@ -17,6 +20,8 @@ export function CharacterPanel({
   character: PublicSnapshot['character'];
   recalledMemory?: PublicSnapshot['recalledMemory'];
   artifacts?: PublicSnapshot['artifacts'];
+  notebook?: PublicSnapshot['notebook'];
+  onNotebook: () => void;
   onMessage: () => void;
   onViewpoint: () => void;
   onMemories: () => void;
@@ -34,8 +39,8 @@ export function CharacterPanel({
       <div className="character-now">
         <p className="eyebrow">Right now</p>
         <h3>{character.activity}</h3>
-        <p>{character.currentThought}</p>
       </div>
+      <NotebookPanel notebook={notebook} preview />
       <div className="stats">
         <Meter label="Mood" value={character.mood} />
         <Meter label="Energy" value={character.energy} />
@@ -61,6 +66,9 @@ export function CharacterPanel({
         </Button>
       </div>
       <div className="panel-links">
+        <button onClick={onNotebook}>
+          Notebook <Icon name="arrow" />
+        </button>
         <button onClick={onMemories}>
           Memories <Icon name="arrow" />
         </button>

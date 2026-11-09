@@ -232,6 +232,17 @@ export interface PublicRuntimeState {
   costKnown?: boolean;
   simulationRate?: number;
 }
+export interface PublicNotebookEntry {
+  id: string;
+  at: number;
+  text: string;
+  sourceIds: string[];
+}
+export interface PublicNotebook {
+  enabled: boolean;
+  entries: PublicNotebookEntry[];
+  draft?: { id: string; at: number; text: string };
+}
 export interface PublicSnapshot {
   world: PublicWorldState;
   character: PublicCharacterState;
@@ -241,6 +252,7 @@ export interface PublicSnapshot {
   runtime: PublicRuntimeState;
   artifacts?: PublicArtifact[];
   wishes?: PublicWish[];
+  notebook?: PublicNotebook;
 }
 
 export interface PublicArtifact {

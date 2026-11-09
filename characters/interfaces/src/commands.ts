@@ -62,6 +62,17 @@ const definitions = [
   },
   {
     schema: z
+      .object({
+        type: z.literal('reconsider'),
+        interestId: targetId,
+        disposition: z.enum(['pursue', 'set-aside']),
+      })
+      .strict(),
+    instruction:
+      'reconsider: choose an offered interestChoices interestId and disposition to pursue a known interest or set it aside. Preferences can change; this does not invent an encounter, change emotions or create a new capability.',
+  },
+  {
+    schema: z
       .object({ type: z.literal('delegate'), task: z.string().trim().min(1).max(1000) })
       .strict(),
     instruction: 'delegate is policy-disabled: external coding workers are not connected.',

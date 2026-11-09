@@ -274,7 +274,7 @@ export function createSoleHubertRegistry(options: {
         characterId: 'hubert',
         ownerUserId: options.ownerUserId,
         connectionId: options.connectionId,
-        capabilities: ['model.decision', 'model.reflection'],
+        capabilities: ['model.decision', 'model.reflection', 'model.expression'],
         enabled: true,
         revision: 1,
       },

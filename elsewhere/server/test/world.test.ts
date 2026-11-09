@@ -197,9 +197,9 @@ describe('authoritative Elsewhere world', () => {
       61000,
     );
     expect(worked.outcome.status).toBe('completed');
-    expect(worked.world.objects.find((o) => o.id === 'weather-vane-sketch')?.detail).toContain(
-      'Hypothesis:',
-    );
+    const detail = worked.world.objects.find((o) => o.id === 'weather-vane-sketch')?.detail;
+    expect(detail).toMatch(/question.*bent fin.*axle housing/i);
+    expect(detail).toMatch(/proposed experiment.*compare three rotations/i);
     const restored = JSON.parse(JSON.stringify(worked.world));
     expect(
       restored.objects.find((o: { id: string }) => o.id === 'weather-vane-sketch'),
