@@ -10,6 +10,7 @@ const name = 'elsewhere-proxy-fixture-' + randomUUID().slice(0, 8),
   proxy = name + '-tls';
 const image = 'caddy@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9';
 const token = 'fixture-service-token-for-proxy-security-check-only-2026';
+const fixtureUser = `${process.getuid()}:${process.getgid()}`;
 function run(args, allow = false) {
   const r = spawnSync('docker', args, { encoding: 'utf8', timeout: 30000 });
   if ((r.error || r.status !== 0) && !allow)
@@ -17,7 +18,7 @@ function run(args, allow = false) {
       'Isolated proxy fixture operation ' +
         args[0] +
         ' failed: ' +
-        String(r.stderr ?? r.error?.message).slice(0, 300),
+        String(r.stderr ?? r.error?.message).slice(0, 2000),
     );
   return r.stdout?.trim() ?? '';
 }
@@ -65,6 +66,8 @@ try {
     name,
     '--name',
     name,
+    '--user',
+    fixtureUser,
     '--read-only',
     '--cap-drop=ALL',
     '--security-opt=no-new-privileges:true',
@@ -85,6 +88,8 @@ try {
     '-d',
     '--name',
     proxy,
+    '--user',
+    fixtureUser,
     '--read-only',
     '--cap-drop=ALL',
     '--security-opt=no-new-privileges:true',
@@ -181,7 +186,11 @@ try {
     realProviderCalls: 0,
   };
 } catch (error) {
-  result = { proxyFixturePassed: false, details: String(error.message).slice(0, 250) };
+  result = {
+    proxyFixturePassed: false,
+    details: String(error.message).slice(0, 2000),
+    fixtureLogs: run(['logs', '--tail', '8', proxy], true).slice(0, 2000),
+  };
   process.exitCode = 1;
 } finally {
   run(['rm', '-f', proxy], true);
