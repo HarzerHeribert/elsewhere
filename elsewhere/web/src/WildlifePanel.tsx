@@ -41,7 +41,7 @@ export function WildlifeDirectory({
   if (!entities.length) return null;
   return (
     <section className="wildlife-directory" aria-label="Wildlife in Elsewhere">
-      <p className="eyebrow">Other lives here</p>
+      <p className="eyebrow">Wildlife</p>
       <div>
         {entities.map((entity) => (
           <button key={entity.id} onClick={() => onSelect(entity.id)}>
@@ -58,7 +58,7 @@ export function WildlifeDirectory({
           </button>
         ))}
       </div>
-      <p className="quiet-note">Small lives, following their own rhythms.</p>
+      <p className="quiet-note">Part of the environment residents can observe and remember.</p>
     </section>
   );
 }

@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { HubertPortrait } from '../HubertPortrait';
 import { CharacterInterests } from '../WildlifePanel';
@@ -27,7 +28,7 @@ export function CharacterPanel({
         <HubertPortrait />
         <div>
           <span className="tag">Founding resident</span>
-          <p>An odd little creature. Especially curious about birds.</p>
+          <p>Follow his decisions, explore his memories, or leave him a note.</p>
         </div>
       </div>
       <div className="character-now">
@@ -40,24 +41,24 @@ export function CharacterPanel({
         <Meter label="Energy" value={character.energy} />
       </div>
       <div className="panel-section">
-        <p className="eyebrow">Things he returns to</p>
+        <p className="eyebrow">Interests</p>
         <CharacterInterests interests={character.interests} />
       </div>
       {recalledMemory && (
         <div className="memory-glimpse">
-          <p className="eyebrow">Something came back to him</p>
+          <p className="eyebrow">Recalled memory</p>
           <p>{recalledMemory.summary}</p>
         </div>
       )}
       <div className="panel-actions">
-        <button className="primary-button" onClick={onMessage}>
+        <Button onClick={onMessage}>
           <Icon name="mail" />
           Message Hubert
-        </button>
-        <button className="secondary-button" onClick={onViewpoint}>
+        </Button>
+        <Button variant="secondary" onClick={onViewpoint}>
           <Icon name="eye" />
           His viewpoint
-        </button>
+        </Button>
       </div>
       <div className="panel-links">
         <button onClick={onMemories}>
@@ -69,7 +70,7 @@ export function CharacterPanel({
       </div>
       {Boolean(artifacts?.length) && (
         <div className="panel-section">
-          <p className="eyebrow">Things he’s made</p>
+          <p className="eyebrow">Creations</p>
           {artifacts
             ?.filter((a) => /^\/api\/artifacts\/[a-z\d_-]+$/i.test(a.url))
             .map((a) => (

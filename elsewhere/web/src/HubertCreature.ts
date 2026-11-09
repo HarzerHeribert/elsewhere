@@ -15,7 +15,7 @@ const { palette } = appearance;
 const smooth = THREE.MathUtils.smoothstep;
 const axisY = new THREE.Vector3(0, 1, 0);
 
-// A single soft body, with the cream face, russet cheeks and seed markings painted into its coat.
+// A wonky clay-colored body: the pale patch sits on the belly, away from the deadpan face.
 function seedBody() {
   const geometry = new THREE.SphereGeometry(1, 80, 56);
   const positions = geometry.getAttribute('position');
@@ -23,7 +23,6 @@ function seedBody() {
   const coat = new THREE.Color(palette.body);
   const gold = new THREE.Color(palette.ochre);
   const cream = new THREE.Color(palette.belly);
-  const cheek = new THREE.Color(palette.blush);
   const umber = new THREE.Color(palette.markings);
   const color = new THREE.Color();
   for (let i = 0; i < positions.count; i++) {
@@ -32,14 +31,12 @@ function seedBody() {
       z = positions.getZ(i);
     const t = (y + 1) / 2;
     const width = 0.455 * (1.13 - 0.28 * t);
-    positions.setXYZ(i, x * width - 0.035 * t * t, 0.098 + t * 0.93, z * width * 0.87);
-    const face = smooth(z + 0.14 * y - 0.16 * Math.cos(x * 6), 0.48, 0.59);
+    positions.setXYZ(i, x * width - 0.085 * t * t, 0.098 + t * 0.93, z * width * 0.87);
+    const face = smooth(z - 0.5 * y, 0.75, 0.96) * (1 - smooth(y, -0.2, 0.1));
     color
       .copy(coat)
       .lerp(gold, smooth(y, -0.2, 1) * 0.65)
       .lerp(cream, face);
-    const cheeks = Math.hypot((Math.abs(x) - 0.66) / 0.25, (y - 0.14) / 0.18);
-    if (z > 0) color.lerp(cheek, (1 - smooth(cheeks, 0.15, 1)) * 0.82);
     // Three little ovals echo the broken nape markings on the cream breast.
     const breast = Math.hypot((Math.abs(x) - 0.27) / 0.09, (y + 0.22 + Math.abs(x) * 0.24) / 0.05);
     const bib = Math.hypot(x / 0.085, (y + 0.39) / 0.065);
@@ -113,16 +110,15 @@ export function createHubertCreature() {
     resources.own(new THREE.MeshStandardMaterial({ color, roughness }));
   const bark = material(palette.markings);
   const moss = material(palette.moss);
-  const eyeRim = material(palette.ochre);
+  const eyeWhite = material(palette.highlight);
+  const eyelid = material(palette.ochre);
   const eye = resources.own(
     new THREE.MeshPhysicalMaterial({
       color: palette.eyes,
-      roughness: 0.25,
-      clearcoat: 0.72,
-      clearcoatRoughness: 0.19,
+      roughness: 0.9,
+      clearcoat: 0,
     }),
   );
-  const glint = resources.own(new THREE.MeshBasicMaterial({ color: palette.highlight }));
   function mesh(parent: THREE.Object3D, geometry: THREE.BufferGeometry, mat: THREE.Material) {
     const part = new THREE.Mesh(geometry, mat);
     part.castShadow = part.receiveShadow = true;
@@ -179,21 +175,34 @@ export function createHubertCreature() {
     foot.position.copy(position);
     foot.rotation.y = [-0.29, 0.29, Math.PI][index]!;
     root.add(foot);
-    oval(foot, moss, [0.133, 0.086, 0.167], [0, 0, 0.022]);
+    oval(foot, moss, [index === 0 ? 0.19 : 0.17, 0.063, 0.215], [0, 0, 0.05]);
     feet.push(foot);
   });
 
   const eyes: THREE.Group[] = [];
+  const pupils: THREE.Mesh[] = [];
   for (const side of [-1, 1]) {
     const eyeGroup = new THREE.Group();
-    eyeGroup.position.set(-0.017 + side * 0.147, appearance.eyeHeight + side * 0.009, 0.259);
+    eyeGroup.position.set(-0.04 + side * 0.15, appearance.eyeHeight - side * 0.027, 0.275);
     eyeGroup.rotation.y = side * 0.33;
     eyeGroup.rotation.x = -0.24;
     bodyPose.add(eyeGroup);
-    oval(eyeGroup, eyeRim, [0.103, 0.121, 0.081], [0, 0, 0]);
-    oval(eyeGroup, eye, [0.088, 0.101, 0.075], [0, 0, 0.025]);
-    const highlight = oval(eyeGroup, glint, [0.014, 0.019, 0.008], [-0.022, 0.033, 0.092]);
-    highlight.castShadow = false;
+    const eyeSize = side < 0 ? 1.12 : 0.87;
+    oval(eyeGroup, eyeWhite, [0.101 * eyeSize, 0.119 * eyeSize, 0.08], [0, 0, 0.018]);
+    const pupil = oval(
+      eyeGroup,
+      eye,
+      [0.025, 0.039, 0.016],
+      [side < 0 ? 0.028 : -0.018, -0.025, 0.098],
+    );
+    pupils.push(pupil);
+    const lid = oval(
+      eyeGroup,
+      eyelid,
+      [0.107 * eyeSize, 0.073 * eyeSize, 0.086],
+      [0, 0.065, 0.029],
+    );
+    lid.rotation.z = side * -0.13;
     eyes.push(eyeGroup);
     for (const [dx, dy, dz, radius] of [
       [0.248, 0.659, 0.3, 0.01],
@@ -211,22 +220,44 @@ export function createHubertCreature() {
     }
   }
   const mouth = new THREE.QuadraticBezierCurve3(
-    new THREE.Vector3(-0.059, 0.641, 0.371),
-    new THREE.Vector3(-0.013, 0.607, 0.379),
-    new THREE.Vector3(0.031, 0.646, 0.368),
+    new THREE.Vector3(-0.085, 0.603, 0.378),
+    new THREE.Vector3(-0.018, 0.604, 0.395),
+    new THREE.Vector3(0.057, 0.594, 0.375),
   );
   mesh(bodyPose, resources.own(new THREE.TubeGeometry(mouth, 12, 0.007, 7, false)), bark);
+  oval(bodyPose, material(palette.body), [0.105, 0.056, 0.075], [0.035, 0.666, 0.358]);
+  const tooth = mesh(bodyPose, resources.own(new THREE.BoxGeometry(0.033, 0.045, 0.024)), eyeWhite);
+  tooth.position.set(-0.008, 0.58, 0.386);
+  tooth.rotation.z = 0.1;
+  for (const side of [-1, 1]) {
+    const arm = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(side * 0.34, 0.54, 0.16),
+      new THREE.Vector3(side * 0.43, 0.37, 0.18),
+      new THREE.Vector3(side * 0.39, 0.31, 0.22),
+    ]);
+    mesh(bodyPose, resources.own(new THREE.TubeGeometry(arm, 12, 0.017, 7, false)), moss);
+  }
   const feelers: THREE.Group[] = [];
   for (const side of [-1, 1]) {
     const group = new THREE.Group();
     group.position.set(side * 0.1 - 0.028, 0.968, -0.038);
     group.scale.y = 0.85;
     bodyPose.add(group);
-    mesh(
+    const tip = new THREE.Vector3(side * 0.25, side < 0 ? 0.27 : 0.24, -0.045);
+    const stalk = new THREE.CatmullRomCurve3(
+      [new THREE.Vector3(), new THREE.Vector3(side * 0.18, side < 0 ? 0.16 : 0.39, -0.025), tip],
+      false,
+      'catmullrom',
+      0.15,
+    );
+    mesh(group, resources.own(new THREE.TubeGeometry(stalk, 14, 0.015, 7, false)), moss);
+    const blade = mesh(
       group,
-      resources.own(listeningLeaf(side, side < 0 ? 0.44 : 0.344, side < 0 ? 0.2 : 0.148)),
+      resources.own(listeningLeaf(side, side < 0 ? 0.2 : 0.13, side < 0 ? 0.025 : -0.075)),
       leafMaterial,
     );
+    blade.position.copy(tip);
+    blade.scale.set(1, 0.6, 0.6);
     feelers.push(group);
   }
 
@@ -257,7 +288,7 @@ export function createHubertCreature() {
     bodyPose.position.y = Math.abs(sway) * 0.012;
     bodyPose.rotation.z = THREE.MathUtils.lerp(
       bodyPose.rotation.z,
-      -direction.x * 0.1 + sway * 0.047,
+      -0.035 - direction.x * 0.14 + sway * 0.085,
       smoothing,
     );
     bodyPose.rotation.x = THREE.MathUtils.lerp(
@@ -266,7 +297,7 @@ export function createHubertCreature() {
       smoothing,
     );
     feet.forEach((foot, index) => {
-      const wave = Math.sin(step + (index * Math.PI * 2) / 3);
+      const wave = Math.sin(step + (index * Math.PI * 2) / 3 + (index === 2 ? 0.4 : 0));
       const origin = footOrigins[index]!;
       foot.position.set(
         origin.x,
@@ -275,9 +306,12 @@ export function createHubertCreature() {
       );
       foot.rotation.x = wave * movement * 0.16;
     });
-    const blinkPhase = (seconds + 3.4) % 7.3;
-    const blink = blinkPhase < 0.24 ? Math.sin((blinkPhase / 0.24) * Math.PI) : 0;
-    for (const group of eyes) group.scale.y = (resting ? 0.73 : 1) * (1 - blink * 0.94);
+    eyes.forEach((group, index) => {
+      const blinkPhase = (seconds + 3.4 - index * 0.13) % 7.3;
+      const blink = blinkPhase < 0.3 ? Math.sin((blinkPhase / 0.3) * Math.PI) : 0;
+      group.scale.y = (resting ? 0.73 : 1) * (1 - blink * 0.94);
+      pupils[index]!.position.x = (index === 0 ? 0.028 : -0.018) + direction.x * 0.021;
+    });
     feelers.forEach((group, index) => {
       const side = index === 0 ? -1 : 1;
       group.rotation.z =

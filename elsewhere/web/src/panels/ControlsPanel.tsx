@@ -1,20 +1,18 @@
-import type { PublicRuntimeState } from '@elsewhere/character-interfaces';
+import { Button } from '../ui/Button';
 import { Icon } from '../Icon';
 
 export function ControlsPanel({
-  runtime,
   fullscreen,
   onEnterWorld,
   onToggleFullscreen,
 }: {
-  runtime?: PublicRuntimeState;
   fullscreen: boolean;
   onEnterWorld?: () => Promise<void>;
   onToggleFullscreen: () => Promise<void>;
 }) {
   return (
     <>
-      <p className="panel-intro">Take your own walk. Hubert will keep living his.</p>
+      <p className="panel-intro">Move through the world independently of its residents.</p>
       <div className="key-guide">
         <span>
           <kbd>W</kbd>
@@ -38,36 +36,14 @@ export function ControlsPanel({
       <p className="muted-copy">
         Drag to look, or capture the mouse while walking. Opening a panel stops your footsteps.
       </p>
-      <button
-        className="primary-button full-width"
-        disabled={!onEnterWorld}
-        onClick={() => void onEnterWorld?.()}
-      >
+      <Button className="full-width" disabled={!onEnterWorld} onClick={() => void onEnterWorld?.()}>
         <Icon name="walk" />
         Enter world
-      </button>
-      <button className="secondary-button full-width" onClick={() => void onToggleFullscreen()}>
+      </Button>
+      <Button variant="secondary" className="full-width" onClick={() => void onToggleFullscreen()}>
         <Icon name="expand" />
         {fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-      </button>
-      {runtime && (
-        <div className="technical-note">
-          <p className="eyebrow">This instance</p>
-          <p>
-            {runtime?.mode === 'ollama'
-              ? 'Ollama · local model'
-              : runtime?.mode === 'compatible'
-                ? 'Connected model'
-                : 'Local deterministic simulation'}{' '}
-            · {runtime?.simulationRate ?? 3}× world time
-          </p>
-          <p>
-            {runtime?.costKnown === false
-              ? 'Provider cost not reported'
-              : '$' + (runtime?.costUsd ?? 0).toFixed(2) + ' paid model spend'}
-          </p>
-        </div>
-      )}
+      </Button>
     </>
   );
 }

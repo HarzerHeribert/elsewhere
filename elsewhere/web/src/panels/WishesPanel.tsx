@@ -1,3 +1,5 @@
+import { Button } from '../ui/Button';
+import { StatusBadge } from '../ui/StatusBadge';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 
 export function WishesPanel({
@@ -16,39 +18,37 @@ export function WishesPanel({
   return (
     <>
       <p className="panel-intro">
-        Possibilities Hubert has imagined from his life here. Up to three in seven days, with room
-        between them.
+        Changes a resident would like to make to the world. Owners can approve a request and add it
+        to Elsewhere.
       </p>
       <div className="wish-list">
         {wishes?.map((w) => (
           <article className="wish-card" key={w.id}>
-            <span className={'wish-state ' + w.status}>{w.status}</span>
+            <StatusBadge tone={w.status === 'pending' ? 'waiting' : 'neutral'}>
+              {w.status}
+            </StatusBadge>
             <h3>{w.title}</h3>
             <p>{w.reason}</p>
             <small>{w.description}</small>
             {canDecide && w.status === 'pending' && (
               <div className="wish-actions">
-                <button
-                  className="primary-button"
-                  disabled={busy}
-                  onClick={() => void onDecide(w.id, 'fulfill')}
-                >
+                <Button disabled={busy} onClick={() => void onDecide(w.id, 'fulfill')}>
                   Add to Elsewhere
-                </button>
-                <button
-                  className="text-button"
+                </Button>
+                <Button
+                  variant="quiet"
                   disabled={busy}
                   onClick={() => void onDecide(w.id, 'decline')}
                 >
                   Decline for now
-                </button>
+                </Button>
               </div>
             )}
           </article>
         ))}
       </div>
       {!wishes?.length && (
-        <p className="empty-state">He’s still discovering what this place could become.</p>
+        <p className="empty-state">No requests yet. Future ideas for the world will appear here.</p>
       )}
       <p role="status" className="control-status">
         {status}
