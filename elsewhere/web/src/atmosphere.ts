@@ -29,12 +29,12 @@ export function createAtmosphere(
   );
   uniforms.sunPosition!.value.copy(sunDirection);
   scene.add(sky);
-  const hemisphere = new THREE.HemisphereLight(0xdde9f1, 0x777556, 1);
+  const hemisphere = new THREE.HemisphereLight(0xf1f8ff, 0xb0b292, 1.22);
   scene.add(hemisphere);
-  const sun = new THREE.DirectionalLight(0xffe1b2, 3.1);
+  const sun = new THREE.DirectionalLight(0xffe8cc, 2.95);
   sun.position.copy(sunDirection).multiplyScalar(75);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, {
     left: -43,
     right: 43,
@@ -62,7 +62,7 @@ export function createAtmosphere(
   let skyTexture: THREE.DataTexture | undefined;
   scene.environment = environment.texture;
   scene.environmentIntensity = 0.5;
-  scene.fog = new THREE.Fog(0xcddcda, 75, 205);
+  scene.fog = new THREE.Fog(0xc6d9d7, 54, 190);
   renderer.domElement.dataset.sky = 'loading';
 
   // A single local download and prefilter, never a per-frame environment render.
@@ -101,40 +101,32 @@ export function createAtmosphere(
   // Continuous, softly lit terrain beyond the playable boundary. Its centre stays flat.
   const landscape = new THREE.Group();
   scene.add(landscape);
-  const radialSegments = 160,
-    rings = 12;
-  const positions: number[] = [],
-    indices: number[] = [];
-  for (let ring = 0; ring <= rings; ring++) {
-    const radius = 61 + (ring / rings) * 164;
-    for (let segment = 0; segment <= radialSegments; segment++) {
-      const angle = (segment / radialSegments) * Math.PI * 2;
-      positions.push(
-        Math.cos(angle) * radius,
-        landscapeHeight(radius, angle),
-        Math.sin(angle) * radius,
-      );
-      if (ring < rings && segment < radialSegments) {
-        const a = ring * (radialSegments + 1) + segment,
-          b = a + radialSegments + 1;
-        indices.push(a, a + 1, b, a + 1, b + 1, b);
-      }
-    }
+  // A single grid spans the walkable meadow and the whole horizon, with continuous UVs.
+  const terrainGeometry = new THREE.PlaneGeometry(460, 460, 156, 156);
+  terrainGeometry.rotateX(-Math.PI / 2);
+  const vertices = terrainGeometry.getAttribute('position');
+  const uvs = terrainGeometry.getAttribute('uv');
+  const colors: number[] = [];
+  const color = new THREE.Color();
+  const shadowGreen = new THREE.Color(0x92b383),
+    sunGreen = new THREE.Color(0xc9dd9c);
+  for (let i = 0; i < vertices.count; i++) {
+    const x = vertices.getX(i),
+      z = vertices.getZ(i);
+    vertices.setY(i, landscapeHeight(Math.hypot(x, z), Math.atan2(z, x)));
+    uvs.setXY(i, x / 2.8, z / 2.8);
+    const patch =
+      0.5 +
+      0.25 * Math.sin(x * 0.22 + z * 0.09) +
+      0.15 * Math.cos(z * 0.35 - x * 0.17) +
+      0.1 * Math.cos(x * 0.47 + z * 0.33);
+    color.lerpColors(shadowGreen, sunGreen, patch);
+    colors.push(color.r, color.g, color.b);
   }
-  const terrainGeometry = new THREE.BufferGeometry();
-  terrainGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  terrainGeometry.setIndex(indices);
+  terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   terrainGeometry.computeVertexNormals();
-  terrainGeometry.setAttribute(
-    'uv',
-    new THREE.Float32BufferAttribute(
-      positions.flatMap((value, index) =>
-        index % 3 === 0 ? [value / 3, positions[index + 2]! / 3] : [],
-      ),
-      2,
-    ),
-  );
-  const terrainMaterial = surfaces.material('grass', { tint: 0xb5c5a2, normalStrength: 0.65 });
+  const terrainMaterial = surfaces.material('grass', { normalStrength: 0.48 });
+  terrainMaterial.vertexColors = true;
   const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
   terrain.receiveShadow = true;
   landscape.add(terrain);

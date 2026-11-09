@@ -1,3 +1,4 @@
+import { villageScenery } from './scenery';
 import type { Position, Snapshot } from './types';
 import type { VisitorSessionView } from '@elsewhere/character-interfaces';
 
@@ -12,8 +13,7 @@ export function WorldMap({
   onFocus: (position: Position, id: string) => void;
   onMove: (position: Position) => void;
 }) {
-  const world = snapshot?.world;
-  if (!world) return null;
+  const world = snapshot?.world ?? villageScenery;
   const b = world.bounds,
     width = b.maxX - b.minX,
     height = b.maxZ - b.minZ;
@@ -28,7 +28,7 @@ export function WorldMap({
         role="img"
         aria-label="Places, Hubert and your position in Elsewhere"
         onClick={(event) => {
-          if (!visitor) return;
+          if (!visitor || !snapshot) return;
           const rect = event.currentTarget.getBoundingClientRect();
           onMove({
             x: b.minX + ((event.clientX - rect.left) / rect.width) * width,
@@ -82,7 +82,7 @@ export function WorldMap({
               </text>
             </g>
           ))}
-        {world.entities?.map((entity) => (
+        {snapshot?.world.entities?.map((entity) => (
           <g key={entity.id} aria-label={entity.name} style={{ pointerEvents: 'none' }}>
             <title>
               {entity.species ?? entity.name} · {entity.behavior}
@@ -97,7 +97,7 @@ export function WorldMap({
             />
           </g>
         ))}
-        {world.residents.map((r) => (
+        {snapshot?.world.residents.map((r) => (
           <circle
             key={r.id}
             cx={r.position.x}
@@ -108,7 +108,7 @@ export function WorldMap({
             strokeWidth=".5"
           />
         ))}
-        {visitor && (
+        {visitor && snapshot && (
           <circle
             cx={visitor.position.x}
             cy={visitor.position.z}

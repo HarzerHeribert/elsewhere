@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { type WorldState } from '@elsewhere/character-interfaces';
+import type { VillageScenery } from './scenery';
 import type { AttachWorldAsset } from './worldAssets';
 import { ENVIRONMENT_MATERIALS, type createEnvironmentMaterials } from './materials';
 import { ResourceScope } from './sceneResources';
@@ -11,6 +11,7 @@ const furniture = (name: string) => `/assets/kenney/furniture/${name}.glb`;
 export interface VillageArchitecture {
   roofs: THREE.Group[];
   occluders: THREE.Object3D[];
+  renderedObstacleIds: ReadonlySet<string>;
   dispose(): void;
 }
 
@@ -34,7 +35,7 @@ function surfaceUV(geometry: THREE.BufferGeometry, tile: number) {
 
 /** Architectural surfaces follow the authoritative wall footprints and door openings. */
 export function buildVillageArchitecture(
-  world: WorldState,
+  world: VillageScenery,
   scene: THREE.Scene,
   attach: AttachWorldAsset,
   surfaces: ReturnType<typeof createEnvironmentMaterials>,
@@ -45,10 +46,17 @@ export function buildVillageArchitecture(
   const resources = new ResourceScope();
   const roofs: THREE.Group[] = [],
     occluders: THREE.Object3D[] = [];
+  const renderedObstacleIds = new Set<string>();
   const timber = surfaces.material('timber', { normalStrength: 0.9 });
   const stone = surfaces.material('stone', { normalStrength: 1.15 });
-  const tile = surfaces.material('roof', { normalStrength: 1.1 });
-  tile.side = THREE.DoubleSide;
+  const mint = new THREE.MeshStandardMaterial({ color: 0x739989, roughness: 0.78 });
+  const cream = new THREE.MeshStandardMaterial({ color: 0xf0dfb8, roughness: 0.88 });
+  const brass = new THREE.MeshStandardMaterial({
+    color: 0xc99b53,
+    metalness: 0.36,
+    roughness: 0.48,
+  });
+  const clay = new THREE.MeshStandardMaterial({ color: 0xb26946, roughness: 0.89 });
   const glass = new THREE.MeshPhysicalMaterial({
     color: 0xc7d8d4,
     roughness: 0.16,
@@ -75,7 +83,7 @@ export function buildVillageArchitecture(
     x: number,
     y: number,
     z: number,
-    mat = timber,
+    mat: THREE.Material = timber,
     parent: THREE.Object3D = root,
   ) {
     const m = mesh(surfaceUV(new THREE.BoxGeometry(w, h, d), mat === stone ? 2 : 2), mat, parent);
@@ -114,7 +122,8 @@ export function buildVillageArchitecture(
     stoneTransforms.push(dummy.matrix.clone());
   }
   for (const wall of world.obstacles) {
-    if (!wall.id.includes('wall') && !wall.id.includes('door-')) continue;
+    if (!/^(workshop|library)-(.*wall|door-)/.test(wall.id)) continue;
+    renderedObstacleIds.add(wall.id);
     const alongX = wall.maxX - wall.minX > wall.maxZ - wall.minZ,
       length = alongX ? wall.maxX - wall.minX : wall.maxZ - wall.minZ,
       cx = (wall.minX + wall.maxX) / 2,
@@ -180,6 +189,13 @@ export function buildVillageArchitecture(
         beam(0.05, 1.2, 0.08, 0, 0.95, 0.04, timber, group);
         beam(0.96, 0.045, 0.08, 0, 1.53, 0.04, timber, group);
         beam(1.24, 0.12, 0.63, 0, 0.81, 0, stone, group);
+        for (const side of [-1, 1]) {
+          for (const x of [-0.77, 0.77]) {
+            beam(0.35, 1.15, 0.055, x, 0.96, side * 0.225, mint, group);
+            for (const y of [1.08, 1.9])
+              beam(0.36, 0.065, 0.065, x, y, side * 0.249, timber, group);
+          }
+        }
         const pane = mesh(new THREE.PlaneGeometry(0.96, 1.2), glass, group);
         pane.position.set(0, 1.55, 0.015);
         pane.castShadow = false;
@@ -239,7 +255,14 @@ export function buildVillageArchitecture(
     },
   ]) {
     const roof = new THREE.Group();
+    roof.userData.placeId = b.id;
     roof.position.set(b.x, b.height, b.z);
+    const library = b.id === 'library';
+    const tile = surfaces.material('roof', {
+      tint: library ? new THREE.Color(0.99, 1.65, 1.7) : new THREE.Color(2.15, 1.1, 0.74),
+      normalStrength: 0.9,
+      side: THREE.DoubleSide,
+    });
     root.add(roof);
     roofs.push(roof);
     const half = b.width / 2 + 0.32,
@@ -316,10 +339,62 @@ export function buildVillageArchitecture(
       shape.closePath();
       const face = mesh(
         surfaceUV(new THREE.ExtrudeGeometry(shape, { depth: 0.16, bevelEnabled: false }), 2),
-        b.id === 'workshop' ? timber : stone,
+        library ? stone : cream,
         roof,
       );
       face.position.z = z - 0.08;
+    }
+    if (library) {
+      // The lantern tower gives the reading room a landmark above the tree line.
+      const towerZ = 1.5,
+        base = rise - 0.32;
+      beam(1.76, 1.3, 1.76, 0, base, towerZ, cream, roof);
+      for (const x of [-0.82, 0.82])
+        for (const z of [towerZ - 0.82, towerZ + 0.82])
+          beam(0.14, 1.35, 0.14, x, base, z, timber, roof);
+      for (const side of [-1, 1]) {
+        for (let slit = -1; slit <= 1; slit++) {
+          beam(0.15, 0.62, 0.05, slit * 0.3, base + 0.36, towerZ + side * 0.89, mint, roof);
+          beam(0.05, 0.62, 0.15, side * 0.89, base + 0.36, towerZ + slit * 0.3, mint, roof);
+        }
+      }
+      const spire = mesh(new THREE.ConeGeometry(1.68, 1.82, 4), mint, roof);
+      spire.rotation.y = Math.PI / 4;
+      spire.position.set(0, base + 2.2, towerZ);
+      const finial = mesh(new THREE.SphereGeometry(0.12, 10, 8), brass, roof);
+      finial.position.set(0, base + 3.12, towerZ);
+    } else {
+      // The flue meets the workshop's roof on the far slope, leaving the entry face open.
+      const flueX = -1.58,
+        flueZ = -3.6;
+      beam(0.85, 1.82, 0.95, flueX, rise - 0.86, flueZ, stone, roof);
+      beam(1.02, 0.16, 1.13, flueX, rise + 0.92, flueZ, cream, roof);
+      for (const z of [flueZ - 0.23, flueZ + 0.23]) {
+        const pot = mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.44, 10), clay, roof);
+        pot.position.set(flueX, rise + 1.3, z);
+        const lip = mesh(new THREE.TorusGeometry(0.146, 0.041, 6, 12), clay, roof);
+        lip.rotation.x = Math.PI / 2;
+        lip.position.set(flueX, rise + 1.52, z);
+      }
+    }
+    // A striped canvas shades each door. Both awnings cantilever above eye height.
+    const awningWidth = b.gap + 0.76,
+      bands = 9,
+      band = awningWidth / bands;
+    const canvasMat = library ? mint : clay;
+    for (let i = 0; i < bands; i++) {
+      const z = b.doorZ - awningWidth / 2 + band * (i + 0.5);
+      const stripe = beam(
+        1.5,
+        0.065,
+        band,
+        b.doorX + 0.7,
+        b.height - 0.21,
+        z,
+        i % 2 ? cream : canvasMat,
+      );
+      stripe.rotation.z = -0.22;
+      beam(0.068, 0.19, band, b.doorX + 1.42, b.height - 0.5, z, i % 2 ? cream : canvasMat);
     }
     for (const z of [b.doorZ - b.gap / 2 - 0.15, b.doorZ + b.gap / 2 + 0.15])
       beam(0.25, b.height + 0.08, 0.25, b.doorX, 0, z);
@@ -403,19 +478,118 @@ export function buildVillageArchitecture(
   asset(furniture('cardboardBoxClosed'), -9, 0, -5.3, 0.65);
   asset(furniture('pottedPlant'), -9, 0, 4.3, 1.15);
   asset(furniture('radio'), -6.6, 1.2, -2, 0.32);
-  const canopy = asset(town('stall-green'), 22.5, 0, -17.5, 3.2, 0, 8.6, 8.4);
+  const canopy = new THREE.Group();
+  canopy.name = 'Lookout vine arbor';
+  canopy.userData.placeId = 'lookout';
+  root.add(canopy);
   roofs.push(canopy);
-  for (const [x, z] of [
-    [18, -22],
-    [27, -22],
-    [18, -13],
-    [27, -13],
-  ] as const)
-    asset(town('pillar-wood'), x, 0, z, 3.05, 0, 0.24, 0.24);
+  for (const x of [18, 27])
+    for (const z of [-22, -13]) {
+      beam(0.5, 0.38, 0.5, x, 0, z, stone);
+      beam(0.24, 3.08, 0.24, x, 0.37, z, timber);
+      for (const alongX of [true, false]) {
+        const towards = alongX ? (x === 18 ? 1 : -1) : z === -22 ? 1 : -1;
+        const brace = beam(
+          0.14,
+          1.15,
+          0.14,
+          x + (alongX ? towards * 0.4 : 0),
+          2.35,
+          z + (alongX ? 0 : towards * 0.4),
+          timber,
+        );
+        if (alongX) brace.rotation.z = (-towards * Math.PI) / 4;
+        else brace.rotation.x = (towards * Math.PI) / 4;
+      }
+    }
+  for (const z of [-22, -13]) beam(9.86, 0.23, 0.18, 22.5, 3.32, z, timber, canopy);
+  for (const x of [18, 27]) beam(0.2, 0.24, 9.86, x, 3.34, -17.5, timber, canopy);
+  for (let i = 0; i <= 13; i++) {
+    const z = -22 + i * 0.69;
+    if (i < 6 || i > 10) beam(9.9, 0.15, 0.12, 22.5, 3.55, z, timber, canopy);
+    else beam(2.3, 0.15, 0.12, 26.22, 3.55, z, timber, canopy);
+  }
+  // Climbing stems follow the columns and run across the slats. Only the overhead growth disappears in cutaway.
+  const arborLeaves: THREE.Matrix4[] = [];
+  for (let vine = 0; vine < 12; vine++) {
+    const x0 = vine % 2 ? 27 : 18,
+      z0 = vine % 3 ? -22 : -13;
+    const points: THREE.Vector3[] = [];
+    for (let j = 0; j <= 28; j++) {
+      const t = j / 28,
+        h = Math.min(1, t * 2.6),
+        spread = Math.max(0, (t - 1 / 2.6) * 1.62);
+      const x =
+        x0 + Math.sin(t * 13 + vine) * 0.15 + spread * (x0 === 18 ? 1 : -1) * (3 + (vine % 4));
+      const z =
+        z0 + Math.cos(t * 11 + vine) * 0.17 + spread * (z0 === -22 ? 1 : -1) * (1 + (vine % 3));
+      const y = h * 3.62 + Math.sin(t * 14 + vine) * spread * 0.18;
+      points.push(new THREE.Vector3(x, y, z));
+      for (let k = 0; k < 8; k++) {
+        dummy.position.set(
+          x + (random() - 0.5) * (0.4 + h * 0.72),
+          y + (random() - 0.53) * (0.3 + h * 0.48),
+          z + (random() - 0.5) * (0.4 + h * 0.6),
+        );
+        dummy.rotation.set(0.35 + random() * 1.5, random() * Math.PI * 2, random() * 3);
+        dummy.scale.setScalar(0.95 + random() * 0.95);
+        dummy.updateMatrix();
+        arborLeaves.push(dummy.matrix.clone());
+      }
+    }
+    mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 32, 0.032, 5, false),
+      stemMaterial,
+      canopy,
+    );
+  }
+  const arbor = new THREE.InstancedMesh(leafGeometry, leafMaterial, arborLeaves.length);
+  arborLeaves.forEach((m, i) => arbor.setMatrixAt(i, m));
+  arbor.castShadow = arbor.receiveShadow = true;
+  canopy.add(arbor);
+  // Batch static joinery by surface while keeping walls pickable and each roof independently hideable.
+  root.updateWorldMatrix(true, true);
+  const oldGeometry = new Set<THREE.BufferGeometry>();
+  function combine(target: THREE.Object3D, members: THREE.Object3D[]) {
+    const byMaterial = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const inverse = target.matrixWorld.clone().invert();
+    for (const member of members) {
+      if (
+        !(member instanceof THREE.Mesh) ||
+        member instanceof THREE.InstancedMesh ||
+        Array.isArray(member.material)
+      )
+        continue;
+      const original = member.geometry as THREE.BufferGeometry;
+      const geometry = original.index ? original.toNonIndexed() : original.clone();
+      geometry.applyMatrix4(inverse.clone().multiply(member.matrixWorld));
+      const batch = byMaterial.get(member.material) ?? [];
+      batch.push(geometry);
+      byMaterial.set(member.material, batch);
+      member.removeFromParent();
+      oldGeometry.add(original);
+    }
+    for (const [material, parts] of byMaterial) {
+      const geometry = mergeGeometries(parts);
+      if (geometry) mesh(geometry, material, target);
+      for (const part of parts) part.dispose();
+    }
+  }
+  const walls = new THREE.Group();
+  root.add(walls);
+  combine(
+    walls,
+    occluders.flatMap((wall) => [...wall.children]),
+  );
+  occluders.splice(0, occluders.length, walls, ...roofs);
+  for (const roof of roofs) combine(roof, [...roof.children]);
+  combine(root, [...root.children]);
+  for (const geometry of oldGeometry) geometry.dispose();
   resources.capture(root);
   return {
     roofs,
     occluders,
+    renderedObstacleIds,
     dispose() {
       attach.detach(root);
       root.removeFromParent();

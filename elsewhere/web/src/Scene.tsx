@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { VisitorSessionView, WorldObject } from '@elsewhere/character-interfaces';
@@ -17,7 +17,9 @@ import { createScenePrimitives, SCENE_COLORS as COLORS } from './scenePrimitives
 import { createWorldObjectModel, type WorldObjectModel } from './worldObjectModels';
 import type { WorldControlAction, WorldControlCommand } from './sceneControls';
 import { placeActorModel, resetActorPlacement } from './sceneActors';
-import { MEADOW_TRAILS } from './landscapeLayout';
+import { buildMeadowBoundary } from './meadowBoundary';
+import { buildVillagePaths } from './villagePaths';
+import { staticLayoutKey, villageScenery } from './scenery';
 import { ResourceScope, releaseObjectResources } from './sceneResources';
 import { firstVisibleIntersection } from './scenePicking';
 
@@ -55,6 +57,8 @@ export function Scene(props: Props) {
     live = useRef(props);
   live.current = props;
   const [failed, setFailed] = useState(false);
+  const world = props.snapshot?.world ?? villageScenery;
+  const layoutKey = useMemo(() => staticLayoutKey(world), [world]);
   useEffect(() => {
     const host = container.current;
     if (!host) return;
@@ -144,42 +148,18 @@ export function Scene(props: Props) {
       resources.capture(sprite);
       return sprite;
     }
-    const ground = box(64, 0.5, 52, 0x90ad78, 0, -0.465, 0);
     const occluders: THREE.Object3D[] = [];
     const pickObjects: THREE.Object3D[] = [],
       objectModels = new Map<string, WorldObjectModel>();
     const labels: THREE.Sprite[] = [];
-    let initialized = false;
     let architecture: VillageArchitecture | null = null;
     let gardens: ReturnType<typeof buildGardens> | null = null;
     let forest: ReturnType<typeof buildForest> | null = null;
     function initializeWorld() {
-      if (initialized || !live.current.snapshot) return;
-      initialized = true;
-      const w = live.current.snapshot.world,
+      const w = live.current.snapshot?.world ?? villageScenery,
         b = w.bounds;
-      ground.scale.set((b.maxX - b.minX) / 64, 1, (b.maxZ - b.minZ) / 52);
-      ground.position.x = (b.minX + b.maxX) / 2;
-      ground.position.z = (b.minZ + b.maxZ) / 2;
-      surface(ground, 'grass', (b.maxX - b.minX) / 2, (b.maxZ - b.minZ) / 2, 0xb5cfa3);
-      // The walkable boundary has a visible edge; the distant landscape is scenery.
-      const outer = new THREE.Mesh(new THREE.PlaneGeometry(360, 360), material(0x9bb48b));
-      outer.rotation.x = -Math.PI / 2;
-      outer.position.y = -0.58;
-      outer.receiveShadow = true;
-      scene.add(outer);
-      surface(outer, 'grass', 180, 180, 0xcbd8b8);
-      for (let x = b.minX; x <= b.maxX; x += 2.5)
-        for (const z of [b.minZ, b.maxZ]) {
-          box(0.12, 0.85, 0.12, COLORS.wood, x, 0, z);
-          box(2.5, 0.08, 0.08, 0x9b9d72, x, 0.57, z);
-        }
-      for (let z = b.minZ; z <= b.maxZ; z += 2.5)
-        for (const x of [b.minX, b.maxX]) {
-          box(0.12, 0.85, 0.12, COLORS.wood, x, 0, z);
-          box(0.08, 0.08, 2.5, 0x9b9d72, x, 0.57, z);
-        }
-      forest = buildForest(w, scene, attachAsset);
+      buildMeadowBoundary(b, scene, surfaces);
+      forest = buildForest(w, scene, attachAsset, surfaces);
       const entryGate = new THREE.Group();
       entryGate.position.set(b.maxX - 0.3, 0, 7);
       entryGate.rotation.y = Math.PI / 2;
@@ -202,33 +182,26 @@ export function Scene(props: Props) {
         labels.push(label(place.name, cx, cz));
       }
       function colorPlace(id: string, x1: number, x2: number, z1: number, z2: number) {
-        if (!['workshop', 'library', 'lookout'].includes(id)) return;
+        if (!['workshop', 'library'].includes(id)) return;
         const width = x2 - x1,
           depth = z2 - z1;
         const floor = new THREE.Mesh(
           new THREE.PlaneGeometry(width, depth),
           id === 'workshop'
             ? surfaces.material('timber', { repeat: [width / 2, depth / 2], normalStrength: 0.65 })
-            : id === 'library'
-              ? surfaces.material('stone', { repeat: [width / 2, depth / 2], normalStrength: 0.7 })
-              : material(0xc8bd91),
+            : surfaces.material('stone', { repeat: [width / 2, depth / 2], normalStrength: 0.7 }),
         );
         floor.rotation.x = -Math.PI / 2;
         floor.position.set((x1 + x2) / 2, 0.055, (z1 + z2) / 2);
         floor.receiveShadow = true;
         scene.add(floor);
-        if (id === 'lookout') surface(floor, 'path', width / 2, depth / 2, 0xe4ddc4);
       }
       // Every visible wall matches the server collision rectangles.
       architecture = buildVillageArchitecture(w, scene, attachAsset, surfaces);
       gardens = buildGardens(w, scene, attachAsset);
       occluders.push(...architecture.occluders);
       for (const obstacle of w.obstacles) {
-        if (
-          obstacle.id.startsWith('workshop-') ||
-          obstacle.id.startsWith('library-') ||
-          obstacle.id === 'garden-bed'
-        )
+        if (architecture.renderedObstacleIds.has(obstacle.id) || obstacle.id === 'garden-bed')
           continue;
         if (obstacle.id.includes('trunk')) continue;
         if (obstacle.id.includes('pond') || obstacle.id.includes('water')) continue;
@@ -251,22 +224,8 @@ export function Scene(props: Props) {
             0xe9e4d3,
           );
       }
-      // Winding meadow trails connect the places. Paths are visual; the server validates walking.
+      buildVillagePaths(scene, surfaces);
 
-      for (const [a, b] of MEADOW_TRAILS) {
-        const distance = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        const trail = new THREE.Mesh(new THREE.PlaneGeometry(distance, 1.6), material(0xc8bd91));
-        trail.rotation.set(-Math.PI / 2, 0, -Math.atan2(b[1] - a[1], b[0] - a[0]));
-        trail.position.set((a[0] + b[0]) / 2, 0.08, (a[1] + b[1]) / 2);
-        trail.receiveShadow = true;
-        scene.add(trail);
-        surface(trail, 'path', distance / 2, 1, 0xe4ddc4);
-      }
-
-      // An open pergola makes the lookout recognizable from both the map and on foot.
-      for (const x of [18, 27])
-        for (const z of [-22, -13]) box(0.18, 3, 0.18, COLORS.wood, x, 0, z);
-      for (let z = -22; z <= -13; z += 1.8) box(9.5, 0.13, 0.15, COLORS.wood, 22.5, 3, z);
       resources.capture(scene);
     }
 
@@ -303,7 +262,7 @@ export function Scene(props: Props) {
       pausedSeen = false,
       resetSeen = live.current.resetKey,
       focusSeen: Position | null = null,
-      controlSeen = 0,
+      controlSeen = live.current.control?.serial ?? 0,
       last = performance.now(),
       lastMove = 0,
       lastLook = 0,
@@ -317,6 +276,7 @@ export function Scene(props: Props) {
       Boolean(target.closest('input,textarea,button,[contenteditable="true"],[role="dialog"]'));
     const canWalk = () =>
       live.current.mode === 'visitor' &&
+      Boolean(live.current.snapshot && live.current.visitor) &&
       !live.current.paused &&
       !document.hidden &&
       !isTyping(document.activeElement);
@@ -445,7 +405,7 @@ export function Scene(props: Props) {
         }
         return;
       }
-      if (live.current.visitor) {
+      if (live.current.visitor && live.current.snapshot) {
         const destination = ray.ray.intersectPlane(
           new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
           new THREE.Vector3(),
@@ -479,7 +439,7 @@ export function Scene(props: Props) {
         halt();
         return;
       }
-      if (!live.current.visitor) return;
+      if (!live.current.visitor || !live.current.snapshot) return;
       if (action === 'turn-left' || action === 'turn-right') {
         yaw += action === 'turn-left' ? 0.3 : -0.3;
         live.current.onLook(yaw);
@@ -515,12 +475,53 @@ export function Scene(props: Props) {
       return predictApprovedPath(position, path, now - receipt.at, speed, cap);
     }
 
+    let lastObjects: WorldObject[] | undefined;
+    const shapeKeys = new Map<string, string>();
+    function syncObjects(objects: WorldObject[]) {
+      if (objects === lastObjects) return;
+      lastObjects = objects;
+      const shapes = new Map(
+        objects.map((o) => [
+          o.id,
+          JSON.stringify([o.kind, o.footprint, o.height, o.elevation, o.observationHeight]),
+        ]),
+      );
+      for (const [id, model] of objectModels) {
+        if (shapes.get(id) === shapeKeys.get(id)) continue;
+        model.dispose();
+        objectModels.delete(id);
+        shapeKeys.delete(id);
+        pickObjects.splice(pickObjects.indexOf(model.root), 1);
+      }
+      for (const object of objects) {
+        let model = objectModels.get(object.id);
+        if (!model) {
+          model = createWorldObjectModel(object, {
+            assets: attachAsset,
+            surfaces,
+            resources,
+            primitives,
+          });
+          scene.add(model.root);
+          objectModels.set(object.id, model);
+          shapeKeys.set(object.id, shapes.get(object.id)!);
+          pickObjects.push(model.root);
+        }
+        model.root.position.set(object.position.x, object.elevation ?? 0, object.position.z);
+      }
+    }
+
+    let initialized = false;
     function animate(now: number) {
       if (disposed) return;
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       const data = live.current;
-      initializeWorld();
+      const scenery = data.snapshot?.world ?? villageScenery;
+      if (!initialized) {
+        initializeWorld();
+        initialized = true;
+      }
       if (data.controlsRef && data.controlsRef.current !== controlsApi)
         data.controlsRef.current = controlsApi;
       if (Boolean(data.paused) !== pausedSeen) {
@@ -540,9 +541,9 @@ export function Scene(props: Props) {
         }
         lastWorldVersion = data.snapshot.world.version;
       }
-      const resident =
-        data.snapshot?.world.residents.find((r) => r.id === 'hubert') ??
-        data.snapshot?.world.residents[0];
+      const resident = data.snapshot?.world.residents.find(
+        (r) => r.id === data.snapshot?.character.id,
+      );
       if (resident) {
         const target = predicted(
           'hubert',
@@ -559,30 +560,8 @@ export function Scene(props: Props) {
         ]);
         hubert.rotation.y = resident.facing;
       }
-      for (const object of data.snapshot?.world.objects ?? []) {
-        let model = objectModels.get(object.id);
-        if (!model) {
-          model = createWorldObjectModel(object, {
-            assets: attachAsset,
-            surfaces,
-            resources,
-            primitives,
-          });
-          scene.add(model.root);
-          objectModels.set(object.id, model);
-          pickObjects.push(model.root);
-        }
-        model.root.position.set(object.position.x, object.elevation ?? 0, object.position.z);
-        model.selectionRing.visible = object.id === data.selected;
-      }
-      for (const [id, model] of objectModels) {
-        if (data.snapshot && !data.snapshot.world.objects.some((object) => object.id === id)) {
-          model.dispose();
-          objectModels.delete(id);
-          const index = pickObjects.indexOf(model.root);
-          if (index >= 0) pickObjects.splice(index, 1);
-        }
-      }
+      syncObjects(scenery.objects);
+      for (const [id, model] of objectModels) model.selectionRing.visible = id === data.selected;
       const visitors = [...(data.snapshot?.world.visitors ?? [])];
       if (data.visitor && !visitors.some((visitor) => visitor.id === data.visitor!.visitorId))
         visitors.push({ id: data.visitor.visitorId, name: 'Visitor', ...data.visitor });
@@ -639,7 +618,7 @@ export function Scene(props: Props) {
       }
       if (data.mode === 'visitor' && data.visitor) {
         orbit.enabled = false;
-        hubert.visible = true;
+        hubert.visible = Boolean(resident);
         if (canWalk()) {
           const turn =
             (keys.has('arrowleft') || keys.has('q') ? 1 : 0) - (keys.has('arrowright') ? 1 : 0);
@@ -703,7 +682,7 @@ export function Scene(props: Props) {
         camera.fov = 68;
       } else {
         orbit.enabled = !data.paused;
-        hubert.visible = true;
+        hubert.visible = Boolean(resident);
         camera.fov = 42;
         orbit.update();
       }
@@ -749,8 +728,20 @@ export function Scene(props: Props) {
         renderer.domElement.dataset.wildlife = JSON.stringify(wildlife.positions());
         atmosphere.update(runtime.simulatedAt);
       }
-      if (architecture)
-        for (const roof of architecture.roofs) roof.visible = data.mode !== 'overview';
+      if (architecture) {
+        const cutaway = data.mode === 'overview' && orbit.getDistance() < 32;
+        for (const roof of architecture.roofs) {
+          const room = scenery.places.find((place) => place.id === roof.userData.placeId)?.bounds;
+          roof.visible = !(
+            cutaway &&
+            room &&
+            orbit.target.x >= room.minX &&
+            orbit.target.x <= room.maxX &&
+            orbit.target.z >= room.minZ &&
+            orbit.target.z <= room.maxZ
+          );
+        }
+      }
       camera.updateProjectionMatrix();
       const diagnostic = JSON.stringify({
         x: Number(camera.position.x.toFixed(3)),
@@ -770,6 +761,9 @@ export function Scene(props: Props) {
       renderer.render(scene, camera);
       if (now - lastDiagnostics > 750) {
         renderer.domElement.dataset.renderStats = JSON.stringify({
+          buildings: architecture?.roofs.filter((roof) => roof.visible).length ?? 0,
+          objects: objectModels.size,
+          residentVisible: hubert.visible,
           drawCalls: renderer.info.render.calls,
           triangles: renderer.info.render.triangles,
           geometries: renderer.info.memory.geometries,
@@ -813,7 +807,7 @@ export function Scene(props: Props) {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, []);
+  }, [layoutKey]);
 
   const label =
     props.mode === 'visitor'

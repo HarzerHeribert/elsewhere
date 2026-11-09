@@ -6,6 +6,7 @@ import type {
   PublicWorldEntity,
   VisitorSessionView,
 } from '@elsewhere/character-interfaces';
+import { villageScenery } from '../scenery';
 import { WorldMap } from '../WorldMap';
 import { EntityDetails, WildlifeDirectory } from '../WildlifePanel';
 import { Icon } from '../Icon';
@@ -34,6 +35,8 @@ export function MapPanel({
   onWalk: (position: Position) => Promise<void>;
   onSelectObject: (id: string) => void;
 }) {
+  const world = snapshot?.world ?? villageScenery;
+  const places = world.places.filter((place) => place.id !== 'meadow');
   return (
     <>
       <p className="panel-intro">A few places to get wonderfully sidetracked.</p>
@@ -46,34 +49,30 @@ export function MapPanel({
       <div className="exploration-count">
         <span>Your field journal</span>
         <strong>
-          {snapshot?.world.places.filter((p) => p.id !== 'meadow' && discovered.includes(p.id))
-            .length ?? 0}{' '}
-          / {snapshot?.world.places.filter((p) => p.id !== 'meadow').length ?? 0}
+          {places.filter((place) => discovered.includes(place.id)).length} / {places.length}
         </strong>
       </div>
       <div className="place-list">
-        {snapshot?.world.places
-          .filter((p) => p.id !== 'meadow')
-          .map((p, i) => (
-            <button key={p.id} onClick={() => onFocusPlace(placeCenter(p), p.id)}>
-              <span className="place-number">
-                {discovered.includes(p.id) ? '✓' : String(i + 1).padStart(2, '0')}
-              </span>
-              <span>
-                {p.name}
-                <small>
-                  {discovered.includes(p.id) ? 'Visited on this walk' : 'Waiting to be explored'}
-                </small>
-              </span>
-              <Icon name="arrow" />
-            </button>
-          ))}
+        {places.map((p, i) => (
+          <button key={p.id} onClick={() => onFocusPlace(placeCenter(p), p.id)}>
+            <span className="place-number">
+              {discovered.includes(p.id) ? '✓' : String(i + 1).padStart(2, '0')}
+            </span>
+            <span>
+              {p.name}
+              <small>
+                {discovered.includes(p.id) ? 'Visited on this walk' : 'Waiting to be explored'}
+              </small>
+            </span>
+            <Icon name="arrow" />
+          </button>
+        ))}
       </div>
       <WildlifeDirectory entities={snapshot?.world.entities ?? []} onSelect={onSelectObject} />
       <details className="object-directory">
         <summary>Look around the objects</summary>
         <div>
-          {snapshot?.world.objects.map((o) => (
+          {world.objects.map((o) => (
             <button key={o.id} onClick={() => onSelectObject(o.id)}>
               {o.name}
               <Icon name="arrow" />
@@ -96,7 +95,7 @@ export function PlacePanel({
   place: Place;
   objects: PublicWorldObject[];
   discovered: boolean;
-  onWalk: (position: Position) => Promise<void>;
+  onWalk?: (position: Position) => Promise<void>;
   onSelectObject: (id: string) => void;
   onBack: () => void;
 }) {
@@ -104,7 +103,11 @@ export function PlacePanel({
     <>
       <span className="tag">{discovered ? 'In your field journal' : 'Somewhere new'}</span>
       <p className="large-copy">{place.description}</p>
-      <button className="primary-button full-width" onClick={() => void onWalk(placeCenter(place))}>
+      <button
+        className="primary-button full-width"
+        disabled={!onWalk}
+        onClick={() => void onWalk?.(placeCenter(place))}
+      >
         <Icon name="walk" />
         Walk toward here
       </button>

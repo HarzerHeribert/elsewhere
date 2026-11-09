@@ -28,10 +28,12 @@ export function MessagesPanel({
           <strong>Hubert</strong>
           <small>A note, whenever</small>
         </div>
-        <i className="presence" />
+        {connected && <i className="presence" />}
       </div>
       <p className="panel-intro">
-        Leave a thought in his mailbox. He can return to it in his own time.
+        {connected
+          ? 'Leave a thought in his mailbox. He can return to it in his own time.'
+          : 'You can leave Hubert a note when the live world reconnects. Your draft stays in this window.'}
       </p>
       <div className="delivery-history">
         {receipts.map((r) => (

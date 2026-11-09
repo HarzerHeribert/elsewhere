@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WorldObject } from '@elsewhere/character-interfaces';
 import { WORLD_ASSETS, type AttachWorldAsset } from './worldAssets';
+import { addTreeCrowns } from './treeCrowns';
 import type { createEnvironmentMaterials } from './materials';
 import { ResourceScope, releaseObjectResources } from './sceneResources';
 import { decorative } from './scenePicking';
@@ -97,12 +98,12 @@ function buildTree(context: WorldObjectBuildContext) {
   const wrapper = new THREE.Group();
   group.add(wrapper);
   const height = 3.5 * 1.3;
+  addTreeCrowns(wrapper, [{ x: 0, y: 0, z: 0, height }], context.surfaces, true);
   attachAsset(wrapper, WORLD_ASSETS.tree, { height, anchorXZ: 'origin', maxDistance: 34 });
   attachAsset(wrapper, WORLD_ASSETS.treeLow, {
     height,
     anchorXZ: 'origin',
     minDistance: 34,
-    maxDistance: 118,
     shadow: false,
   });
 }
