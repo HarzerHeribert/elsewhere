@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { ElsewhereController, type ControllerState } from '../app/controller';
 import { SqliteSnapshotStore } from '../packages/persistence/src/index';
 import { observeWorld } from '../elsewhere/server/src/world';
+import { readableSources } from '../characters/hubert/src/research';
 import { workingContext } from '../characters/hubert/src/index';
 
 it('lets Hubert choose an observed topic and read it, without transmitting a private note or publishing page text', async () => {
@@ -93,6 +94,59 @@ it('defers unsupported targets without dispatching a user-chosen query', async (
     await c.step();
     expect(search).not.toHaveBeenCalled();
     expect((await backing.load())!.value.hubert.intent).toContain('no longer available');
+  } finally {
+    await c.close();
+  }
+});
+
+it('backs off unreadable sources and drops expired offers without inventing a reading memory', async () => {
+  let now = Date.UTC(2026, 10, 9, 12);
+  const backing = new SqliteSnapshotStore<ControllerState>(':memory:');
+  const source = {
+    id: 'source-' + 'b'.repeat(24),
+    title: 'Unavailable page',
+    url: 'https://example.com/birds',
+    snippet: 'A source.',
+  };
+  let turn = 0;
+  const read = vi.fn(async () => {
+    throw Error('Unavailable');
+  });
+  const c = await new ElsewhereController(backing, {
+    now: () => now,
+    modelProvider: {
+      id: 'fixture',
+      propose: async (context) =>
+        ++turn === 1
+          ? {
+              type: 'research',
+              targetId: (context.state.research as { targets: { id: string }[] }).targets[0].id,
+            }
+          : { type: 'read', sourceId: source.id },
+    },
+    research: {
+      search: async (input) => ({
+        kind: 'search',
+        receiptId: 'search-backoff',
+        provider: 'searxng',
+        query: input.query,
+        fetchedAt: now,
+        cached: false,
+        sources: [source],
+      }),
+      read,
+    },
+  }).init();
+  try {
+    await c.step();
+    now += 120001;
+    await c.step();
+    const state = (await backing.load())!.value.hubert;
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(state.memories.some((m) => m.source === 'web-reading')).toBe(false);
+    expect(readableSources(state, now + 120001)).toEqual([]);
+    expect(readableSources(state, now + 6 * 3600000)).toHaveLength(1);
+    expect(readableSources(state, now + 24 * 3600000)).toEqual([]);
   } finally {
     await c.close();
   }

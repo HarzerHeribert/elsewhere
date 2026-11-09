@@ -12,7 +12,7 @@ This is the first running external connector. Hubert chooses `research` for an o
 - `reader.ts` follows only public HTTPS URLs returned by search, resolves and pins public DNS addresses on every redirect, rejects private/link-local/reserved answers and non-443 ports, and never sends cookies or service credentials. It does not execute JavaScript or load subresources. It bounds network time, response bytes, decompression, extracted text and redirects. Some sites cannot be read this way.
 - RPC requires a separate bearer and an exact owner/character binding; browser Origin requests are denied. Research credentials cannot authorize inference. There is no public visitor search endpoint.
 
-Hubert waits at least two real minutes between research actions and six hours between searches for the same target. Reading occupies an activity interval. The last two bounded reading excerpts enter context as untrusted external data; up to 32 web-reading memories remain alongside existing life episodes. These records are factual reading receipts, not authored thoughts or proof that a page's claims are true.
+Hubert waits at least two real minutes between research actions and six hours between searches for the same target. Unreadable sources back off for six hours; source offers expire after 24 hours. Reading occupies an activity interval. The last two bounded reading excerpts enter context as untrusted external data; up to 32 web-reading memories remain alongside existing life episodes. These records are factual reading receipts, not authored thoughts or proof that a page's claims are true.
 
 ## Local and portable deployment
 
