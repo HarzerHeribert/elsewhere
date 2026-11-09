@@ -213,7 +213,7 @@ describe('protected ChatGPT session handoff', () => {
     const transport = vi.fn();
     for (const invalid of [
       '-oProxyCommand=cat',
-      'srv-ok@evil.test',
+      'user:password@host.example',
       'srv-ok@ssh.frankfurt.render.com;cat',
     ])
       await expect(
@@ -229,6 +229,46 @@ describe('protected ChatGPT session handoff', () => {
     ).rejects.toThrow('transfer_unconfirmed_source_disabled');
     expect(local.load()?.transfer?.state).toBe('pending');
     expect(new ChatGPTSession(local).isAvailable()).toBe(false);
+  });
+
+  it('supports an explicit VPS SSH alias and pins the destination container through retries', async () => {
+    const local = fixtureStore().store;
+    const remote = fixtureStore().store;
+    local.save(account());
+    const transport = vi.fn(async (target, payload, container) => {
+      expect(target).toBe('owner-vm');
+      expect(container).toBe('hubert-inference');
+      await importChatGPTTransfer(remote, payload, ownerUserId);
+      throw new Error('Lost acknowledgment');
+    });
+    await expect(
+      transferChatGPTSession(local, {
+        destination: 'owner-vm',
+        ownerUserId,
+        container: 'hubert-inference',
+        transport,
+      }),
+    ).rejects.toThrow('unconfirmed');
+    expect(local.load()?.transfer?.container).toBe('hubert-inference');
+    await expect(
+      transferChatGPTSession(local, {
+        destination: 'owner-vm',
+        ownerUserId,
+        container: 'another-container',
+        transport,
+      }),
+    ).rejects.toThrow('binding_mismatch');
+    expect(transport).toHaveBeenCalledTimes(1);
+    for (const invalid of ['-it', 'name;cat', 'name with spaces']) {
+      await expect(
+        transferChatGPTSession(local, {
+          destination: 'owner-vm',
+          ownerUserId,
+          container: invalid,
+          transport,
+        }),
+      ).rejects.toThrow('invalid_transfer');
+    }
   });
 
   it('uses pinned non-interactive SSH and transmits tokens only through stdin', async () => {
@@ -258,7 +298,11 @@ describe('protected ChatGPT session handoff', () => {
       child.emit('close', 0);
     });
     vi.mocked(spawn).mockReturnValueOnce(child as unknown as ReturnType<typeof spawn>);
-    await transferChatGPTSession(local, { destination, ownerUserId });
+    await transferChatGPTSession(local, {
+      destination: 'owner@vps.example.test',
+      ownerUserId,
+      container: 'hubert-inference',
+    });
     const args = vi.mocked(spawn).mock.calls[0];
     expect(args[0]).toBe('ssh');
     expect(args[1]).toEqual(
@@ -266,7 +310,11 @@ describe('protected ChatGPT session handoff', () => {
         '-T',
         '-oBatchMode=yes',
         '-oStrictHostKeyChecking=yes',
-        destination,
+        'owner@vps.example.test',
+        'docker',
+        'exec',
+        '-i',
+        'hubert-inference',
         '/app/dist/inference-operator.mjs',
       ]),
     );

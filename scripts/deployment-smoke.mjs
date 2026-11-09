@@ -146,7 +146,17 @@ try {
     inferenceEnv,
     false,
     values.image,
-    ['--mount', `type=volume,source=${inferenceVolume},target=/var/lib/elsewhere-inference`],
+    [
+      '--read-only',
+      '--cap-drop',
+      'ALL',
+      '--security-opt',
+      'no-new-privileges:true',
+      '--tmpfs',
+      '/tmp:rw,noexec,nosuid,size=32m',
+      '--mount',
+      `type=volume,source=${inferenceVolume},target=/var/lib/elsewhere-inference`,
+    ],
     ['node', 'dist/inference.mjs'],
   );
   await until(

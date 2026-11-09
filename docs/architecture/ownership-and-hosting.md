@@ -20,6 +20,8 @@ Connector proposals contain opaque binding/capability/resource IDs. The host sup
 
 ## Hosted process boundary
 
+The service can also run on an existing personal VPS; see [VPS setup and SSH/Docker handoff](vps-inference.md). Render is an optional deployment profile rather than a runtime dependency.
+
 ```mermaid
 flowchart LR
   visitor[Public visitor] --> web[Vercel web]

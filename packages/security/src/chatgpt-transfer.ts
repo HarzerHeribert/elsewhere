@@ -16,9 +16,9 @@ const profileSchema = z
 const ownerSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 const destinationSchema = z
   .string()
-  .regex(
-    /^srv-[a-z0-9]{1,64}(?:-[a-z0-9]{5})?@ssh\.(?:oregon|ohio|virginia|frankfurt|singapore)\.render\.com$/,
-  );
+  .max(200)
+  .regex(/^(?:[a-zA-Z_][a-zA-Z0-9_.-]{0,63}@)?[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/);
+const containerSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/);
 export const chatGPTTransferEnvelopeSchema = z
   .object({
     format: z.literal('elsewhere-chatgpt-session-transfer-v1'),
@@ -48,6 +48,7 @@ export type ChatGPTTransferAck = z.infer<typeof chatGPTTransferAckSchema>;
 type TransferTransport = (
   destination: string,
   envelope: ChatGPTTransferEnvelope,
+  container?: string,
 ) => Promise<unknown>;
 
 function acknowledgment(envelope: {
@@ -67,6 +68,7 @@ function acknowledgment(envelope: {
 async function sshTransfer(
   destination: string,
   envelope: ChatGPTTransferEnvelope,
+  container?: string,
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -76,9 +78,11 @@ async function sshTransfer(
         '-oBatchMode=yes',
         '-oStrictHostKeyChecking=yes',
         '-oConnectTimeout=15',
+        ...(process.platform === 'darwin' ? ['-oUseKeychain=yes'] : []),
         '-oForwardAgent=no',
         '-oClearAllForwardings=yes',
         destination,
+        ...(container ? ['docker', 'exec', '-i', container] : []),
         'node',
         '/app/dist/inference-operator.mjs',
         'import',
@@ -133,11 +137,17 @@ async function sshTransfer(
  */
 export async function transferChatGPTSession(
   store: ChatGPTStore,
-  options: { destination: string; ownerUserId: string; transport?: TransferTransport },
+  options: {
+    destination: string;
+    ownerUserId: string;
+    container?: string;
+    transport?: TransferTransport;
+  },
 ): Promise<ChatGPTTransferAck> {
   if (
     !destinationSchema.safeParse(options.destination).success ||
-    !ownerSchema.safeParse(options.ownerUserId).success
+    !ownerSchema.safeParse(options.ownerUserId).success ||
+    (options.container !== undefined && !containerSchema.safeParse(options.container).success)
   )
     throw new ChatGPTError('invalid_transfer_destination_or_owner');
   return store.exclusive(async () => {
@@ -148,6 +158,7 @@ export async function transferChatGPTSession(
       previous &&
       (previous.state === 'received' ||
         previous.ownerUserId !== options.ownerUserId ||
+        previous.container !== options.container ||
         previous.destination !== options.destination)
     )
       throw new ChatGPTError('transfer_binding_mismatch');
@@ -178,12 +189,17 @@ export async function transferChatGPTSession(
         state: 'pending',
         ownerUserId: options.ownerUserId,
         destination: options.destination,
+        ...(options.container ? { container: options.container } : {}),
       },
     };
     store.save(pending);
     try {
       const received = chatGPTTransferAckSchema.safeParse(
-        await (options.transport ?? sshTransfer)(options.destination, parsed.data),
+        await (options.transport ?? sshTransfer)(
+          options.destination,
+          parsed.data,
+          options.container,
+        ),
       );
       if (!received.success || JSON.stringify(received.data) !== JSON.stringify(expected))
         throw new ChatGPTError('transfer_acknowledgment_mismatch');

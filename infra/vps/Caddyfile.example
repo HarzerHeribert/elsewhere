@@ -1,0 +1,11 @@
+# Add a dedicated site to your existing proxy; do not replace unrelated sites.
+# Set HUBERT_INFERENCE_HOST to a hostname pointing at this VPS.
+{$HUBERT_INFERENCE_HOST} {
+    @hubert_routes path /v1/decision /v1/reflection /readyz
+    handle @hubert_routes {
+        reverse_proxy 127.0.0.1:4100
+    }
+    handle {
+        respond "Not found" 404
+    }
+}
