@@ -12,6 +12,8 @@ import { admin } from 'better-auth/plugins';
 import { oneTimeToken } from 'better-auth/plugins/one-time-token';
 import { magicLink } from 'better-auth/plugins/magic-link';
 import { AuthMailBudget, type AuthMailLimits } from './mail-budget';
+import { mutateCredentialPolicy, CredentialPolicyError } from './credential-policy';
+import { AuthMutationLocks, AuthMutationBusy } from './mutation-lock';
 import type { AccountSummary } from '@elsewhere/character-interfaces';
 export type { AccountSummary } from '@elsewhere/character-interfaces';
 export { authOptionsFromEnvironment } from './environment';
@@ -283,7 +285,8 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   ]);
   // World administration grants no authority over other people's accounts. Keep the admin
   // plugin's role schema while deliberately withholding all of its public account-admin APIs.
-  const webHandler = async (request: Request): Promise<Response> => {
+  const mutationLocks = new AuthMutationLocks();
+  const webHandler = async (request: Request, mutationLocked = false): Promise<Response> => {
     const failure = (status: number, message: string) => Response.json({ message }, { status });
     const validReturn = (value: unknown) => {
       if (value === undefined || value === null) return true;
@@ -320,16 +323,27 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     if (origin && !allowedOrigins.has(origin)) return failure(403, 'Origin is not permitted.');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !origin)
       return failure(403, 'A trusted origin is required for authentication changes.');
+    if (
+      !mutationLocked &&
+      (sensitiveAuthRoutes.has(path) || path === '/api/auth/security/owner-passkey')
+    ) {
+      const current = await sessionFromHeaders(request.headers);
+      if (current) {
+        if (current.user.ownerControlsRequirePasskey && !freshPasskey(current.session))
+          return failure(403, 'Verify a passkey to change protected sign-in methods.');
+        try {
+          return await mutationLocks.run(current.user.id, () => webHandler(request, true));
+        } catch (error) {
+          if (error instanceof AuthMutationBusy)
+            return failure(429, 'Please retry this account change shortly.');
+          throw error;
+        }
+      }
+    }
     if (sensitiveAuthRoutes.has(path)) {
       const current = await sessionFromHeaders(request.headers);
       if (current?.user.ownerControlsRequirePasskey && !freshPasskey(current.session))
         return failure(403, 'Verify a passkey to change protected sign-in methods.');
-      if (
-        path === '/api/auth/passkey/delete-passkey' &&
-        current?.user.ownerControlsRequirePasskey &&
-        (await passkeysFor(current.user.id)).length <= 1
-      )
-        return failure(403, 'Turn off passkey protection before removing the last passkey.');
     }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
       if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))
@@ -402,12 +416,52 @@ export async function createLocalAuth(options: LocalAuthOptions) {
             403,
             'Sign in with a passkey, then change this setting within five minutes.',
           );
-        await (
-          await auth.$context
-        ).internalAdapter.updateUser(current.user.id, {
-          ownerControlsRequirePasskey: input.required,
-        });
+        try {
+          await mutateCredentialPolicy(
+            { sqlite, pool },
+            current.user.id,
+            { type: 'policy', required: input.required },
+            freshPasskey(current.session),
+          );
+        } catch (error) {
+          if (error instanceof CredentialPolicyError) return failure(error.status, error.message);
+          throw error;
+        }
         return Response.json({ ok: true }, { headers: { 'cache-control': 'no-store' } });
+      }
+      if (path === '/api/auth/passkey/delete-passkey') {
+        if (request.method !== 'POST') return failure(405, 'Use POST.');
+        let input: unknown;
+        try {
+          input = JSON.parse(body.toString());
+        } catch {
+          return failure(400, 'Invalid passkey.');
+        }
+        if (
+          !input ||
+          typeof input !== 'object' ||
+          Array.isArray(input) ||
+          Object.keys(input).length !== 1 ||
+          !('id' in input) ||
+          typeof input.id !== 'string' ||
+          !/^[a-zA-Z0-9_-]{1,128}$/.test(input.id)
+        )
+          return failure(400, 'Invalid passkey.');
+        const current = await sessionFromHeaders(request.headers);
+        if (!current || ('banned' in current.user && current.user.banned))
+          return failure(401, 'Sign in before changing account security.');
+        try {
+          await mutateCredentialPolicy(
+            { sqlite, pool },
+            current.user.id,
+            { type: 'delete', id: input.id },
+            freshPasskey(current.session),
+          );
+        } catch (error) {
+          if (error instanceof CredentialPolicyError) return failure(error.status, error.message);
+          throw error;
+        }
+        return Response.json({ status: true }, { headers: { 'cache-control': 'no-store' } });
       }
       if (path === '/api/auth/sign-in/magic-link') {
         let input: Record<string, unknown>;
@@ -539,6 +593,12 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       throw new Error('Operator sign-in link could not be issued.');
     }
   }
+  async function recoverOwnerPasskeys(userId: string) {
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(userId)) throw new Error('Invalid operator identifier.');
+    await mutationLocks.run(userId, () =>
+      mutateCredentialPolicy({ sqlite, pool }, userId, { type: 'recover' }, false),
+    );
+  }
   // Deliberately not mounted as an HTTP endpoint. Only a trusted out-of-band owner command may call it.
   async function setWorldAdmin(userId: string, enabled = true): Promise<void> {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(userId)) throw new Error('Invalid user identifier.');
@@ -566,6 +626,7 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     setWorldAdmin,
     createOperatorAccount,
     issueOperatorSignIn,
+    recoverOwnerPasskeys,
     passwordAuthEnabled,
     emailLinkAuthEnabled,
     passkeyAuthEnabled,

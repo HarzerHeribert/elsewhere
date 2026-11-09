@@ -20,7 +20,8 @@ describe.runIf(Boolean(connectionString))('durable PostgreSQL auth-email admissi
       });
       const first = new AuthMailBudget({ pool }, 'fixture-mail-secret', { maxPerDay: 5 }),
         second = new AuthMailBudget({ pool }, 'fixture-mail-secret', { maxPerDay: 5 });
-      await Promise.all([first.init(), second.init()]);
+      await first.init();
+      await second.init();
       const attempts = await Promise.all(
         Array.from({ length: 16 }, (_, i) =>
           (i % 2 ? first : second).reserve(`person${i}@example.invalid`),

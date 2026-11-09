@@ -31,9 +31,7 @@ export interface ApiAuth {
   passwordAuthEnabled?: boolean;
   emailLinkAuthEnabled?: boolean;
   passkeyAuthEnabled?: boolean;
-  getSecurityState?(
-    req: IncomingMessage,
-  ): Promise<{
+  getSecurityState?(req: IncomingMessage): Promise<{
     ownerControlsRequirePasskey: boolean;
     ownerControlsUnlocked: boolean;
     passkeyVerifiedRecently: boolean;
@@ -860,6 +858,7 @@ export function createApiServer(deps: ApiDependencies) {
             throw new HttpError(400, 'Wish decision must be fulfill or decline.');
           if (!(await managesCharacter()))
             throw new HttpError(403, 'Character ownership is required.');
+          await requireControlAssurance();
           send(200, publicSnapshot(await deps.resolveWish(wishId, body.decision)));
           return;
         }
@@ -882,6 +881,7 @@ export function createApiServer(deps: ApiDependencies) {
           !(await managesCharacter())
         )
           throw new HttpError(403, 'Character ownership or world moderation is required.');
+        await requireControlAssurance();
         const result = await handlers[action]();
         if (action === 'reset') visitors.clear();
         send(200, publicSnapshot(result));

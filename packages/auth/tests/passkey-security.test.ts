@@ -96,6 +96,7 @@ it('requires explicit opt-in after a fresh trusted passkey login, then blocks em
       )
     ).status,
   ).toBe(400);
+  await f.post('update-session', { authMethod: 'passkey', authTime: Date.now() }, strongCookie);
   await f.post(
     'update-user',
     { ownerControlsRequirePasskey: true, authMethod: 'passkey', authTime: Date.now() },
@@ -172,6 +173,65 @@ it('requires explicit opt-in after a fresh trusted passkey login, then blocks em
       id: f.userId,
       isWorldAdmin: true,
     });
+  } finally {
+    db.close();
+  }
+});
+
+it('serializes final-key deletion with policy toggles and gives lost-key recovery only to the private operator', async () => {
+  const f = await fixture(),
+    cookie = await f.signIn();
+  const db = new Database(join(f.dir, 'auth.sqlite'));
+  const key = (id: string) =>
+    db
+      .prepare(
+        'INSERT INTO elsewhere_auth_passkey(id,name,publicKey,userId,credentialID,counter,deviceType,backedUp,createdAt) VALUES(?,?,?,?,?,?,?,?,?)',
+      )
+      .run(id, 'Device', 'fixture-public-key', f.userId, id, 0, 'singleDevice', 0, Date.now());
+  try {
+    key('key-one');
+    key('key-two');
+    db.prepare('UPDATE elsewhere_auth_session SET authMethod=?,authTime=? WHERE userId=?').run(
+      'passkey',
+      Date.now(),
+      f.userId,
+    );
+    expect((await f.post('security/owner-passkey', { required: true }, cookie)).status).toBe(200);
+    const deletes = await Promise.all(
+      ['key-one', 'key-two'].map((id) => f.post('passkey/delete-passkey', { id }, cookie)),
+    );
+    expect(deletes.map((r) => r.status).sort()).toEqual([200, 403]);
+    expect(
+      (db.prepare('SELECT COUNT(*) AS n FROM elsewhere_auth_passkey').get() as { n: number }).n,
+    ).toBe(1);
+    expect((await f.post('security/owner-passkey', { required: false }, cookie)).status).toBe(200);
+    const id = (db.prepare('SELECT id FROM elsewhere_auth_passkey').get() as { id: string }).id;
+    const races = await Promise.all([
+      f.post('security/owner-passkey', { required: true }, cookie),
+      f.post('passkey/delete-passkey', { id }, cookie),
+    ]);
+    expect(races.map((r) => r.status).sort()).toEqual([200, 403]);
+    const required = (await f.auth.getSecurityState(req(cookie)))!.ownerControlsRequirePasskey;
+    const count = (
+      db.prepare('SELECT COUNT(*) AS n FROM elsewhere_auth_passkey').get() as { n: number }
+    ).n;
+    expect(required && count === 0).toBe(false);
+    await f.auth.recoverOwnerPasskeys(f.userId);
+    expect(await f.auth.getAccount(req(cookie))).toBeNull();
+    expect(
+      (db.prepare('SELECT COUNT(*) AS n FROM elsewhere_auth_passkey').get() as { n: number }).n,
+    ).toBe(0);
+    const recovered = await f.signIn();
+    expect(await f.auth.getAccount(req(recovered))).toMatchObject({
+      id: f.userId,
+      isWorldAdmin: true,
+    });
+    expect(await f.auth.getSecurityState(req(recovered))).toMatchObject({
+      ownerControlsRequirePasskey: false,
+      ownerControlsUnlocked: true,
+      passkeyVerifiedRecently: false,
+    });
+    await expect(f.auth.recoverOwnerPasskeys('missing-account')).rejects.toThrow();
   } finally {
     db.close();
   }
