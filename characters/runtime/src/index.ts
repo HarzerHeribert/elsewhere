@@ -1,6 +1,7 @@
 /** Provider-independent memory and context machinery. Private memories never become world state. */
 export * from './progress';
 export * from './dreams';
+export * from './decision-errors';
 export type MemoryCueKind = 'place' | 'object' | 'entity' | 'person' | 'phrase';
 export interface MemoryCue {
   kind: MemoryCueKind;

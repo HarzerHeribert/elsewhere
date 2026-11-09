@@ -1,4 +1,5 @@
 import { availableInterestChoices, type HubertInterestChoiceState } from './interestChoices';
+import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
 import type { HubertNotebookState } from './notebook';
 import { HUBERT_IDENTITY, bodyLanguage } from './persona';
 import { hubertDreamActions, hubertDreamSources } from './dreams';
@@ -140,6 +141,7 @@ export interface HubertState {
   research?: HubertResearchState;
   notebook?: HubertNotebookState;
   interestChoices?: HubertInterestChoiceState;
+  lastDecisionProblem?: { at: number; code: string; message: string; fields: string[] };
 }
 export interface OutsideEvent {
   id: string;
@@ -1001,6 +1003,7 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
     })),
     lastOutcome: state.lastOutcome ? { ...state.lastOutcome } : null,
     lastProposal: state.lastProposal ? { ...state.lastProposal } : null,
+    lastDecisionProblem: state.lastDecisionProblem ? { ...state.lastDecisionProblem } : null,
     progressAdvice: state.progressGuidance
       ? {
           kind: state.progressGuidance.kind,
@@ -1093,10 +1096,18 @@ export async function chooseActionWithProvider(
   const result = await provider.propose(
     workingContext(state, observation, nowReal, researchEnabled),
   );
-  const action = CharacterCommandSchema.parse(result);
+  const parsed = CharacterCommandSchema.safeParse(result);
+  if (!parsed.success)
+    throw new InvalidDecisionError('invalid_action', invalidDecisionFields(parsed.error));
+  const action = parsed.data;
   const assessment = assessHubertSpatialAction(state, observation, action, now);
   if (assessment.status === 'unavailable')
-    throw new Error(`Provider proposed an unavailable action: ${assessment.reason}`);
+    throw new InvalidDecisionError(
+      'unavailable_action',
+      [],
+      action,
+      `Provider proposed an unavailable action: ${assessment.reason}`,
+    );
   if (assessment.status === 'approach') {
     const adjusted = recordIntent(state, assessment.command, assessment.reason, now, observation);
     adjusted.state.lastProposal = {

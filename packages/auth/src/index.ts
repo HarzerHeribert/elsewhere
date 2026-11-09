@@ -9,6 +9,7 @@ import { getMigrations } from 'better-auth/db/migration';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import { admin } from 'better-auth/plugins';
 import { oneTimeToken } from 'better-auth/plugins/one-time-token';
+import { magicLink } from 'better-auth/plugins/magic-link';
 import type { AccountSummary } from '@elsewhere/character-interfaces';
 export type { AccountSummary } from '@elsewhere/character-interfaces';
 export { authOptionsFromEnvironment } from './environment';
@@ -22,6 +23,7 @@ export interface LocalAuthOptions {
   production?: boolean;
   bodyTimeoutMs?: number;
   sendVerificationEmail?: (message: { email: string; name: string; url: string }) => Promise<void>;
+  sendSignInEmail?: (message: { email: string; url: string }) => Promise<void>;
 }
 
 /** Separate from the owner token. Neither credential is passed into Hubert or a public response. */
@@ -95,6 +97,7 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   const explicitAdmins = new Set(options.adminUserIds ?? []);
   // Local development has no email sender. Public password auth remains off until delivery exists.
   const passwordAuthEnabled = !production || Boolean(options.sendVerificationEmail);
+  const emailLinkAuthEnabled = Boolean(options.sendSignInEmail);
   const allowedOrigins = new Set([base.origin, ...options.trustedOrigins]);
   const operatorTokens = oneTimeToken({
     disableClientRequest: true,
@@ -155,6 +158,17 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     plugins: [
       admin({ defaultRole: 'user', adminRoles: ['admin'], adminUserIds: [...explicitAdmins] }),
       operatorTokens,
+      ...(options.sendSignInEmail
+        ? [
+            magicLink({
+              storeToken: 'hashed',
+              expiresIn: 600,
+              disableSignUp: true,
+              rateLimit: { window: 60, max: 5 },
+              sendMagicLink: async ({ email, url }) => options.sendSignInEmail!({ email, url }),
+            }),
+          ]
+        : []),
     ],
   });
   try {
@@ -170,6 +184,16 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   // plugin's role schema while deliberately withholding all of its public account-admin APIs.
   const webHandler = async (request: Request): Promise<Response> => {
     const failure = (status: number, message: string) => Response.json({ message }, { status });
+    const validReturn = (value: unknown) => {
+      if (value === undefined || value === null) return true;
+      if (typeof value !== 'string' || value.length > 2000) return false;
+      try {
+        const target = new URL(value, base.origin);
+        return target.origin === base.origin && !target.username && !target.password;
+      } catch {
+        return false;
+      }
+    };
     let path: string;
     try {
       path = decodeURIComponent(new URL(request.url).pathname);
@@ -182,6 +206,15 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       return failure(403, 'Account-administration endpoints are not enabled.');
     if (path === '/api/auth/one-time-token/generate')
       return failure(403, 'Sign-in links are issued only by the private operator command.');
+    if (path === '/api/auth/magic-link/verify') {
+      const parameters = new URL(request.url).searchParams;
+      if (
+        ['callbackURL', 'newUserCallbackURL', 'errorCallbackURL'].some((key) =>
+          parameters.getAll(key).some((value) => !validReturn(value)),
+        )
+      )
+        return failure(403, 'Sign-in returns must stay on this Elsewhere instance.');
+    }
     const origin = request.headers.get('origin');
     if (origin && !allowedOrigins.has(origin)) return failure(403, 'Origin is not permitted.');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !origin)
@@ -231,11 +264,29 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       } finally {
         clearTimeout(timer);
       }
+      const body = Buffer.concat(chunks);
+      if (path === '/api/auth/sign-in/magic-link') {
+        let input: Record<string, unknown>;
+        try {
+          input = JSON.parse(body.toString());
+        } catch {
+          return failure(400, 'Invalid authentication request.');
+        }
+        if (
+          !input ||
+          typeof input !== 'object' ||
+          Array.isArray(input) ||
+          ['callbackURL', 'newUserCallbackURL', 'errorCallbackURL'].some(
+            (key) => !validReturn(input[key]),
+          )
+        )
+          return failure(403, 'Sign-in returns must stay on this Elsewhere instance.');
+      }
       const response = await auth.handler(
         new Request(request.url, {
           method: request.method,
           headers: request.headers,
-          body: Buffer.concat(chunks),
+          body,
         }),
       );
       if (path === '/api/auth/one-time-token/verify' && response.ok) {
@@ -249,7 +300,20 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       }
       return response;
     }
-    return auth.handler(request);
+    const response = await auth.handler(request);
+    if (path === '/api/auth/magic-link/verify') {
+      const headers = new Headers(response.headers);
+      headers.set('cache-control', 'no-store');
+      headers.set('referrer-policy', 'no-referrer');
+      if (response.ok) {
+        headers.set('content-type', 'application/json');
+        headers.delete('content-length');
+        await response.body?.cancel();
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+      }
+      return new Response(response.body, { status: response.status, headers });
+    }
+    return response;
   };
   const nodeHandler = toNodeHandler(webHandler);
   async function getSession(req: IncomingMessage) {
@@ -337,6 +401,7 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     createOperatorAccount,
     issueOperatorSignIn,
     passwordAuthEnabled,
+    emailLinkAuthEnabled,
     requiresEmailVerification: production,
     close: async () => {
       sqlite?.close();

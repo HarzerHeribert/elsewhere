@@ -401,10 +401,10 @@ describe('authoritative controller lifecycle', () => {
     expect(snapshot.artifacts).toEqual([]);
     expect((await store.load())!.value.hubert.project.verifiedWorkSessions).toBe(0);
     expect(snapshot.runtime.modelStatus).toBe(
-      kind === 'shell' ? 'Hubert is currently unavailable' : 'Model connected',
+      kind === 'shell' ? 'Model replied; reconsidering an unusable action' : 'Model connected',
     );
     expect(controller.getCharacterIssues()).toEqual(
-      kind === 'shell' ? [expect.objectContaining({ kind: 'failed' })] : [],
+      kind === 'shell' ? [expect.objectContaining({ kind: 'invalid', retrying: true })] : [],
     );
     if (kind !== 'shell') {
       expect(snapshot.character.currentThought).toBeUndefined();

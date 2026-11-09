@@ -18,6 +18,11 @@ import {
   type ReflectionInput,
 } from '../packages/adapters/src/models/reflection';
 import type { DecisionContext } from '@elsewhere/character-runtime';
+import { InvalidDecisionError } from '@elsewhere/character-runtime';
+import {
+  InferenceDiagnosticSchema,
+  type InferenceDiagnostic,
+} from '../packages/inference/src/contracts';
 import type { ModelUsage } from '../packages/models/src/contracts';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
 import {
@@ -46,12 +51,10 @@ try {
   });
   const dispatch = async (input: DecisionContext | ReflectionInput, signal: AbortSignal) => {
     usage = undefined;
+    let text: string | undefined;
+    const dream = 'episodes' in input;
     try {
-      const dream = 'episodes' in input;
-      const text = await client.text(
-        dream ? reflectionMessages(input) : decisionMessages(input),
-        signal,
-      );
+      text = await client.text(dream ? reflectionMessages(input) : decisionMessages(input), signal);
       const value = dream
         ? validateReflectionProposal(
             JSON.parse(
@@ -64,8 +67,24 @@ try {
           )
         : parseModelAction(text);
       return { value, usage };
-    } catch {
-      throw new InferenceDispatchError(usage);
+    } catch (error) {
+      let diagnostic: InferenceDiagnostic;
+      if (error instanceof InvalidDecisionError)
+        diagnostic = {
+          code: error.code === 'invalid_json' ? 'invalid_json' : 'invalid_action',
+          fields: error.fields,
+        };
+      else if (text !== undefined && dream) diagnostic = { code: 'invalid_reflection', fields: [] };
+      else {
+        const candidate = {
+          code: 'provider_response',
+          fields: [],
+          providerCode: (error as { code?: unknown })?.code,
+        };
+        const parsed = InferenceDiagnosticSchema.safeParse(candidate);
+        diagnostic = parsed.success ? parsed.data : { code: 'provider_response', fields: [] };
+      }
+      throw new InferenceDispatchError(usage, diagnostic);
     }
   };
   const ownerUserId = config.HUBERT_OWNER_USER_ID;

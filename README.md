@@ -82,7 +82,8 @@ Only `pnpm dev:configured` reads Hubert's saved model profile; its key is delive
 - Open **Residents**, select Hubert, or approach him on foot and press **E** to see his live stats and activity. Encounter cards use his actual public state, not fabricated dialogue.
 - Open **Messages** to leave a private note; **Activity** contains public events, visit notifications and memories. The field journal in **Map** records places visited during this walk.
 - Watch verified activity, mood/energy, interests and source-linked memories. Routine activity is compacted with repeat counts. Expand research in Activity to see the actual query, returned and read sources, and source excerpts; conclusions and follow-up are shown only when recorded.
-- Character owners see provider problems in their signed-in account panel, with an account indicator and a Retry action. World administrators do not inherit access to another character’s provider notices.
+- Once account mail is configured, existing accounts can sign in with a hashed, one-use email link that expires after ten minutes; password sign-in and verified visitor signup remain available.
+- Character owners see connection problems and action validation feedback in their signed-in account panel, with an account indicator and a Retry action. World administrators do not inherit access to another character’s provider notices.
 - Look for the courtyard sparrow, orchard robin, pond duck and garden butterfly. Click an animal or open **Map → Other lives here** to see its current activity. Hubert discovers interests through encounters and can set them aside or revisit them. His profile shows interest strengths and encounter counts.
 - Return to the page later: objects, state and memories persist in `.data/elsewhere.sqlite`.
 - Leave a note. Its raw contents remain private and cannot grant tools or change permissions.
@@ -194,7 +195,7 @@ MODEL_MAX_CALLS_PER_DAY=100
 MODEL_TIMEOUT_MS=15000
 ```
 
-The endpoint must support text chat completions and JSON action responses. Invalid output, provider failure or exhausted allowance stops new decisions and records a persistent owner-only account notice. The owner can retry after fixing the connection or waiting for the allowance reset. Every attempted request is durably reserved before dispatch; resetting Hubert does not replenish the same day's allowance. Dollar cost is shown as unknown rather than falsely reported as zero. This call-count allowance is **not a guaranteed currency spending cap**: also set provider-side limits.
+The endpoint must support text chat completions and JSON action responses. Unusable model actions receive explicit feedback and may be reconsidered on the next normal turn, with at most three consecutive attempts before an owner-only notice requires Retry. Provider failures and exhausted allowance stop new decisions immediately. The owner can retry after fixing the connection or waiting for the allowance reset. Every attempted request is durably reserved before dispatch; resetting Hubert does not replenish the same day's allowance. Dollar cost is shown as unknown rather than falsely reported as zero. This call-count allowance is **not a guaranteed currency spending cap**: also set provider-side limits.
 
 The native `ollama` adapter uses `/api/chat` on loopback only, constrains output with a JSON schema, and disables thinking output for the small test model. The provided local development profile allows up to 1,000 local proposals per real day, with decisions stopping and an owner notice when the allowance is exhausted. No wallet or paid-model key is involved.
 

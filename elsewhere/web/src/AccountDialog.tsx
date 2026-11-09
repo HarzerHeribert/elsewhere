@@ -16,6 +16,7 @@ export function AccountDialog({
 }) {
   const { account, capabilities, pending, error, verificationEmail } = session;
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [usePassword, setUsePassword] = useState(false);
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
     form.current?.querySelector<HTMLInputElement>('input')?.focus();
@@ -114,9 +115,23 @@ export function AccountDialog({
                   <article key={issue.id} className="memory-glimpse">
                     <strong>
                       {issue.characterId === 'hubert' ? 'Hubert' : issue.characterId} ·{' '}
-                      {issue.resolvedAt === undefined ? 'Needs attention' : 'Recovered'}
+                      {issue.resolvedAt !== undefined
+                        ? 'Recovered'
+                        : issue.retrying
+                          ? 'Reconsidering'
+                          : 'Needs attention'}
                     </strong>
-                    <p>{issue.message}</p>
+                    <p>
+                      {issue.resolvedAt !== undefined
+                        ? 'This earlier issue has recovered.'
+                        : issue.message}
+                    </p>
+                    {issue.code && (
+                      <p>
+                        Action feedback: {issue.code.replace(/_/g, ' ')}
+                        {issue.fields?.length ? ' · fields: ' + issue.fields.join(', ') : ''}
+                      </p>
+                    )}
                     <small>
                       {issue.workload === 'notebook'
                         ? 'Notebook'
@@ -128,7 +143,7 @@ export function AccountDialog({
                         <> · Recovered {new Date(issue.resolvedAt).toLocaleString()}</>
                       )}
                     </small>
-                    {issue.resolvedAt === undefined && (
+                    {issue.resolvedAt === undefined && !issue.retrying && (
                       <Button
                         variant="secondary"
                         busy={pending}
@@ -173,7 +188,8 @@ export function AccountDialog({
             </Button>
           )}
         </>
-      ) : !capabilities.enabled || !capabilities.passwordAuthEnabled ? (
+      ) : !capabilities.enabled ||
+        (!capabilities.passwordAuthEnabled && !capabilities.emailLinkAuthEnabled) ? (
         <p>Account sign-in is unavailable on this instance. You can keep exploring as a guest.</p>
       ) : verificationEmail ? (
         <>
@@ -190,6 +206,53 @@ export function AccountDialog({
           >
             Back to sign in
           </Button>
+        </>
+      ) : session.signInLinkEmail ? (
+        <>
+          <p role="status">
+            If {session.signInLinkEmail} has an Elsewhere account, a one-use sign-in link is on its
+            way. Open it within 10 minutes.
+          </p>
+          <Button variant="secondary" className="full-width" onClick={session.dismissSignInLink}>
+            Use another email
+          </Button>
+        </>
+      ) : mode === 'signin' && capabilities.emailLinkAuthEnabled && !usePassword ? (
+        <>
+          <p>Receive a one-use sign-in link for your existing Elsewhere account.</p>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const email = String(new FormData(event.currentTarget).get('email') ?? '');
+              void session.sendSignInLink(email);
+            }}
+          >
+            <label htmlFor="account-link-email">Email</label>
+            <input
+              className="ew-field"
+              data-autofocus
+              id="account-link-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              maxLength={254}
+              required
+              disabled={pending}
+            />
+            <Button type="submit" className="full-width" busy={pending}>
+              Email me a sign-in link
+            </Button>
+          </form>
+          {capabilities.passwordAuthEnabled && (
+            <Button variant="quiet" className="full-width" onClick={() => setUsePassword(true)}>
+              Use a password instead
+            </Button>
+          )}
+          {capabilities.passwordAuthEnabled && (
+            <Button variant="secondary" className="full-width" onClick={() => setMode('signup')}>
+              Create a visitor account
+            </Button>
+          )}
         </>
       ) : (
         <>
@@ -247,6 +310,11 @@ export function AccountDialog({
               {pending ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}
             </Button>
           </form>
+          {mode === 'signin' && capabilities.emailLinkAuthEnabled && (
+            <Button variant="quiet" className="full-width" onClick={() => setUsePassword(false)}>
+              Use an email link instead
+            </Button>
+          )}
           <p className="account-switch">
             {mode === 'signup' ? 'Already have an account?' : 'New to Elsewhere?'}{' '}
             <Button

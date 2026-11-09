@@ -35,9 +35,11 @@ import {
   BrokerReflectionRequestSchema,
   BrokerUsageSchema,
   InferenceBindingSchema,
+  InferenceDiagnosticSchema,
   encodeInferenceBinding,
   type InferenceBinding,
   type InferenceWorkload,
+  type InferenceDiagnostic,
 } from './contracts';
 
 export * from './contracts';
@@ -67,7 +69,10 @@ export interface InferenceResult {
 
 /** Carries bounded usage only; raw provider errors remain inside the private process. */
 export class InferenceDispatchError extends Error {
-  constructor(readonly usage?: ModelUsage) {
+  constructor(
+    readonly usage?: ModelUsage,
+    readonly diagnostic?: InferenceDiagnostic,
+  ) {
     super('Inference provider failed.');
   }
 }
@@ -491,9 +496,17 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
               ? BrokerUsageSchema.safeParse(error.usage)
               : undefined;
           await settle(reported?.success ? reported.data : undefined);
-          send(response, 503, {
-            error: 'provider_unavailable',
+          const detail =
+            error instanceof InferenceDispatchError
+              ? InferenceDiagnosticSchema.safeParse(error.diagnostic)
+              : undefined;
+          const diagnostic = detail?.success ? detail.data : undefined;
+          const invalidAction =
+            decision && diagnostic && ['invalid_action', 'invalid_json'].includes(diagnostic.code);
+          send(response, invalidAction ? 400 : 503, {
+            error: invalidAction ? 'invalid_action' : 'provider_unavailable',
             retryAfterMs: 60000,
+            ...(diagnostic ? { diagnostic } : {}),
             ...(reported?.success ? { usage: reported.data } : {}),
           });
           return;

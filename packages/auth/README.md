@@ -52,3 +52,5 @@ Primary implementation references:
 - https://better-auth.com/docs/concepts/database
 - https://better-auth.com/docs/plugins/admin
 - https://better-auth.com/docs/authentication/email-password
+
+Production account email uses the dedicated `AUTH_EMAIL_API_KEY` and `AUTH_EMAIL_FROM` settings. The same sender enables verification and ten-minute, hashed, one-use sign-in links for existing accounts, including provisioned operators without passwords. Email links do not create accounts or grant character ownership. Return URLs are restricted to the public instance; successful redemption exposes only the HttpOnly session cookie. Character correspondence remains a separate connector.

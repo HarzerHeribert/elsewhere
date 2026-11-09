@@ -333,6 +333,29 @@ describe('private character inference broker', () => {
     });
   });
 
+  it('returns bounded action diagnostics without pausing the connection or refunding attempts', async () => {
+    const decision = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new InferenceDispatchError(
+          { inputTokens: 20, outputTokens: 5, cachedInputTokens: 0 },
+          { code: 'invalid_action', fields: ['durationMs'] },
+        ),
+      )
+      .mockResolvedValue({ value: { type: 'reflect' } });
+    const f = await start({ decision });
+    const client = new BrokerModelClient({ baseUrl: f.baseUrl, token, expectedBinding: binding });
+    const provider = new BrokerDecisionProvider(client);
+    await expect(provider.propose(context)).rejects.toMatchObject({
+      code: 'invalid_action',
+      fields: ['durationMs'],
+    });
+    expect(client.isAvailable()).toBe(true);
+    expect(await provider.propose(context)).toEqual({ type: 'reflect' });
+    expect(f.broker.getState().allowance.calls).toBe(2);
+    expect(f.broker.getState().allowance.inputTokens).toBe(20);
+  });
+
   it('shares the fixed persona and validates dream affordances through the same private connection', async () => {
     const f = await start();
     const provider = new BrokerReflectionProvider(

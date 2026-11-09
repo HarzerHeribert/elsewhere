@@ -23,6 +23,7 @@ export interface ApiAuth {
   getAccount(req: IncomingMessage): Promise<AccountSummary | null>;
   isWorldAdmin(req: IncomingMessage): Promise<boolean>;
   passwordAuthEnabled?: boolean;
+  emailLinkAuthEnabled?: boolean;
   requiresEmailVerification?: boolean;
 }
 
@@ -577,6 +578,7 @@ export function createApiServer(deps: ApiDependencies) {
           user: account,
           enabled: true,
           passwordAuthEnabled: deps.auth.passwordAuthEnabled ?? true,
+          ...(deps.auth.emailLinkAuthEnabled ? { emailLinkAuthEnabled: true } : {}),
           requiresEmailVerification: deps.auth.requiresEmailVerification ?? false,
           managedCharacterIds: managesCharacter ? [characterId] : [],
           ...(managesCharacter
@@ -585,7 +587,7 @@ export function createApiServer(deps: ApiDependencies) {
                   .filter((issue) => issue.characterId === characterId)
                   .slice(-16)
                   .map(
-                    ({ id, characterId, kind, workload, since, lastAt, message, resolvedAt }) => ({
+                    ({
                       id,
                       characterId,
                       kind,
@@ -593,6 +595,21 @@ export function createApiServer(deps: ApiDependencies) {
                       since,
                       lastAt,
                       message,
+                      resolvedAt,
+                      code,
+                      fields,
+                      retrying,
+                    }) => ({
+                      id,
+                      characterId,
+                      kind,
+                      workload,
+                      since,
+                      lastAt,
+                      message,
+                      ...(code ? { code } : {}),
+                      ...(fields ? { fields } : {}),
+                      ...(retrying !== undefined ? { retrying } : {}),
                       ...(resolvedAt === undefined ? {} : { resolvedAt }),
                     }),
                   ),
