@@ -12,12 +12,19 @@ import { findPath, isWalkable, placeAt } from './world.js';
 
 const TTL = 30 * 60_000;
 const IDLE_TTL = 5 * 60_000;
+const ACTIVATION_TTL = 30_000;
+const MAX_SESSIONS = 64;
+const MAX_SESSIONS_PER_SOURCE = 2;
 const VISITOR_SPEED = 0.0032;
 interface Session {
   visitor: WorldVisitor;
   token: string;
   updatedAt: number;
   lastActiveAt: number;
+  /** Trusted host source only; never included in a public visitor or registration. */
+  admissionKey: string;
+  activated: boolean;
+  activationDeadline: number;
 }
 export class VisitorError extends Error {
   constructor(
@@ -36,7 +43,11 @@ export class VisitorRegistry {
   private purge() {
     const now = this.now();
     for (const [id, session] of this.sessions)
-      if (session.visitor.expiresAt <= now || session.lastActiveAt + IDLE_TTL <= now)
+      if (
+        session.visitor.expiresAt <= now ||
+        session.lastActiveAt + IDLE_TTL <= now ||
+        (!session.activated && session.activationDeadline <= now)
+      )
         this.sessions.delete(id);
   }
   private advance(session: Session, world: WorldState) {
@@ -101,9 +112,20 @@ export class VisitorRegistry {
   authenticate(id: string, token: string): void {
     this.authorize(id, token);
   }
-  create(world: WorldState): VisitorRegistration {
+  /** At most two concurrent visits per trusted source, including unused registrations.
+   * The caller supplies the canonical transport source, never a value from request JSON.
+   * This intentionally trades large shared-NAT groups for bounded anonymous admission.
+   */
+  create(world: WorldState, admissionKey = 'local'): VisitorRegistration {
+    if (!admissionKey || admissionKey.length > 128 || /[\x00-\x20\x7f]/.test(admissionKey))
+      throw new VisitorError(400, 'The visitor source is invalid.');
     this.purge();
-    if (this.sessions.size >= 64)
+    const fromSource = [...this.sessions.values()].filter(
+      (session) => session.admissionKey === admissionKey,
+    ).length;
+    if (fromSource >= MAX_SESSIONS_PER_SOURCE)
+      throw new VisitorError(429, 'This connection already has two active visits.');
+    if (this.sessions.size >= MAX_SESSIONS)
       throw new VisitorError(503, 'The local world has reached its visitor limit.');
     const now = this.now();
     const spawn: Position = { x: 7, z: 7 };
@@ -113,6 +135,9 @@ export class VisitorRegistry {
       token: randomBytes(32).toString('hex'),
       updatedAt: now,
       lastActiveAt: now,
+      admissionKey,
+      activated: false,
+      activationDeadline: now + ACTIVATION_TTL,
       visitor: {
         id: `visitor-${randomUUID()}`,
         name: 'Visitor',
@@ -127,6 +152,7 @@ export class VisitorRegistry {
   }
   get(id: string, token: string, world: WorldState): VisitorSessionView {
     const session = this.authorize(id, token);
+    session.activated = true;
     session.lastActiveAt = this.now();
     this.advance(session, world);
     return this.view(session, world);
@@ -136,7 +162,6 @@ export class VisitorRegistry {
     const parsed = VisitorActionSchema.safeParse(input);
     if (!parsed.success)
       throw new VisitorError(400, 'Visitor sessions support only moving, looking and stopping.');
-    session.lastActiveAt = this.now();
     this.advance(session, world);
     const visitor = session.visitor;
     const action = parsed.data;
@@ -161,13 +186,22 @@ export class VisitorRegistry {
       visitor.path = [];
       visitor.destination = undefined;
     }
+    // Rejected commands cannot claim an unused allocation or keep an abandoned one alive.
+    session.activated = true;
+    session.lastActiveAt = this.now();
     return this.view(session, world);
+  }
+  /** Only an explicit successful host world reset should discard all visitor credentials. */
+  clear(): void {
+    this.sessions.clear();
   }
   publicVisitors(world: WorldState): WorldVisitor[] {
     this.purge();
-    return [...this.sessions.values()].map((session) => {
-      this.advance(session, world);
-      return structuredClone(session.visitor);
-    });
+    return [...this.sessions.values()]
+      .filter((session) => session.activated)
+      .map((session) => {
+        this.advance(session, world);
+        return structuredClone(session.visitor);
+      });
   }
 }

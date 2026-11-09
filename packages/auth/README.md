@@ -18,7 +18,7 @@ Public navigation has no owner/administration entry or credential form. Authoriz
 
 For a replacement link, run `pnpm auth:operator signin --input <private-user-id.json> --output <new-private-signin.json>` with an input containing only `userId`. Only an existing, active admin account can receive this private recovery link. In the production image use `node dist/auth-operator.mjs` with the same arguments and the runtime's normal auth/database environment. Never put the resulting URL, session cookies, database credentials or auth secret into chat, command arguments, public files, model context or character tools. After provisioning or maintenance, remove any temporary external database access rule.
 
-The browser should use same-origin `/api` routes (the Vite development proxy provides this locally). Session cookies are HttpOnly and SameSite=Lax. Authentication changes require a trusted Origin, JSON content and a body no larger than 64 KB. The Node and Request-based handlers enforce these checks, with Better Auth's own validation and database-backed rate limits underneath.
+The browser should use same-origin `/api` routes (the Vite development proxy provides this locally). Session cookies are HttpOnly and SameSite=Lax. Authentication changes require a trusted Origin, JSON content and a body no larger than 64 KB, received within five seconds. The Node and Request-based handlers enforce these checks, with Better Auth's own validation and database-backed rate limits underneath.
 
 ## Administration boundary
 
@@ -35,6 +35,8 @@ Existing local owner bearer authorization continues to work independently. Sessi
 Production authentication requires an explicit, stable `BETTER_AUTH_SECRET` and an HTTPS public base URL. Without a configured verification-email delivery callback, password authentication is disabled; anonymous world observation can remain available. Once a delivery callback is provided, production email/password sign-in requires verification. The package never prints verification links, passwords, session tokens or signing secrets.
 
 A standard PostgreSQL connection can replace the local SQLite database through `databaseUrl`. Auth tables use an `elsewhere_auth_` prefix. Both SQLite and PostgreSQL adapters have been tested locally. The PostgreSQL integration creates a randomly named schema and verifies real sign-up, session persistence and role changes before dropping only that schema; still verify connectivity in the intended deployment before switching.
+
+The authentication pool has at most three clients. Connection acquisition times out after five seconds; server statements and client queries are bounded at five and six seconds respectively, locks at two seconds, and idle transactions at five seconds. A stalled database therefore releases authentication admission slots instead of accumulating indefinitely. Database failures do not establish an account or grant permissions. The PostgreSQL integration also checks recovery after a deliberately held lock in its isolated schema.
 
 ## Validation
 

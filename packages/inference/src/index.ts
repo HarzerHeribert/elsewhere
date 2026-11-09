@@ -12,6 +12,16 @@ import type { HostResourceRegistry } from '../../identity/src/index';
 import type { ModelUsage } from '../../models/src/contracts';
 import type { SnapshotStore } from '../../persistence/src/index';
 import { reserveModelCall } from '../../security/src/index';
+import { decisionMessages } from '../../adapters/src/models/shared';
+import {
+  DEFAULT_INFERENCE_TOKEN_BUDGET,
+  InferenceTokenBudgetSchema,
+  UsageAccountingSchema,
+  emptyUsageAccounting,
+  settleUsageAccounting,
+  tokenBudgetFailure,
+  type InferenceTokenBudget,
+} from './usage-budget';
 import {
   BrokerDecisionRequestSchema,
   BrokerReflectionRequestSchema,
@@ -23,6 +33,7 @@ import {
 } from './contracts';
 
 export * from './contracts';
+export { DEFAULT_INFERENCE_TOKEN_BUDGET, type InferenceTokenBudget } from './usage-budget';
 
 const allowanceSchema = z
   .object({
@@ -33,7 +44,12 @@ const allowanceSchema = z
   })
   .strict();
 const stateSchema = z
-  .object({ version: z.literal(1), binding: InferenceBindingSchema, allowance: allowanceSchema })
+  .object({
+    version: z.literal(1),
+    binding: InferenceBindingSchema,
+    allowance: allowanceSchema,
+    accounting: UsageAccountingSchema.optional(),
+  })
   .strict();
 export type InferenceBrokerState = z.infer<typeof stateSchema>;
 export interface InferenceResult {
@@ -54,6 +70,8 @@ export interface InferenceBrokerOptions {
   identity: string;
   store: SnapshotStore<InferenceBrokerState>;
   maxCallsPerDay?: number;
+  tokenBudget?: Partial<InferenceTokenBudget>;
+  requestBodyTimeoutMs?: number;
   timeoutMs?: number;
   now?: () => number;
   isAvailable?: () => boolean;
@@ -98,8 +116,14 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
   const binding = InferenceBindingSchema.safeParse(options.binding);
   const maximum = options.maxCallsPerDay ?? 20;
   const timeoutMs = options.timeoutMs ?? 35000;
+  const bodyTimeoutMs = options.requestBodyTimeoutMs ?? 5000;
+  const tokenBudget = InferenceTokenBudgetSchema.safeParse({
+    ...DEFAULT_INFERENCE_TOKEN_BUDGET,
+    ...options.tokenBudget,
+  });
   if (
     !binding.success ||
+    !tokenBudget.success ||
     !/^[^\s\x00-\x1f\x7f]{32,512}$/.test(options.token) ||
     !Number.isSafeInteger(maximum) ||
     maximum < 1 ||
@@ -107,6 +131,9 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
     !Number.isSafeInteger(timeoutMs) ||
     timeoutMs < 1000 ||
     timeoutMs > 60000 ||
+    !Number.isSafeInteger(bodyTimeoutMs) ||
+    bodyTimeoutMs < 100 ||
+    bodyTimeoutMs > 10000 ||
     !options.identity ||
     options.identity.length > 4000
   )
@@ -131,6 +158,12 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
     if (!parsed.success || JSON.stringify(parsed.data.binding) !== JSON.stringify(binding.data))
       throw new Error('Private inference allowance is invalid or belongs to another binding.');
     state = parsed.data;
+    if (state.accounting && state.accounting.day !== state.allowance.day)
+      throw new Error('Private inference usage accounting has an invalid day.');
+    const needsAccounting = state.accounting === undefined;
+    const accounting = state.accounting ?? emptyUsageAccounting(state.allowance.day);
+    state.accounting = settleUsageAccounting(accounting, undefined);
+    if (needsAccounting || accounting.pending) version = await options.store.save(state, version);
   } else {
     state = {
       version: 1,
@@ -141,6 +174,7 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         inputTokens: 0,
         outputTokens: 0,
       },
+      accounting: emptyUsageAccounting(new Date(clock()).toISOString().slice(0, 10)),
     };
     version = await options.store.save(state, version);
   }
@@ -184,9 +218,34 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
       throw new RequestFailure(503, 'storage_unavailable');
     }
   };
+  const usageView = (timestamp: number) => {
+    const day = new Date(timestamp).toISOString().slice(0, 10);
+    return state.allowance.day < day
+      ? {
+          allowance: { day, calls: 0, inputTokens: 0, outputTokens: 0 },
+          accounting: emptyUsageAccounting(day),
+        }
+      : { allowance: state.allowance, accounting: state.accounting! };
+  };
+  const retryAfterReset = (timestamp: number) =>
+    Math.max(
+      1000,
+      Math.min(
+        86400000,
+        Date.parse(`${usageView(timestamp).allowance.day}T00:00:00.000Z`) + 86400000 - timestamp,
+      ),
+    );
   function send(response: ServerResponse, status: number, body: unknown) {
     if (response.writableEnded || response.destroyed) return;
     const data = JSON.stringify(body);
+    if (status >= 400) response.setHeader('Connection', 'close');
+    if (
+      body &&
+      typeof body === 'object' &&
+      'retryAfterMs' in body &&
+      typeof body.retryAfterMs === 'number'
+    )
+      response.setHeader('Retry-After', String(Math.ceil(body.retryAfterMs / 1000)));
     response.writeHead(status, {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
@@ -210,7 +269,12 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         send(response, 403, { error: 'not_authorized' });
         return;
       }
-      const ready = available() && (allowed('decision') || allowed('reflection'));
+      const view = usageView(clock());
+      const ready =
+        available() &&
+        view.allowance.calls < maximum &&
+        !tokenBudgetFailure(view.allowance, view.accounting, tokenBudget.data) &&
+        (allowed('decision') || allowed('reflection'));
       send(response, ready ? 200 : 503, { ready });
       return;
     }
@@ -243,6 +307,23 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
     active = true;
     activeCompletion = (async () => {
       let deadline: ReturnType<typeof setTimeout> | undefined;
+      let reserved = false;
+      let dispatched = false;
+      let settled = false;
+      const settle = async (usage: ModelUsage | undefined) => {
+        if (settled) return;
+        settled = true;
+        state = {
+          ...state,
+          accounting: settleUsageAccounting(state.accounting!, usage),
+          allowance: {
+            ...state.allowance,
+            inputTokens: state.allowance.inputTokens + (usage?.inputTokens ?? 0),
+            outputTokens: state.allowance.outputTokens + (usage?.outputTokens ?? 0),
+          },
+        };
+        await persist();
+      };
       const dispatch = new AbortController();
       const abort = () => dispatch.abort();
       const disconnected = () => {
@@ -251,7 +332,16 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
       response.once('close', disconnected);
       lifetime.signal.addEventListener('abort', abort, { once: true });
       try {
+        deadline = setTimeout(() => {
+          dispatch.abort();
+          // Finishing a response alone does not end an unfinished IncomingMessage iterator.
+          response.once('finish', () => request.destroy());
+          send(response, 408, { error: 'request_timeout', retryAfterMs: 1000 });
+        }, bodyTimeoutMs);
         const body = await readRequest(request);
+        clearTimeout(deadline);
+        deadline = undefined;
+        if (dispatch.signal.aborted || request.aborted || response.writableEnded) return;
         const parsed =
           workload === 'decision'
             ? BrokerDecisionRequestSchema.safeParse(body)
@@ -265,25 +355,40 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
           workload === 'reflection'
             ? { identity: options.identity, ...BrokerReflectionRequestSchema.parse(body).input }
             : undefined;
-        if (reflection) {
-          try {
-            reflectionMessages(reflection);
-          } catch {
-            throw new RequestFailure(400, 'invalid_request');
-          }
+        let messages;
+        try {
+          messages = decision ? decisionMessages(decision) : reflectionMessages(reflection!);
+        } catch {
+          throw new RequestFailure(400, 'invalid_request');
         }
+        // UTF-8 message bytes plus framing are a conservative local admission estimate,
+        // not a provider tokenizer or an output-generation limit.
+        const inputReserve = Buffer.byteLength(JSON.stringify(messages), 'utf8') + 512;
         const timestamp = clock();
         // Backwards wall-clock changes cannot reopen an earlier day's allowance.
+        const view = usageView(timestamp);
+        const budgetFailure = tokenBudgetFailure(
+          view.allowance,
+          view.accounting,
+          tokenBudget.data,
+          inputReserve,
+        );
+        if (budgetFailure) {
+          send(response, budgetFailure === 'request_too_large' ? 413 : 429, {
+            error: budgetFailure,
+            ...(budgetFailure === 'request_too_large'
+              ? {}
+              : { retryAfterMs: retryAfterReset(timestamp) }),
+          });
+          return;
+        }
         const realDay = new Date(timestamp).toISOString().slice(0, 10);
         const current =
           state.allowance.day > realDay
             ? state.allowance
             : reserveModelCall(state.allowance, timestamp, maximum);
         if (!current || (state.allowance.day > realDay && state.allowance.calls >= maximum)) {
-          const reset = Math.max(
-            1000,
-            Math.min(86400000, Date.parse(`${realDay}T00:00:00.000Z`) + 86400000 - timestamp),
-          );
+          const reset = retryAfterReset(timestamp);
           send(response, 429, { error: 'daily_limit', retryAfterMs: reset });
           return;
         }
@@ -293,8 +398,16 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
             state.allowance.day > realDay
               ? { ...state.allowance, calls: state.allowance.calls + 1 }
               : current,
+          accounting: {
+            ...view.accounting,
+            pending: {
+              inputTokens: inputReserve,
+              outputTokens: tokenBudget.data.outputTokenReserve,
+            },
+          },
         };
         await persist(); // Durable reservation is never refunded for failure or restart.
+        reserved = true;
         if (!allowed(workload)) throw new RequestFailure(403, 'not_authorized');
         if (!available() || lifetime.signal.aborted) throw new RequestFailure(503, 'unavailable');
         deadline = setTimeout(() => {
@@ -303,6 +416,7 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         }, timeoutMs);
         let result: InferenceResult;
         try {
+          dispatched = true;
           result = decision
             ? await options.decision(decision, dispatch.signal)
             : await options.reflection(reflection!, dispatch.signal);
@@ -311,17 +425,7 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
             error instanceof InferenceDispatchError
               ? BrokerUsageSchema.safeParse(error.usage)
               : undefined;
-          if (reported?.success) {
-            state = {
-              ...state,
-              allowance: {
-                ...state.allowance,
-                inputTokens: state.allowance.inputTokens + reported.data.inputTokens,
-                outputTokens: state.allowance.outputTokens + reported.data.outputTokens,
-              },
-            };
-            await persist();
-          }
+          await settle(reported?.success ? reported.data : undefined);
           send(response, 503, {
             error: 'provider_unavailable',
             retryAfterMs: 60000,
@@ -330,17 +434,7 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
           return;
         }
         const reported = BrokerUsageSchema.safeParse(result.usage);
-        if (reported.success) {
-          state = {
-            ...state,
-            allowance: {
-              ...state.allowance,
-              inputTokens: state.allowance.inputTokens + reported.data.inputTokens,
-              outputTokens: state.allowance.outputTokens + reported.data.outputTokens,
-            },
-          };
-          await persist();
-        }
+        await settle(reported.success ? reported.data : undefined);
         const value = decision
           ? CharacterCommandSchema.parse(result.value)
           : validateReflectionProposal(result.value, reflection!);
@@ -353,6 +447,10 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         clearTimeout(deadline);
         lifetime.signal.removeEventListener('abort', abort);
         response.removeListener('close', disconnected);
+        if (reserved && !settled && !halted)
+          await settle(
+            dispatched ? undefined : { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+          );
         active = false;
       }
     })();
@@ -364,6 +462,11 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
   server.maxConnections = 16;
   server.requestTimeout = 10000;
   server.headersTimeout = 5000;
+  server.keepAliveTimeout = 5000;
+  server.maxHeadersCount = 32;
+  server.setTimeout(Math.max(10000, timeoutMs + bodyTimeoutMs + 1000), (socket) =>
+    socket.destroy(),
+  );
   return {
     server,
     getState: () => structuredClone(state),

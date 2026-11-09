@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { request as httpRequest } from 'node:http';
 import type { DecisionContext } from '@elsewhere/character-runtime';
 import type { ReflectionInput } from '../../adapters/src/models/reflection';
 import { createSoleHubertRegistry } from '../../identity/src/index';
@@ -405,5 +406,174 @@ describe('private character inference broker', () => {
     expect((await f.request('/v1/decision', { context: data })).status).toBe(409);
     release();
     await vi.waitFor(() => expect(f.broker.getState().allowance.calls).toBe(1));
+  });
+
+  it('preserves legacy calls and reported tokens when adding accounting to a version-one ledger', async () => {
+    const store = memoryStore();
+    const legacy = {
+      version: 1 as const,
+      binding,
+      allowance: { day: '2026-11-09', calls: 19, inputTokens: 53214, outputTokens: 378 },
+    };
+    await store.save(legacy, 0);
+    const f = await start({ store });
+    expect(f.broker.getState().allowance).toEqual(legacy.allowance);
+    expect((await store.load())!.value.accounting).toMatchObject({
+      day: '2026-11-09',
+      unknownCalls: 0,
+      unreportedInputTokens: 0,
+      unreportedOutputTokens: 0,
+    });
+  });
+
+  it.each(['input', 'output'] as const)(
+    'stops new dispatch after reported %s usage crosses its threshold, including after restart',
+    async (kind) => {
+      const store = memoryStore();
+      const usage = {
+        inputTokens: kind === 'input' ? 100001 : 100,
+        outputTokens: kind === 'output' ? 100001 : 20,
+        cachedInputTokens: 0,
+      };
+      const decision = vi.fn(async () => ({ value: { type: 'reflect' }, usage }));
+      const options = {
+        store,
+        decision,
+        tokenBudget: { maxInputTokensPerDay: 100000, maxOutputTokensPerDay: 100000 },
+      };
+      const f = await start(options);
+      const { identity: _, ...data } = context;
+      expect((await f.request('/v1/decision', { context: data })).status).toBe(200);
+      // Usage is learned after the provider finishes; the final admitted call can overshoot.
+      expect(f.broker.getState().allowance[kind === 'input' ? 'inputTokens' : 'outputTokens']).toBe(
+        100001,
+      );
+      await stop(f.broker);
+      const restarted = await start(options);
+      const response = await restarted.request('/v1/decision', { context: data });
+      expect(response.status).toBe(429);
+      expect(await response.json()).toMatchObject({ error: 'daily_token_limit' });
+      expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0);
+      expect(decision).toHaveBeenCalledTimes(1);
+      expect(restarted.broker.getState().allowance.calls).toBe(1);
+    },
+  );
+
+  it('reserves message size before dispatch and blocks an oversized context without spending a call', async () => {
+    const f = await start({ tokenBudget: { maxInputTokensPerRequest: 1 } });
+    const { identity: _, ...data } = context;
+    const response = await f.request('/v1/decision', { context: data });
+    expect(response.status).toBe(413);
+    expect(f.decision).not.toHaveBeenCalled();
+    expect(f.broker.getState().allowance.calls).toBe(0);
+  });
+
+  it('retains conservative charges for missing usage and closes the circuit across restart', async () => {
+    let now = epoch;
+    const store = memoryStore();
+    const decision = vi.fn(async () => {
+      throw new Error('private-provider-error-must-not-leak');
+    });
+    const options = {
+      store,
+      decision,
+      now: () => now,
+      tokenBudget: { maxUnknownUsageCallsPerDay: 2 },
+    };
+    const f = await start(options);
+    const { identity: _, ...data } = context;
+    expect((await f.request('/v1/decision', { context: data })).status).toBe(503);
+    const charged = f.broker.getState().accounting!;
+    expect(charged.unknownCalls).toBe(1);
+    expect(charged.unreportedInputTokens).toBeGreaterThan(0);
+    expect(charged.unreportedOutputTokens).toBe(2000);
+    expect(charged.pending).toBeUndefined();
+    await stop(f.broker);
+    const restarted = await start(options);
+    expect((await restarted.request('/v1/decision', { context: data })).status).toBe(503);
+    const rejected = await restarted.request('/v1/decision', { context: data });
+    expect(rejected.status).toBe(429);
+    expect(await rejected.json()).toMatchObject({ error: 'usage_unknown' });
+    expect(decision).toHaveBeenCalledTimes(2);
+    expect(restarted.broker.getState().accounting?.unreportedOutputTokens).toBe(4000);
+    // Clock rollback cannot reopen a spent day; the next real UTC day can.
+    now -= 86400000;
+    expect((await restarted.request('/v1/decision', { context: data })).status).toBe(429);
+    now = epoch + 86400000;
+    expect((await restarted.request('/v1/decision', { context: data })).status).toBe(503);
+    expect(decision).toHaveBeenCalledTimes(3);
+    expect(restarted.broker.getState().allowance.calls).toBe(1);
+    expect(restarted.broker.getState().accounting?.unknownCalls).toBe(1);
+  });
+
+  it('charges an abandoned in-flight reservation once, without refunding calls or changing binding', async () => {
+    const store = memoryStore();
+    const allowance = { day: '2026-11-09', calls: 19, inputTokens: 53214, outputTokens: 378 };
+    await store.save(
+      {
+        version: 1,
+        binding,
+        allowance,
+        accounting: {
+          day: allowance.day,
+          unknownCalls: 0,
+          unreportedInputTokens: 0,
+          unreportedOutputTokens: 0,
+          pending: { inputTokens: 12345, outputTokens: 2000 },
+        },
+      },
+      0,
+    );
+    const options = { store, tokenBudget: { maxUnknownUsageCallsPerDay: 1 } };
+    const first = await start(options);
+    const state = first.broker.getState();
+    expect(state.binding).toEqual(binding);
+    expect(state.allowance).toEqual(allowance);
+    expect(state.accounting).toEqual({
+      day: allowance.day,
+      unknownCalls: 1,
+      unreportedInputTokens: 12345,
+      unreportedOutputTokens: 2000,
+    });
+    await stop(first.broker);
+    const restarted = await start(options);
+    expect(restarted.broker.getState()).toEqual(state);
+    const { identity: _, ...data } = context;
+    expect((await restarted.request('/v1/decision', { context: data })).status).toBe(429);
+    expect(restarted.decision).not.toHaveBeenCalled();
+  });
+
+  it('releases a slow body reservation without invoking the provider and keeps health responsive', async () => {
+    const f = await start({ requestBodyTimeoutMs: 250 });
+    const response = new Promise<number>((resolve, reject) => {
+      const request = httpRequest(
+        f.baseUrl + '/v1/decision',
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'x-elsewhere-inference-binding': encodeInferenceBinding(binding),
+            'content-type': 'application/json',
+            'content-length': '1000',
+          },
+        },
+        (response) => {
+          response.resume();
+          response.once('end', () => resolve(response.statusCode!));
+        },
+      );
+      request.on('error', reject);
+      request.setTimeout(2000, () => request.destroy(new Error('fixture timed out')));
+      request.flushHeaders();
+    });
+    expect((await fetch(f.baseUrl + '/healthz')).status).toBe(200);
+    expect(await response).toBe(408);
+    expect(f.decision).not.toHaveBeenCalled();
+    expect(f.broker.getState().allowance.calls).toBe(0);
+    const { identity: _, ...data } = context;
+    await vi.waitFor(async () => {
+      const recovered = await f.request('/v1/decision', { context: data });
+      expect(recovered.status).toBe(200);
+    });
   });
 });

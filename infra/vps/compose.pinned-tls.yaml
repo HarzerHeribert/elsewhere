@@ -8,6 +8,7 @@ services:
     command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
     environment:
       HUBERT_INFERENCE_HOST: '${HUBERT_INFERENCE_HOST:?set the VPS hostname}'
+      INFERENCE_BROKER_TOKEN: '${INFERENCE_BROKER_TOKEN:?set the dedicated broker service token}'
     volumes:
       - './Caddyfile.pinned:/etc/caddy/Caddyfile:ro'
       - './tls:/etc/hubert-tls:ro'

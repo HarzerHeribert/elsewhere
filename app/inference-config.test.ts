@@ -26,6 +26,18 @@ it('supports the sole-Hubert private-service composition and default Luna withou
   expect(inferenceConfig(inference).MODEL_NAME).toBe('gpt-6-luna');
   expect(appConfig(world).INFERENCE_BROKER_URL).toBe('http://elsewhere-inference:4100/');
 });
+it('supplies separate observed-token and unknown-usage safeguards without reducing the approved call cap', () => {
+  const config = inferenceConfig({ ...inference, MODEL_MAX_CALLS_PER_DAY: '1000' });
+  expect(config).toMatchObject({
+    MODEL_MAX_CALLS_PER_DAY: 1000,
+    MODEL_MAX_INPUT_TOKENS_PER_DAY: 3500000,
+    MODEL_MAX_OUTPUT_TOKENS_PER_DAY: 100000,
+    MODEL_MAX_INPUT_TOKENS_PER_REQUEST: 32000,
+    MODEL_OUTPUT_TOKEN_RESERVE: 2000,
+    MODEL_MAX_UNKNOWN_USAGE_CALLS_PER_DAY: 3,
+    MODEL_REQUEST_BODY_TIMEOUT_MS: 5000,
+  });
+});
 it('allows an ownerless installation that cannot instantiate a grant or spend quota', () => {
   expect(
     inferenceConfig({ ...inference, HUBERT_OWNER_USER_ID: undefined }).HUBERT_OWNER_USER_ID,

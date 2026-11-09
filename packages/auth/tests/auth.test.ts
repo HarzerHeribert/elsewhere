@@ -69,6 +69,30 @@ afterEach(async () => {
 });
 
 describe('real Better Auth accounts', () => {
+  it('cancels unfinished authentication bodies and remains available for a completed request', async () => {
+    const { auth } = await create({ bodyTimeoutMs: 30 });
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{'));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const init = {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body,
+      duplex: 'half',
+    };
+    const response = await auth.webHandler(new Request(`${origin}/api/auth/sign-up/email`, init));
+    expect(response.status).toBe(408);
+    expect(response.headers.get('Retry-After')).toBe('1');
+    expect(cancelled).toBe(true);
+    await signup(auth, 'after-body-timeout@example.invalid');
+  });
+
   it('creates a normal account with signed HttpOnly cookies and never makes the first signup admin', async () => {
     const { auth } = await create();
     expect(await auth.getAccount(nodeRequest())).toBeNull();

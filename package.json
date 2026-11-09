@@ -20,6 +20,7 @@
     "start:production": "node dist/server.mjs",
     "snapshot": "tsx scripts/snapshot.ts",
     "smoke:deployment": "node scripts/deployment-smoke.mjs",
+    "smoke:proxy": "node scripts/proxy-security-smoke.mjs",
     "audit:public": "node scripts/public-audit.mjs",
     "start": "tsx app/main.ts",
     "owner": "node scripts/owner.mjs",

@@ -24,6 +24,22 @@ const schema = z.object({
     .regex(/^[a-zA-Z0-9._-]{1,120}$/)
     .default('gpt-6-luna'),
   MODEL_MAX_CALLS_PER_DAY: z.coerce.number().int().min(1).max(1000).default(20),
+  MODEL_MAX_INPUT_TOKENS_PER_DAY: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1_000_000_000)
+    .default(3_500_000),
+  MODEL_MAX_OUTPUT_TOKENS_PER_DAY: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1_000_000_000)
+    .default(100_000),
+  MODEL_MAX_INPUT_TOKENS_PER_REQUEST: z.coerce.number().int().min(1).max(128_000).default(32_000),
+  MODEL_OUTPUT_TOKEN_RESERVE: z.coerce.number().int().min(1).max(1_000_000).default(2_000),
+  MODEL_MAX_UNKNOWN_USAGE_CALLS_PER_DAY: z.coerce.number().int().min(1).max(100).default(3),
+  MODEL_REQUEST_BODY_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).default(5000),
   MODEL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60000).default(30000),
 });
 

@@ -75,6 +75,14 @@ try {
           resolve(credentials.directory, 'allowance.sqlite'),
         ),
         maxCallsPerDay: config.MODEL_MAX_CALLS_PER_DAY,
+        tokenBudget: {
+          maxInputTokensPerDay: config.MODEL_MAX_INPUT_TOKENS_PER_DAY,
+          maxOutputTokensPerDay: config.MODEL_MAX_OUTPUT_TOKENS_PER_DAY,
+          maxInputTokensPerRequest: config.MODEL_MAX_INPUT_TOKENS_PER_REQUEST,
+          outputTokenReserve: config.MODEL_OUTPUT_TOKEN_RESERVE,
+          maxUnknownUsageCallsPerDay: config.MODEL_MAX_UNKNOWN_USAGE_CALLS_PER_DAY,
+        },
+        requestBodyTimeoutMs: config.MODEL_REQUEST_BODY_TIMEOUT_MS,
         timeoutMs: Math.min(60000, config.MODEL_TIMEOUT_MS + 5000),
         isAvailable: () => {
           const account = credentials.load();
