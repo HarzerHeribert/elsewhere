@@ -156,6 +156,8 @@ export interface AccountCapabilities {
 /** Account endpoints are private session responses, never public world metadata. */
 export interface AccountResponse extends AccountCapabilities {
   user: AccountSummary | null;
+  /** Private session capability, independent from world administration. */
+  managedCharacterIds: string[];
 }
 export interface Observation {
   characterId: string;

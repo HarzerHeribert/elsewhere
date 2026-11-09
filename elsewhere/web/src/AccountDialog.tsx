@@ -54,8 +54,18 @@ export function AccountDialog({
               <dd>{account.email}</dd>
             </div>
             <div>
-              <dt>Access</dt>
+              <dt>World access</dt>
               <dd>{account.isWorldAdmin ? 'World admin' : 'Visitor'}</dd>
+            </div>
+            <div>
+              <dt>Characters you manage</dt>
+              <dd>
+                {capabilities?.managedCharacterIds.length
+                  ? capabilities.managedCharacterIds
+                      .map((id) => (id === 'hubert' ? 'Hubert' : id))
+                      .join(', ')
+                  : 'None'}
+              </dd>
             </div>
             <div>
               <dt>Email status</dt>

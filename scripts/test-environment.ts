@@ -17,7 +17,8 @@ export function isolatedAppEnvironment(
   const inherited = Object.fromEntries(
     Object.entries(parent).filter(
       (entry): entry is [string, string] =>
-        entry[1] !== undefined && !entry[0].startsWith('MODEL_'),
+        entry[1] !== undefined &&
+        !/^(MODEL_|CHATGPT_|OPENAI_|INFERENCE_|HUBERT_OWNER_)/.test(entry[0]),
     ),
   );
   const webOrigin = `http://127.0.0.1:${options.webPort ?? options.port}`;

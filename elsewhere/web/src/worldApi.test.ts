@@ -1,11 +1,49 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, requestJson } from './worldApi';
+import { ApiError, getAccount, requestJson } from './worldApi';
 
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 describe('API request recovery', () => {
+  it('keeps character management independent from the signed-in platform admin role', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ enabled: true, user: { id: 'admin', isWorldAdmin: true } }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          enabled: true,
+          user: { id: 'owner', isWorldAdmin: false },
+          managedCharacterIds: ['hubert'],
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+    expect((await getAccount(new AbortController().signal)).managedCharacterIds).toEqual([]);
+    expect((await getAccount(new AbortController().signal)).managedCharacterIds).toEqual([
+      'hubert',
+    ]);
+  });
+  it('discards anonymous and malformed character-management capabilities', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ enabled: true, user: null, managedCharacterIds: ['hubert'] }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          enabled: true,
+          user: { id: 'owner' },
+          managedCharacterIds: ['hubert', null, { id: 'other' }, '../other'],
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+    expect((await getAccount(new AbortController().signal)).managedCharacterIds).toEqual([]);
+    expect((await getAccount(new AbortController().signal)).managedCharacterIds).toEqual([
+      'hubert',
+    ]);
+  });
   it('times out a stalled body, aborts the connection and allows a later request to succeed', async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;

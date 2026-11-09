@@ -30,6 +30,17 @@ pnpm dev:ollama
 
 Run either `pnpm dev` or `pnpm dev:ollama`, not both on the same ports. Ollama must be running on localhost:11434. Qwen3 4B is a roughly 2.5 GB quantized download; it is a deliberately small test model. The local profile uses constrained JSON actions, no API key, and no cloud model requests. `pnpm ollama:check` performs one real inference and reports its action and elapsed time.
 
+For an eligible ChatGPT plan, the separate owner OAuth profile uses the public Responses API with Hubert's own instructions:
+
+```sh
+pnpm chatgpt login       # Continue with ChatGPT in your browser; no API key
+pnpm chatgpt models      # Read your account's current model catalog
+pnpm chatgpt check       # One isolated Hubert turn; never opens his saved world
+pnpm dev:chatgpt         # Run the saved life with GPT-6 Luna, capped at 20 calls/day
+```
+
+Decisions and dreams share the call cap. Provider limits pause subscription requests without stopping local life or changing billing. Credentials remain in private, ignored operator storage; visitors never receive them. Direct OAuth mode is local only; hosted Hubert uses a separate private inference service and a protected session handoff. See [setup and quota controls](docs/architecture/chatgpt-plan.md) and [ownership and hosted deployment](docs/architecture/ownership-and-hosting.md).
+
 To use owner controls, run this in a second terminal:
 
 ```sh
@@ -102,7 +113,7 @@ pnpm auth:admin <user-id>
 pnpm auth:admin <user-id> --revoke
 ```
 
-Reload the account window afterward. The role permits Elsewhere's world-management actions, not wallet, billing or character-private tools. Better Auth's account impersonation and role-management HTTP endpoints are blocked; role grants remain out of band. If an ID is explicitly configured in `AUTH_ADMIN_USER_IDS`, remove it from that configuration to revoke that override too. The existing private `pnpm owner` link remains a separate local operator option.
+Reload the account window afterward. The role permits world pause/resume moderation. Character advancement, reset and wish decisions require separate character ownership, configured for Hubert with the exact account ID in `HUBERT_OWNER_USER_ID`. World administration grants no model, wallet, billing or character-private tools. Better Auth's account impersonation and role-management HTTP endpoints are blocked; role grants remain out of band. If an ID is explicitly configured in `AUTH_ADMIN_USER_IDS`, remove it from that configuration to revoke that override too. The existing private `pnpm owner` link remains a separate bootstrap operator capability for the sole resident.
 
 For a public deployment, Better Auth requires an HTTPS public URL and explicit `BETTER_AUTH_SECRET`. Password authentication stays disabled in production until an email verification delivery adapter is configured. Locally, emails remain explicitly **unverified** and no verification/reset mail is sent. See `.env.example` and `packages/auth/README.md`.
 

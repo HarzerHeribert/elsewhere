@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import { request, type IncomingMessage } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PublicSnapshot } from '@elsewhere/character-interfaces';
+import type { AccountSummary, PublicSnapshot } from '@elsewhere/character-interfaces';
 import { closeApiServer, createApiServer, type ApiDependencies } from '../src/http.js';
 import { createInitialWorld } from '../src/world.js';
 
@@ -231,6 +231,7 @@ describe('local public/owner API separation', () => {
       enabled: false,
       passwordAuthEnabled: false,
       requiresEmailVerification: false,
+      managedCharacterIds: [],
     });
   });
 
@@ -361,6 +362,129 @@ describe('local public/owner API separation', () => {
     });
     expect(response.status).toBe(200);
     expect(tick).toHaveBeenCalledOnce();
+  });
+
+  it('separates platform moderation from character ownership and exposes only private management capabilities', async () => {
+    const accounts: Record<string, AccountSummary> = {
+      owner: {
+        id: 'hubert-owner',
+        name: 'Owner',
+        email: 'owner@example.test',
+        emailVerified: true,
+        role: 'user',
+        isWorldAdmin: false,
+      },
+      admin: {
+        id: 'world-admin',
+        name: 'Admin',
+        email: 'admin@example.test',
+        emailVerified: true,
+        role: 'admin',
+        isWorldAdmin: true,
+      },
+      visitor: {
+        id: 'visitor',
+        name: 'Visitor',
+        email: 'visitor@example.test',
+        emailVerified: true,
+        role: 'user',
+        isWorldAdmin: false,
+      },
+    };
+    const pause = vi.fn(async () => fixture()),
+      resume = vi.fn(async () => fixture()),
+      reset = vi.fn(async () => fixture());
+    const { url, tick, resolveWish } = await start({
+      pause,
+      resume,
+      reset,
+      canManageCharacter: (userId, characterId) =>
+        userId === 'hubert-owner' && characterId === 'hubert',
+      auth: {
+        handle: async () => {},
+        isWorldAdmin: async (req) => accounts[String(req.headers.cookie)]?.isWorldAdmin ?? false,
+        getAccount: async (req) => accounts[String(req.headers.cookie)] ?? null,
+      },
+    });
+    const post = (actor: string, action: string, body: unknown = {}) =>
+      fetch(`${url}/api/admin/${action}`, {
+        method: 'POST',
+        headers: {
+          Cookie: actor,
+          Origin: 'http://127.0.0.1:5173',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    for (const action of ['tick', 'reset', 'wishes/wish:hubert:test'])
+      expect(
+        (await post('admin', action, action.startsWith('wishes/') ? { decision: 'decline' } : {}))
+          .status,
+      ).toBe(403);
+    expect(tick).not.toHaveBeenCalled();
+    expect(reset).not.toHaveBeenCalled();
+    expect(resolveWish).not.toHaveBeenCalled();
+    expect((await post('admin', 'pause')).status).toBe(200);
+    expect((await post('admin', 'resume')).status).toBe(200);
+    expect(pause).toHaveBeenCalledOnce();
+    expect(resume).toHaveBeenCalledOnce();
+    expect((await post('owner', 'tick')).status).toBe(200);
+    expect((await post('owner', 'reset')).status).toBe(200);
+    expect((await post('owner', 'wishes/wish:hubert:test', { decision: 'decline' })).status).toBe(
+      200,
+    );
+    expect(
+      (await post('visitor', 'tick', { ownerUserId: 'hubert-owner', isWorldAdmin: true })).status,
+    ).toBe(401);
+    expect((await post('owner', 'tick', { characterId: 'another' })).status).toBe(400);
+    const ownerAccount = await fetch(`${url}/api/account`, { headers: { Cookie: 'owner' } }).then(
+      (response) => response.json(),
+    );
+    const adminAccount = await fetch(`${url}/api/account`, { headers: { Cookie: 'admin' } }).then(
+      (response) => response.json(),
+    );
+    expect(ownerAccount.managedCharacterIds).toEqual(['hubert']);
+    expect(ownerAccount.user.isWorldAdmin).toBe(false);
+    expect(adminAccount.managedCharacterIds).toEqual([]);
+    expect(adminAccount.user.isWorldAdmin).toBe(true);
+    const publicText = await fetch(`${url}/api/world`).then((response) => response.text());
+    expect(publicText).not.toContain('managedCharacterIds');
+    expect(publicText).not.toContain('hubert-owner');
+    expect(
+      (
+        await fetch(`${url}/api/characters`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it('rechecks character ownership immediately before a session-authorized mutation', async () => {
+    let checks = 0;
+    const { url, tick } = await start({
+      canManageCharacter: () => ++checks < 3,
+      auth: {
+        handle: async () => {},
+        isWorldAdmin: async () => false,
+        getAccount: async () => ({
+          id: 'former-owner',
+          name: 'Former owner',
+          email: 'former@example.test',
+          emailVerified: true,
+          role: 'user',
+          isWorldAdmin: false,
+        }),
+      },
+    });
+    const response = await fetch(`${url}/api/admin/tick`, {
+      method: 'POST',
+      headers: { Origin: 'http://127.0.0.1:5173', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(response.status).toBe(403);
+    expect(tick).not.toHaveBeenCalled();
   });
 
   it('rejects an unapproved origin even when the owner token is present', async () => {

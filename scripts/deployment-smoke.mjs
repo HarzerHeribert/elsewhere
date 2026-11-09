@@ -15,10 +15,14 @@ const database = `${network}-pg`;
 const first = `${network}-first`;
 const second = `${network}-second`;
 const guard = `${network}-empty-guard`;
+const inference = `${network}-inference`;
+const inferenceVolume = `${network}-oauth-fixture`;
 const directory = await mkdtemp(join(tmpdir(), 'elsewhere-deployment-'));
 const key = randomBytes(32).toString('hex');
 const password = randomBytes(24).toString('hex');
 const owner = randomBytes(32).toString('hex');
+const inferenceToken = randomBytes(32).toString('hex');
+const ownerUserId = 'fixture-hosted-owner';
 const owned = new Set();
 let interrupted = false;
 const interrupt = () => {
@@ -50,7 +54,7 @@ async function until(test, message) {
   }
   throw new Error(message);
 }
-function start(name, envFile, publish = false, image = values.image, extra = []) {
+function start(name, envFile, publish = false, image = values.image, extra = [], command = []) {
   docker(
     'run',
     '-d',
@@ -63,9 +67,37 @@ function start(name, envFile, publish = false, image = values.image, extra = [])
     ...(publish ? ['-p', '127.0.0.1::4000'] : []),
     ...extra,
     image,
+    ...command,
   );
   owned.add(name);
 }
+function inferenceNode(source) {
+  return execFileSync('docker', ['exec', '-i', inference, 'node', '--input-type=module'], {
+    input: source,
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 15000,
+  }).trim();
+}
+function inferenceProbe(path, init = {}) {
+  return JSON.parse(
+    inferenceNode(
+      `const r=await fetch(${JSON.stringify(`http://127.0.0.1:4100${path}`)},${JSON.stringify(init)}); console.log(JSON.stringify({status:r.status,body:await r.json()}));`,
+    ),
+  );
+}
+const bindingHeader = Buffer.from(
+  JSON.stringify({
+    worldId: 'elsewhere',
+    ownerUserId,
+    characterId: 'hubert',
+    connectionId: 'hubert-model',
+  }),
+).toString('base64url');
+const inferenceHeaders = {
+  authorization: `Bearer ${inferenceToken}`,
+  'x-elsewhere-inference-binding': bindingHeader,
+};
 function base(name) {
   const port = docker('port', name, '4000/tcp').split(':').at(-1);
   return `http://127.0.0.1:${port}`;
@@ -82,6 +114,7 @@ async function action(url, name) {
 }
 try {
   docker('network', 'create', network);
+  docker('volume', 'create', inferenceVolume);
   const pgEnv = join(directory, 'postgres.env');
   await writeFile(pgEnv, `POSTGRES_PASSWORD=${password}\nPOSTGRES_DB=elsewhere_test\n`, {
     mode: 0o600,
@@ -94,6 +127,93 @@ try {
       ),
     'Fixture database did not start.',
   );
+  const inferenceEnv = join(directory, 'inference.env');
+  await writeFile(
+    inferenceEnv,
+    [
+      'NODE_ENV=production',
+      'HOST=0.0.0.0',
+      'PORT=4100',
+      'INFERENCE_DATA_ROOT=/var/lib/elsewhere-inference',
+      `INFERENCE_BROKER_TOKEN=${inferenceToken}`,
+      `HUBERT_OWNER_USER_ID=${ownerUserId}`,
+      'MODEL_MAX_CALLS_PER_DAY=2',
+    ].join('\n') + '\n',
+    { mode: 0o600 },
+  );
+  start(
+    inference,
+    inferenceEnv,
+    false,
+    values.image,
+    ['--mount', `type=volume,source=${inferenceVolume},target=/var/lib/elsewhere-inference`],
+    ['node', 'dist/inference.mjs'],
+  );
+  await until(
+    () => inferenceProbe('/healthz').status === 200,
+    'Unprovisioned private inference did not stay running.',
+  );
+  assert.equal(inferenceProbe('/readyz').status, 401);
+  assert.equal(inferenceProbe('/readyz', { headers: inferenceHeaders }).status, 503);
+  assert.equal(docker('port', inference), '', 'Private inference unexpectedly published a port.');
+  const hostPath = '/var/lib/elsewhere-inference/.data/chatgpt/host.json';
+  const hostId = inferenceNode(
+    `import fs from 'node:fs'; console.log(fs.readFileSync(${JSON.stringify(hostPath)},'utf8').trim());`,
+  );
+  const transfer = {
+    format: 'elsewhere-chatgpt-session-transfer-v1',
+    transferId: 'c2247335-2e85-4f83-99e2-5c1b6ee41818',
+    ownerUserId,
+    profile: 'default',
+    account: {
+      version: 1,
+      issuer: 'https://auth.openai.com',
+      subject: 'fixture-subject',
+      clientId: 'oaiapp_fixture',
+      pause: { code: 'fixture_paused' },
+      tokens: {
+        accessToken: 'fixture-access-not-real',
+        refreshToken: 'fixture-refresh-not-real',
+        idToken: 'fixture-id-not-real',
+        expiresAt: Date.now() + 3600000,
+        scopes: ['chatgpt.tokens.use.direct'],
+      },
+    },
+  };
+  const imported = execFileSync(
+    'docker',
+    ['exec', '-i', inference, 'node', 'dist/inference-operator.mjs', 'import'],
+    {
+      input: JSON.stringify(transfer),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 15000,
+    },
+  );
+  assert.equal(JSON.parse(imported).transferId, transfer.transferId);
+  assert.equal(
+    inferenceProbe('/readyz', { headers: inferenceHeaders }).status,
+    503,
+    'Paused fixture must never invoke a real model.',
+  );
+  assert.equal(
+    inferenceNode(
+      `import fs from 'node:fs'; console.log(fs.readFileSync(${JSON.stringify(hostPath)},'utf8').trim());`,
+    ),
+    hostId,
+  );
+  assert.equal(
+    inferenceNode(
+      "import fs from 'node:fs'; console.log([fs.statSync('/var/lib/elsewhere-inference/.data/chatgpt').mode&511,fs.statSync('/var/lib/elsewhere-inference/.data/chatgpt/default.json').mode&511].join(','));",
+    ),
+    '448,384',
+  );
+  docker('restart', '--time', '15', inference);
+  await until(
+    () => inferenceProbe('/healthz').status === 200,
+    'Private inference did not recover with its volume.',
+  );
+  assert.equal(inferenceProbe('/readyz', { headers: inferenceHeaders }).status, 503);
   const env = join(directory, 'runtime.env');
   await writeFile(
     env,
@@ -102,7 +222,11 @@ try {
       'HOST=0.0.0.0',
       'PORT=4000',
       'WEB_ORIGIN=https://elsewhere.example',
-      'MODEL_PROVIDER=local',
+      'MODEL_PROVIDER=broker',
+      `HUBERT_OWNER_USER_ID=${ownerUserId}`,
+      `INFERENCE_BROKER_URL=http://${inference}:4100`,
+      'INFERENCE_BROKER_ALLOW_PRIVATE_HTTP=true',
+      `INFERENCE_BROKER_TOKEN=${inferenceToken}`,
       'TICK_INTERVAL_MS=60000',
       'SIMULATION_RATE=1',
       'ALLOW_NEW_LIFE=true',
@@ -136,6 +260,18 @@ try {
     account.passwordAuthEnabled,
     false,
     'Unconfigured account mail must keep public signup disabled.',
+  );
+  assert.deepEqual(account.managedCharacterIds, []);
+  assert.equal(
+    docker(
+      'exec',
+      first,
+      'node',
+      '-e',
+      "console.log(require('node:fs').existsSync('/var/lib/elsewhere-inference/.data/chatgpt/default.json'))",
+    ),
+    'false',
+    'World process could read the private OAuth volume.',
   );
   await action(a, 'pause');
   await action(a, 'tick');
@@ -174,11 +310,11 @@ try {
   assert.equal((await action(b, 'tick')).runtime.tick, checkpoint.runtime.tick + 1);
   docker('stop', '--time', '15', second);
   console.log(
-    'Deployment smoke passed: real production image, private ingress, disabled unconfigured signup, exclusive standby, exact persisted handoff and continued activity.',
+    'Deployment smoke passed: production world/private inference separation, protected mounted OAuth import and restart, unprovisioned/paused fallback, private ingress, exclusive life handoff and continued activity. No real model calls.',
   );
 } catch (error) {
   // Only these newly created fixtures are inspected. No operator env files or services are read.
-  for (const name of [guard, first, second]) {
+  for (const name of [guard, first, second, inference]) {
     if (owned.has(name)) {
       try {
         console.error(logs(name));
@@ -194,6 +330,9 @@ try {
   }
   try {
     docker('network', 'rm', network);
+  } catch {}
+  try {
+    docker('volume', 'rm', inferenceVolume);
   } catch {}
   await rm(directory, { recursive: true, force: true });
   process.removeListener('SIGINT', interrupt);

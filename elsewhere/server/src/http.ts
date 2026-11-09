@@ -25,6 +25,8 @@ export interface ApiDependencies {
   /** Set only for the known Vercel ingress; all non-health traffic must present this secret. */
   proxySecret?: string;
   isReady?(): boolean;
+  /** Derived from trusted ownership records, independently of the account's admin role. */
+  canManageCharacter?(userId: string, characterId: string): boolean | Promise<boolean>;
   getSnapshot(): PublicSnapshot | Promise<PublicSnapshot>;
   tick(): Promise<PublicSnapshot>;
   pause(): Promise<PublicSnapshot>;
@@ -294,15 +296,20 @@ export function createApiServer(deps: ApiDependencies) {
             enabled: false,
             passwordAuthEnabled: false,
             requiresEmailVerification: false,
+            managedCharacterIds: [],
           });
           return;
         }
         const account = await deps.auth.getAccount(req);
+        const characterId = (await deps.getSnapshot()).character.id;
+        const managesCharacter =
+          account && (await deps.canManageCharacter?.(account.id, characterId)) === true;
         send(200, {
           user: account,
           enabled: true,
           passwordAuthEnabled: deps.auth.passwordAuthEnabled ?? true,
           requiresEmailVerification: deps.auth.requiresEmailVerification ?? false,
+          managedCharacterIds: managesCharacter ? [characterId] : [],
         });
         return;
       }
@@ -380,10 +387,17 @@ export function createApiServer(deps: ApiDependencies) {
       if (req.method === 'POST' && pathname.startsWith('/api/admin/')) {
         const owner = authenticated(req, deps.adminToken);
         const account = !owner && deps.auth ? await deps.auth.getAccount(req) : null;
-        if (!owner && !account?.isWorldAdmin) {
+        const managesCharacter = async () =>
+          owner ||
+          (!!account &&
+            (await deps.canManageCharacter?.(
+              account.id,
+              (await deps.getSnapshot()).character.id,
+            )) === true);
+        if (!owner && !account?.isWorldAdmin && !(await managesCharacter())) {
           if (!consume(`admin-denied:${ip}`, 120, Date.now()))
             throw new HttpError(429, 'Owner request limit reached.');
-          throw new HttpError(401, 'Owner or world-admin authorization required.');
+          throw new HttpError(401, 'Character-owner or world-admin authorization required.');
         }
         if (!consume(owner ? 'admin:owner' : `admin:user:${account!.id}`, 120, Date.now()))
           throw new HttpError(429, 'Owner request limit reached.');
@@ -394,6 +408,8 @@ export function createApiServer(deps: ApiDependencies) {
           );
         const wishRoute = /^\/api\/admin\/wishes\/([^/]+)$/.exec(pathname);
         if (wishRoute && deps.resolveWish) {
+          if (!(await managesCharacter()))
+            throw new HttpError(403, 'Character ownership is required.');
           let wishId: string;
           try {
             wishId = decodeURIComponent(wishRoute[1]);
@@ -412,6 +428,8 @@ export function createApiServer(deps: ApiDependencies) {
             (body.decision !== 'fulfill' && body.decision !== 'decline')
           )
             throw new HttpError(400, 'Wish decision must be fulfill or decline.');
+          if (!(await managesCharacter()))
+            throw new HttpError(403, 'Character ownership is required.');
           send(200, publicSnapshot(await deps.resolveWish(wishId, body.decision)));
           return;
         }
@@ -423,9 +441,14 @@ export function createApiServer(deps: ApiDependencies) {
           reset: deps.reset.bind(deps),
         };
         if (!Object.hasOwn(handlers, action)) throw new HttpError(404, 'Unknown owner action.');
+        const isCharacterAction = action === 'tick' || action === 'reset';
+        if (isCharacterAction && !(await managesCharacter()))
+          throw new HttpError(403, 'Character ownership is required.');
         const body = await readJson(req);
         if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length)
           throw new HttpError(400, 'Owner action body must be an empty object.');
+        if (!(await managesCharacter()) && (isCharacterAction || !account?.isWorldAdmin))
+          throw new HttpError(403, 'Character ownership or world moderation is required.');
         send(200, publicSnapshot(await handlers[action]()));
         return;
       }

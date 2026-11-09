@@ -44,6 +44,17 @@ afterEach(async () => {
 });
 
 describe('authoritative controller lifecycle', () => {
+  it('keeps quota-paused subscription providers from consuming daily calls or blocking local life', async () => {
+    const propose = vi.fn();
+    const { controller, store } = await create({
+      modelProvider: { id: 'chatgpt', isAvailable: () => false, propose },
+    });
+    const before = (await store.load())!.value.modelAllowance.calls;
+    await controller.step();
+    expect(propose).not.toHaveBeenCalled();
+    expect((await store.load())!.value.modelAllowance.calls).toBe(before);
+    expect(controller.getSnapshot().runtime.tick).toBe(1);
+  });
   it('does not reserve or dispatch a model call when mandatory rest already determines the action', async () => {
     const file = databaseFile();
     const initial = await create({}, file);

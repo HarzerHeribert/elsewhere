@@ -114,7 +114,7 @@ export function useAccountSession() {
         signal: controller.signal,
       });
       if (!current(version)) return false;
-      setSession((value) => (value ? { ...value, user: null } : value));
+      setSession((value) => (value ? { ...value, user: null, managedCharacterIds: [] } : value));
       setVerificationEmail('');
       return true;
     } catch (reason) {

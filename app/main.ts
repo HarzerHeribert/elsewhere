@@ -10,20 +10,17 @@ import {
   type SnapshotStore,
 } from '../packages/persistence/src/index';
 import { ownerToken } from '../packages/security/src/index';
-import { CompatibleDecisionProvider } from '../packages/adapters/src/models/compatible';
-import { OllamaDecisionProvider } from '../packages/adapters/src/models/ollama';
-import { RoutedDecisionProvider } from '../packages/adapters/src/models/routed';
-import {
-  CompatibleReflectionProvider,
-  OllamaReflectionProvider,
-  RoutedReflectionProvider,
-} from '../packages/adapters/src/models/reflection';
-import { parseRoutingConfig } from '../packages/models/src/config';
+import { runtimeProviders } from './providers';
+import { hubertResourceRegistry } from './residency';
 import { authOptionsFromEnvironment, createLocalAuth } from '../packages/auth/src/index';
 import { verificationSenderFromEnvironment } from '../packages/auth/src/verification-mail';
 
 const config = appConfig(process.env);
 const directory = resolve(config.DATA_DIR);
+const registry = hubertResourceRegistry(
+  config.HUBERT_OWNER_USER_ID,
+  config.MODEL_PROVIDER === 'broker' ? 'chatgpt' : config.MODEL_PROVIDER,
+);
 const token = ownerToken(directory, process.env.ADMIN_TOKEN);
 const lifetime = new AbortController();
 let ready = false;
@@ -56,6 +53,7 @@ const server = createApiServer({
     },
   },
   adminToken: token,
+  canManageCharacter: (userId, characterId) => registry.canManage(userId, characterId),
   allowedOrigins: config.production
     ? [config.WEB_ORIGIN]
     : [config.WEB_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'],
@@ -92,72 +90,15 @@ async function initialize() {
     }),
   );
   if (lifetime.signal.aborted) return;
-  const onUsage = (input: number, output: number) => controller?.addUsage(input, output);
-  const routing =
-    config.MODEL_PROVIDER === 'routed'
-      ? parseRoutingConfig(process.env.MODEL_ROUTING_JSON, config.production)
-      : undefined;
-  let routedBudget: ReturnType<ElsewhereController['modelBudget']> | undefined;
-  const budget = () => (routedBudget ??= controller!.modelBudget(routing!));
-  const model = routing
-    ? new RoutedDecisionProvider(
-        routing,
-        {
-          reserve: (estimate) => budget().reserve(estimate),
-          settle: (id, usage, failed) => budget().settle(id, usage, failed),
-        },
-        process.env,
-        { production: config.production },
-      )
-    : config.MODEL_PROVIDER === 'ollama'
-      ? new OllamaDecisionProvider({
-          baseUrl: process.env.OLLAMA_BASE_URL,
-          model: process.env.MODEL_NAME ?? 'qwen3:4b',
-          timeoutMs: Math.max(30000, config.MODEL_TIMEOUT_MS),
-          onUsage,
-        })
-      : config.MODEL_PROVIDER === 'compatible'
-        ? new CompatibleDecisionProvider({
-            baseUrl: process.env.MODEL_BASE_URL ?? '',
-            model: process.env.MODEL_NAME ?? '',
-            apiKey: process.env.MODEL_API_KEY ?? '',
-            timeoutMs: config.MODEL_TIMEOUT_MS,
-            onUsage,
-          })
-        : undefined;
-  const reflection = routing
-    ? routing.policies.reflection
-      ? new RoutedReflectionProvider(
-          routing,
-          {
-            reserve: (estimate) => budget().reserve(estimate),
-            settle: (id, usage, failed) => budget().settle(id, usage, failed),
-          },
-          process.env,
-          { production: config.production },
-        )
-      : undefined
-    : config.MODEL_PROVIDER === 'ollama'
-      ? new OllamaReflectionProvider({
-          baseUrl: process.env.OLLAMA_BASE_URL,
-          model: process.env.MODEL_NAME ?? 'qwen3:4b',
-          timeoutMs: Math.max(30000, config.MODEL_TIMEOUT_MS),
-          onUsage,
-        })
-      : config.MODEL_PROVIDER === 'compatible'
-        ? new CompatibleReflectionProvider({
-            baseUrl: process.env.MODEL_BASE_URL ?? '',
-            model: process.env.MODEL_NAME ?? '',
-            apiKey: process.env.MODEL_API_KEY ?? '',
-            timeoutMs: config.MODEL_TIMEOUT_MS,
-            onUsage,
-          })
-        : undefined;
+  const providers = runtimeProviders(config, process.env, {
+    onUsage: (input, output) => controller?.addUsage(input, output),
+    budgetFor: (routing) => controller!.modelBudget(routing),
+  });
   controller = await new ElsewhereController(store, {
     simulationStepMs: config.TICK_INTERVAL_MS * config.SIMULATION_RATE,
     simulationRate: config.SIMULATION_RATE,
-    modelProvider: model,
-    reflectionProvider: reflection,
+    modelProvider: providers.model,
+    reflectionProvider: providers.reflection,
     modelMaximum: config.MODEL_MAX_CALLS_PER_DAY,
   }).init();
   ready = !lifetime.signal.aborted;

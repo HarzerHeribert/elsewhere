@@ -35,3 +35,10 @@ it('rejects a different auth origin and a personal local model in production', (
   );
   expect(() => appConfig({ ...production, MODEL_PROVIDER: 'ollama' })).toThrow('Ollama');
 });
+it('allows explicit local subscription mode and blocks an unreviewed hosted credential boundary', () => {
+  expect(appConfig({ MODEL_PROVIDER: 'chatgpt' }).MODEL_PROVIDER).toBe('chatgpt');
+  expect(() => appConfig({ ...production, MODEL_PROVIDER: 'chatgpt' })).toThrow(
+    'local owner runtime',
+  );
+  expect(() => appConfig({ MODEL_PROVIDER: 'chatgpt', HOST: '0.0.0.0' })).toThrow('loopback');
+});

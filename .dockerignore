@@ -5,6 +5,8 @@
 !tsconfig.json
 !app/
 !app/**
+!scripts/
+!scripts/inference-operator.ts
 !characters/
 !characters/**
 !packages/

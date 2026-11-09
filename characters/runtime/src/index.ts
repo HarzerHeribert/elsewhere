@@ -107,6 +107,8 @@ export interface DecisionContext {
   outsideMessages: Array<{ source: string; text: string }>;
 }
 export interface DecisionProvider<T = unknown> {
+  /** Host-side quota/auth gate. False skips dispatch and preserves daily call allowance. */
+  isAvailable?(): boolean;
   id: string;
   /** Trusted composition-root providers can reserve each routed attempt through the controller. */
   managesAllowance?: boolean;
