@@ -1,4 +1,4 @@
-/* Map the existing world UI to the shared system without changing its navigation model. */
+/* Shared product surfaces and content styles. World arrangement lives in world-layout.css. */
 .glass {
   background: var(--ew-surface);
   border-color: var(--ew-line);
@@ -16,14 +16,8 @@
   color: var(--ew-text-muted);
   letter-spacing: 0.025em;
 }
-.world-rail,
-.world-panel,
-.arrival-card,
 .modal {
   border-radius: var(--ew-radius-panel);
-}
-.world-panel {
-  animation: ew-panel-in var(--ew-duration-panel) var(--ew-ease);
 }
 .panel-header {
   padding: var(--ew-space-6);
@@ -34,7 +28,6 @@
 .panel-header h2,
 .character-now h3,
 .encounter-card h3,
-.arrival-card h1,
 .modal h2 {
   font-family: var(--ew-font-display);
   font-weight: 700;
@@ -54,8 +47,7 @@
 .character-profile p,
 .modal > p:not(.eyebrow),
 .privacy-note,
-.quiet-note,
-.arrival-card > p:not(.eyebrow) {
+.quiet-note {
   color: var(--ew-text-muted);
   font-size: 13px;
   line-height: var(--ew-leading-body);
@@ -63,42 +55,6 @@
 .quiet-note,
 .privacy-note {
   font-size: var(--ew-text-small);
-}
-.world-rail button {
-  color: var(--ew-text-muted);
-  border-radius: var(--ew-radius-control);
-}
-.world-rail button:hover {
-  background: var(--ew-surface-muted);
-  color: var(--ew-text);
-}
-.world-rail button.active {
-  background: var(--ew-selected);
-  color: var(--ew-action);
-}
-.world-rail button.active::before {
-  content: '';
-  position: absolute;
-  width: 3px;
-  height: 20px;
-  left: -3px;
-  border-radius: 3px;
-  background: var(--ew-action);
-}
-.rail-label {
-  font-size: var(--ew-text-caption);
-}
-.camera-switch button {
-  color: var(--ew-text-muted);
-  min-height: 40px;
-}
-.camera-switch button[aria-pressed='true'] {
-  background: var(--ew-selected);
-  color: var(--ew-action);
-  box-shadow: inset 0 0 0 1px var(--ew-line);
-}
-.camera-switch button:hover {
-  background: var(--ew-surface-muted);
 }
 .resident-row {
   padding: var(--ew-space-4);
@@ -137,9 +93,6 @@ button.resident-row:active {
 .connection.connecting i {
   background: var(--ew-text-muted);
 }
-.world-clock,
-.world-clock small,
-.location-chip span,
 .encounter-card p,
 .subtle {
   color: var(--ew-text-muted);
@@ -197,9 +150,6 @@ a:focus-visible {
 .owner-actions > .ew-button {
   flex: 1;
 }
-.arrival-card {
-  background: var(--ew-surface);
-}
 @keyframes ew-panel-in {
   from {
     opacity: 0;
@@ -221,9 +171,6 @@ a:focus-visible {
   }
 }
 @media (max-width: 800px) {
-  .world-panel {
-    animation-name: ew-sheet-in;
-  }
   .panel-header,
   .panel-scroll {
     padding: var(--ew-space-5);
@@ -240,7 +187,6 @@ a:focus-visible {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .world-panel,
   .modal {
     animation: none;
   }
@@ -268,14 +214,6 @@ a:focus-visible {
 .interest-row > small,
 .interest-row > div > span {
   color: var(--ew-text-muted);
-}
-.walk-controls button {
-  background: var(--ew-surface);
-  border-color: var(--ew-line);
-  color: var(--ew-text);
-}
-.walk-controls button:active {
-  background: var(--ew-selected);
 }
 .hubert-portrait {
   background: var(--ew-surface-muted);
@@ -421,29 +359,11 @@ a:focus-visible {
 .about-credits p {
   margin: var(--ew-space-2) 0;
 }
-.arrival-card {
-  max-width: 370px;
-}
-.arrival-card > small {
-  font-size: var(--ew-text-caption);
-  color: var(--ew-text-muted);
-}
 @media (max-width: 580px) {
   .message-form > div {
     gap: var(--ew-space-2);
   }
   .wish-actions .ew-button {
     flex: 1 1 auto;
-  }
-}
-
-@media (max-width: 580px) {
-  .game-shell:has(.connection-toast) .world-panel {
-    top: 144px;
-  }
-  .connection-toast {
-    top: 80px;
-    margin: 0;
-    line-height: 1.5;
   }
 }

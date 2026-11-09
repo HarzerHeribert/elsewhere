@@ -1,0 +1,531 @@
+/* World controls stay at the edges; panels share one predictable reading area. */
+.game-header {
+  position: absolute;
+  z-index: 12;
+  top: max(12px, env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 6px 10px;
+  border-radius: var(--ew-radius-panel);
+}
+.game-header .brand {
+  padding: 4px 8px;
+  min-height: 44px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.game-header .brand small {
+  display: none;
+}
+.game-header .elsewhere-mark {
+  width: 30px;
+  height: 34px;
+}
+.game-header .elsewhere-wordmark {
+  width: 138px;
+}
+.world-clock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--ew-text-small);
+  color: var(--ew-text-muted);
+}
+.world-clock > span:last-child {
+  display: flex;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.world-clock small {
+  font: inherit;
+}
+.header-actions {
+  display: flex;
+  margin-left: auto;
+  min-width: 0;
+}
+.account-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 180px;
+  padding: 10px 14px;
+  background: var(--ew-surface-muted);
+  border-radius: var(--ew-radius-control);
+  font-size: var(--ew-text-small);
+}
+.account-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-button > svg {
+  width: 18px;
+  height: 18px;
+}
+.account-button:hover {
+  background: var(--ew-selected);
+}
+.world-rail {
+  position: absolute;
+  z-index: 12;
+  top: 88px;
+  left: 16px;
+  width: 156px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--ew-radius-panel);
+}
+.world-rail button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  background: transparent;
+  border-radius: var(--ew-radius-control);
+  color: var(--ew-text-muted);
+  text-align: left;
+}
+.world-rail button svg {
+  width: 20px;
+  height: 20px;
+}
+.world-rail button:hover {
+  background: var(--ew-surface-muted);
+  color: var(--ew-text);
+}
+.world-rail button.active {
+  background: var(--ew-selected);
+  color: var(--ew-action);
+}
+.world-rail button.active::before {
+  content: '';
+  width: 3px;
+  height: 20px;
+  position: absolute;
+  left: 0;
+  border-radius: 3px;
+  background: currentColor;
+}
+.rail-label {
+  font-size: var(--ew-text-small);
+  font-weight: 500;
+}
+.rail-dot {
+  position: absolute;
+  right: 8px;
+  top: 10px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ew-accent);
+}
+.world-panel {
+  position: absolute;
+  z-index: 11;
+  top: 88px;
+  bottom: 96px;
+  left: 188px;
+  width: 348px;
+  max-width: calc(100vw - 204px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--ew-radius-panel);
+  animation: ew-panel-in var(--ew-duration-panel) var(--ew-ease);
+}
+.panel-header {
+  padding: 16px 20px;
+  gap: 12px;
+}
+.panel-header h2 {
+  margin: 0;
+  font-size: var(--ew-text-title);
+}
+.panel-header h2:focus {
+  outline: none;
+}
+.panel-header .square-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.panel-scroll {
+  padding: 20px;
+}
+.view-controls {
+  position: absolute;
+  z-index: 12;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--ew-radius-panel);
+}
+.camera-switch {
+  display: flex;
+  gap: 4px;
+}
+.camera-switch button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: transparent;
+  border-radius: var(--ew-radius-control);
+  font-size: var(--ew-text-small);
+  color: var(--ew-text-muted);
+}
+.camera-switch svg {
+  width: 18px;
+  height: 18px;
+}
+.camera-switch button:hover:not(:disabled) {
+  background: var(--ew-surface-muted);
+}
+.camera-switch button[aria-pressed='true'] {
+  background: var(--ew-selected);
+  color: var(--ew-action);
+  box-shadow: inset 0 0 0 1px var(--ew-line);
+}
+.view-tools {
+  display: flex;
+  gap: 4px;
+  border-left: 1px solid var(--ew-line);
+  padding-left: 8px;
+}
+.view-tools button {
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--ew-text-muted);
+}
+.view-tools button:hover {
+  background: var(--ew-surface-muted);
+}
+.world-bottom {
+  position: absolute;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  z-index: 8;
+}
+.location-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--ew-radius-control);
+  padding: 10px 14px;
+  max-width: 260px;
+}
+.location-chip strong {
+  display: block;
+  font-size: var(--ew-text-small);
+  font-weight: 500;
+}
+.location-chip small {
+  display: block;
+  color: var(--ew-text-muted);
+  font-size: var(--ew-text-caption);
+  margin-top: 4px;
+}
+.location-chip > svg {
+  width: 18px;
+  height: 18px;
+}
+.bottom-actions {
+  display: flex;
+}
+.bottom-actions:empty {
+  display: none;
+}
+.walk-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 92px;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--ew-radius-control);
+}
+.walk-controls button {
+  min-height: 44px;
+  border: 1px solid var(--ew-line);
+  border-radius: var(--ew-radius-small);
+  font-size: 20px;
+  background: var(--ew-surface);
+  color: var(--ew-text);
+}
+.walk-controls button:active {
+  background: var(--ew-selected);
+}
+.walk-controls .stop-walking {
+  grid-column: 1 / -1;
+  font-size: var(--ew-text-small);
+}
+.panel-open .walk-controls {
+  display: none;
+}
+.encounter-card {
+  bottom: 100px;
+  left: 50%;
+  min-width: 0;
+  max-width: 380px;
+}
+.encounter-card > button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.connection-toast {
+  position: absolute;
+  top: 88px;
+  right: 16px;
+  z-index: 10;
+  max-width: 340px;
+  padding: 12px 16px;
+  margin: 0;
+  border-radius: var(--ew-radius-control);
+  font-size: var(--ew-text-small);
+  line-height: 1.5;
+  color: var(--ew-text-muted);
+}
+@media (max-width: 1050px) and (min-width: 801px) {
+  .world-bottom .bottom-actions {
+    display: none;
+  }
+  .location-chip {
+    max-width: 230px;
+  }
+  .connection-toast {
+    max-width: 240px;
+  }
+}
+@media (max-width: 800px) {
+  .game-header {
+    top: max(8px, env(safe-area-inset-top));
+    left: 8px;
+    right: 8px;
+    height: 56px;
+    gap: 12px;
+    padding: 4px 8px;
+  }
+  .game-header .brand {
+    gap: 6px;
+    padding: 4px;
+  }
+  .game-header .elsewhere-mark {
+    width: 24px;
+    height: 28px;
+  }
+  .game-header .elsewhere-wordmark {
+    width: 116px;
+  }
+  .world-clock {
+    margin-left: auto;
+  }
+  .world-clock .clock-divider,
+  .world-clock > span:last-child {
+    display: none;
+  }
+  .header-actions {
+    margin-left: 0;
+  }
+  .account-button {
+    max-width: 120px;
+    padding: 10px;
+  }
+  .view-controls {
+    top: calc(max(8px, env(safe-area-inset-top)) + 64px);
+    bottom: auto;
+    left: 8px;
+    right: 8px;
+    padding: 4px;
+    border-radius: var(--ew-radius-control);
+  }
+  .camera-switch {
+    flex: 1;
+    min-width: 0;
+  }
+  .camera-switch button {
+    flex: 1;
+    padding: 10px 6px;
+    gap: 6px;
+  }
+  .camera-switch button span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    font-size: var(--ew-text-small);
+  }
+  .view-tools {
+    display: none;
+  }
+  .world-rail {
+    top: auto;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    right: 8px;
+    width: auto;
+    flex-direction: row;
+    padding: 4px;
+    gap: 0;
+    border-radius: var(--ew-radius-control);
+  }
+  .world-rail button {
+    flex: 1;
+    width: 0;
+    min-width: 44px;
+    min-height: 58px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 7px 0;
+  }
+  .rail-label {
+    font-size: 11px;
+  }
+  .world-rail button.active::before {
+    top: 0;
+    left: calc(50% - 10px);
+    width: 20px;
+    height: 3px;
+  }
+  .world-panel {
+    top: calc(max(8px, env(safe-area-inset-top)) + 128px);
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 84px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
+    border-radius: var(--ew-radius-panel);
+    animation-name: ew-sheet-in;
+  }
+  .panel-header {
+    padding: 12px 16px;
+  }
+  .panel-scroll {
+    padding: 20px;
+  }
+  .panel-intro {
+    font-size: var(--ew-text-small);
+  }
+  .world-bottom {
+    left: 8px;
+    right: auto;
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 76px);
+  }
+  .location-chip {
+    max-width: 210px;
+    padding: 10px 12px;
+  }
+  .location-chip small {
+    max-width: 175px;
+  }
+  .mouse-capture {
+    display: none;
+  }
+  .walk-controls {
+    right: 8px;
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 144px);
+  }
+  .panel-open .world-bottom {
+    display: none;
+  }
+  .encounter-card {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 316px);
+    max-width: none;
+    min-width: 0;
+    padding: 12px;
+  }
+  .encounter-card > button > span {
+    display: inline;
+  }
+  .encounter-card p {
+    max-width: none;
+  }
+  .encounter-card kbd {
+    display: none;
+  }
+  .connection-toast {
+    top: calc(max(8px, env(safe-area-inset-top)) + 128px);
+    left: 8px;
+    right: 8px;
+    max-width: none;
+    padding: 10px 12px;
+    font-size: var(--ew-text-small);
+  }
+  .game-shell:has(.connection-toast) .world-panel {
+    top: calc(max(8px, env(safe-area-inset-top)) + 196px);
+  }
+}
+@media (max-width: 480px) {
+  .world-clock {
+    display: none;
+  }
+  .header-actions {
+    margin-left: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .world-panel {
+    animation: none;
+  }
+}
+/* Tiny phones keep full labels instead of squeezing six words into one row. */
+@media (max-width: 360px) {
+  .world-rail {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .world-rail button {
+    width: 100%;
+    flex-direction: row;
+    min-height: 44px;
+    gap: 6px;
+    padding: 6px 4px;
+  }
+  .rail-label {
+    font-size: var(--ew-text-small);
+  }
+  .world-rail button.active::before {
+    left: 0;
+    top: calc(50% - 10px);
+    width: 3px;
+    height: 20px;
+  }
+  .world-panel {
+    top: calc(max(8px, env(safe-area-inset-top)) + 136px);
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 116px);
+  }
+  .world-bottom {
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 108px);
+  }
+  .walk-controls {
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 176px);
+  }
+  .encounter-card {
+    bottom: calc(max(8px, env(safe-area-inset-bottom)) + 348px);
+  }
+}

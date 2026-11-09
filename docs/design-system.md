@@ -10,17 +10,18 @@ For Elsewhere this means: keep the world visible; reveal one focused task at a t
 
 ## Source of truth
 
-| Layer                   | Source                                                  | Consumers                                   |
-| ----------------------- | ------------------------------------------------------- | ------------------------------------------- |
-| Semantic tokens         | `elsewhere/web/src/ui/tokens.css`                       | World, specimen, exported gallery CSS       |
-| Reusable control styles | `elsewhere/web/src/ui/components.css`                   | Button, badge, field, segment controls      |
-| Existing UI mapping     | `elsewhere/web/src/ui/application.css`                  | World navigation, panels, forms and dialogs |
-| React primitives        | `elsewhere/web/src/ui/`                                 | Real account/world dialogs and specimen     |
-| Interactive reference   | `elsewhere/web/src/design-system/`                      | `/design-system.html`                       |
-| Logo source             | `scripts/generate-wordmark.py` and `assets/brand/type/` | Filled SVG wordmark outlines and local font |
-| Character / doorway     | `elsewhere/web/src/brandArtwork.ts`                     | UI and exported assets                      |
+| Layer                   | Source                                                  | Consumers                                          |
+| ----------------------- | ------------------------------------------------------- | -------------------------------------------------- |
+| Semantic tokens         | `elsewhere/web/src/ui/tokens.css`                       | World, specimen, exported gallery CSS              |
+| Reusable control styles | `elsewhere/web/src/ui/components.css`                   | Button, badge, field, segment controls             |
+| Existing UI mapping     | `elsewhere/web/src/ui/application.css`                  | World navigation, panels, forms and dialogs        |
+| World layout            | `elsewhere/web/src/ui/world-layout.css`                 | Header, navigation, camera dock, responsive panels |
+| React primitives        | `elsewhere/web/src/ui/`                                 | Real account/world dialogs and specimen            |
+| Interactive reference   | `elsewhere/web/src/design-system/`                      | `/design-system.html`                              |
+| Logo source             | `scripts/generate-wordmark.py` and `assets/brand/type/` | Filled SVG wordmark outlines and local font        |
+| Character / doorway     | `elsewhere/web/src/brandArtwork.ts`                     | UI and exported assets                             |
 
-Import the styles in this order: `styles.css` (tokens and components), then `ui/application.css`. New components should consume `--ew-*` tokens rather than add palette literals or private motion timings. The application mapping preserves existing selectors and responsive layout. All product CSS colors use semantic roles; the map, message feed, wishes, controls, account forms, and activity views share the palette. Primary and secondary actions use the shared Button component.
+Import the styles in this order: `styles.css` (tokens and components), then `ui/application.css`, then `ui/world-layout.css` for the world application. New components should consume `--ew-*` tokens rather than add palette literals or private motion timings. The application mapping styles shared content; world-layout.css owns the application arrangement and responsive breakpoints. All product CSS colors use semantic roles; the map, message feed, wishes, controls, account forms, and activity views share the palette. Primary and secondary actions use the shared Button component.
 
 ## Color and meaning
 
@@ -70,9 +71,15 @@ Corners: 8 px inset, 12 px control, 20 px panel. Pill rounding is for badges. Pr
 
 Fields retain labels, use `aria-describedby` for help/errors and `aria-invalid` for validation. Put error text next to the input. Loading, unavailable, empty and success states must preserve the user’s context and input.
 
-Reuse `Modal` for focus containment, Escape dismissal, and restoring focus to the opening control. Use headings and a clear close control. Existing world panels remain contextual, with their navigation visible. Avoid replacing a panel with a full-page scene for a short action.
+Reuse `Modal` for focus containment, Escape dismissal, and restoring focus to the opening control. Use headings and a clear close control. World panels remain contextual, with their navigation visible. Opening a panel focuses its heading; closing it returns focus to the navigation control. Camera transitions instead return focus to the world. Avoid replacing a panel with a full-page scene for a short action.
 
 The specimen’s note form is local-only and explicitly says so. It must not send data to the application API or imply a real delivery.
+
+## World navigation
+
+The world opens directly, without a welcome card. The top bar contains the identity, world status, and account. Desktop navigation uses labeled rows at the left; a separate camera dock groups Overview, Walk, the resident viewpoint, reset, and fullscreen. Walk enters the world without requiring an account.
+
+At 800 px and below, labeled navigation moves to the bottom and camera modes stay directly below the header. Panels use the available width between these controls. At 360 px and below, navigation uses two rows so labels keep their reading size. Navigation and camera targets are at least 44 × 44 px; camera labels stay visible. Secondary reset and fullscreen controls remain available in Controls on phones. Offline notices have a reserved space above panels. Movement controls stay out of the way while a panel is open.
 
 ## Motion
 

@@ -78,7 +78,7 @@ async function ownVisitor(
 async function enterWorld(page: Page) {
   // Readiness is an actual first-person camera and focused canvas. Entering this
   // mode must not send a stop after a user-requested destination.
-  await page.getByRole('button', { name: 'Enter world', exact: true }).click();
+  await page.getByRole('button', { name: 'Walk', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Walk', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -929,7 +929,7 @@ test('a stalled world response times out and polling reconnects without a reload
     ).toBeVisible({ timeout: 10000 });
     holding = false;
     release();
-    await expect(page.getByRole('button', { name: 'Enter world', exact: true })).toBeVisible({
+    await expect(page.getByRole('button', { name: 'Walk', exact: true })).toBeEnabled({
       timeout: 10000,
     });
     await expect(
@@ -1407,4 +1407,67 @@ test('a private operator link requires confirmation, leaves no browser token sto
   await page.getByRole('button', { name: 'Continue with private sign-in', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Invalid token');
   expect(new URL(page.url()).hash).toBe('');
+});
+
+test('world navigation moves keyboard focus into panels and returns it on dismissal', async ({
+  page,
+}) => {
+  await visit(page);
+  await expect(page.getByRole('region', { name: 'Welcome to Elsewhere' })).toHaveCount(0);
+  const navigation = page.getByRole('navigation', { name: 'World navigation' });
+  const messages = navigation.getByRole('button', { name: 'Messages', exact: true });
+  await messages.focus();
+  await page.keyboard.press('Enter');
+  await expect(panel(page).getByRole('heading', { name: 'Messages', exact: true })).toBeFocused();
+  await expect(messages).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Close panel', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(messages).toBeFocused();
+  await expect(panel(page)).not.toBeVisible();
+  await expect(messages).toHaveAttribute('aria-expanded', 'false');
+  await openPanel(page, 'Residents');
+  await messages.click();
+  await page.keyboard.press('Escape');
+  await expect(messages).toBeFocused();
+});
+
+test('labeled navigation and camera controls remain reachable on desktop and narrow phones', async ({
+  page,
+}, info) => {
+  await visit(page);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
+    const navigation = page.getByRole('navigation', { name: 'World navigation' });
+    const views = page.getByRole('group', { name: 'Camera perspective' });
+    for (const button of [
+      ...(await navigation.getByRole('button').all()),
+      ...(await views.getByRole('button').all()),
+    ]) {
+      await expect(button).toBeVisible();
+      const bounds = (await button.boundingBox())!;
+      expect(bounds.width).toBeGreaterThanOrEqual(44);
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(width > 800 ? 1000 : 844);
+    }
+    await openPanel(page, 'Messages');
+    const panelBounds = (await panel(page).boundingBox())!;
+    const navigationBounds = (await navigation.boundingBox())!;
+    if (width <= 800) {
+      expect(panelBounds.width).toBeGreaterThan(width - 24);
+      expect(panelBounds.y + panelBounds.height).toBeLessThan(navigationBounds.y);
+      const viewsBounds = (await views.boundingBox())!;
+      expect(panelBounds.y).toBeGreaterThan(viewsBounds.y + viewsBounds.height);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({
+      path: info.outputPath(`navigation-${width}.png`),
+      animations: 'disabled',
+    });
+    await closePanel(page);
+  }
 });

@@ -108,6 +108,8 @@ export interface DecisionContext {
   outsideMessages: Array<{ source: string; text: string }>;
 }
 export interface DecisionProvider<T = unknown> {
+  /** Owner-requested refresh of local connection state; never resets provider or host budgets. */
+  resetAvailability?(): void;
   /** Host-side quota/auth gate. False skips dispatch and preserves daily call allowance. */
   isAvailable?(): boolean;
   id: string;

@@ -9,12 +9,40 @@ import {
 } from '../app/controller';
 import { SqliteSnapshotStore, type SnapshotStore } from '../packages/persistence/src/index';
 
+import { assessHubertSpatialAction } from '../characters/hubert/src/actionOffers';
+import { chooseAction } from '../characters/hubert/src/index';
+import { observeWorld, advanceWorld } from '../elsewhere/server/src/world';
+import type { DecisionProvider } from '../characters/runtime/src/index';
+
+// Old simulation fixtures explicitly select an offline test provider. Production has no fallback.
+function simulationProvider(store: SnapshotStore<ControllerState>): DecisionProvider {
+  return {
+    id: 'offline-test-fixture',
+    localOnly: true,
+    managesAllowance: true,
+    propose: async (context) => {
+      const saved = (await store.load())!.value;
+      const now = context.observations.observedAt as number;
+      const observation = observeWorld(advanceWorld(saved.world, now), 'hubert', now);
+      const action = chooseAction(saved.hubert, observation, now, epoch).action;
+      return assessHubertSpatialAction(saved.hubert, observation, action, now).status ===
+        'unavailable'
+        ? { type: 'rest' }
+        : action;
+    },
+  };
+}
+
 const epoch = Date.UTC(2026, 10, 8, 12);
 const active = new Set<ElsewhereController>();
 const directories: string[] = [];
 async function create(options: ControllerOptions = {}, file = ':memory:') {
   const store = new SqliteSnapshotStore<ControllerState>(file);
-  const controller = await new ElsewhereController(store, { now: () => epoch, ...options }).init();
+  const controller = await new ElsewhereController(store, {
+    now: () => epoch,
+    modelProvider: simulationProvider(store),
+    ...options,
+  }).init();
   active.add(controller);
   return { controller, store };
 }
@@ -106,7 +134,7 @@ describe('authoritative controller lifecycle', () => {
     expect((await store.load())!.value.modelAllowance.calls).toBe(before);
     expect(controller.getSnapshot().runtime.tick).toBe(1);
   });
-  it('does not reserve or dispatch a model call when mandatory rest already determines the action', async () => {
+  it('dispatches to the model even when low energy would previously force rest', async () => {
     const file = databaseFile();
     const initial = await create({}, file);
     const saved = (await initial.store.load())!;
@@ -119,9 +147,9 @@ describe('authoritative controller lifecycle', () => {
     const { controller, store } = await create({ modelProvider: { id: 'test', propose } }, file);
     const before = (await store.load())!.value.modelAllowance.calls;
     await controller.step();
-    expect(propose).not.toHaveBeenCalled();
-    expect((await store.load())!.value.modelAllowance.calls).toBe(before);
-    expect((await store.load())!.value.hubert.activity.kind).toBe('rest');
+    expect(propose).toHaveBeenCalledOnce();
+    expect((await store.load())!.value.modelAllowance.calls).toBe(before + 1);
+    expect((await store.load())!.value.hubert.activity.kind).toBe('reflect');
   });
   it('pauses ordinary ticks, permits an explicit step, and resumes normally', async () => {
     const { controller } = await create();
@@ -168,7 +196,10 @@ describe('authoritative controller lifecycle', () => {
         },
         close: () => backing.close(),
       };
-      const controller = await new ElsewhereController(store, { now: () => epoch }).init();
+      const controller = await new ElsewhereController(store, {
+        now: () => epoch,
+        modelProvider: simulationProvider(store),
+      }).init();
       active.add(controller);
       for (let i = 0; i < 160 && !controller.getArtifact('weather-study'); i++)
         await controller.step();
@@ -297,7 +328,10 @@ describe('authoritative controller lifecycle', () => {
       },
       close,
     };
-    const controller = await new ElsewhereController(store, { now: () => epoch }).init();
+    const controller = await new ElsewhereController(store, {
+      now: () => epoch,
+      modelProvider: simulationProvider(store),
+    }).init();
     active.add(controller);
     const first = controller.step(),
       second = controller.step();
@@ -366,8 +400,11 @@ describe('authoritative controller lifecycle', () => {
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE-CANARY-REPUBLICATION');
     expect(snapshot.artifacts).toEqual([]);
     expect((await store.load())!.value.hubert.project.verifiedWorkSessions).toBe(0);
-    expect(snapshot.runtime.modelStatus).toContain(
-      kind === 'shell' ? 'invalid proposal' : 'validated',
+    expect(snapshot.runtime.modelStatus).toBe(
+      kind === 'shell' ? 'Hubert is currently unavailable' : 'Model connected',
+    );
+    expect(controller.getCharacterIssues()).toEqual(
+      kind === 'shell' ? [expect.objectContaining({ kind: 'failed' })] : [],
     );
     if (kind !== 'shell') {
       expect(snapshot.character.currentThought).toBeUndefined();
@@ -397,10 +434,12 @@ describe('authoritative controller lifecycle', () => {
     const snapshot = await restarted.controller.step();
     expect(propose).toHaveBeenCalledOnce();
     expect(snapshot.runtime.modelCalls).toBe(1);
-    expect(snapshot.runtime.modelStatus).toContain('allowance reached');
+    expect(restarted.controller.getCharacterIssues()).toContainEqual(
+      expect.objectContaining({ kind: 'allowance' }),
+    );
   });
 
-  it('counts failed provider attempts against the allowance and falls back without repeating a paid retry', async () => {
+  it('counts failed provider attempts and waits without choosing a fallback or paid retry', async () => {
     const propose = vi.fn(async () => {
       throw new Error('upstream unavailable');
     });
@@ -409,7 +448,10 @@ describe('authoritative controller lifecycle', () => {
       modelMaximum: 1,
     });
     const first = await controller.step();
-    expect(first.runtime.modelStatus).toContain('fallback');
+    expect(first.runtime.modelStatus).toBe('Hubert is currently unavailable');
+    expect(controller.getCharacterIssues()).toContainEqual(
+      expect.objectContaining({ kind: 'failed' }),
+    );
     await controller.step();
     expect(propose).toHaveBeenCalledOnce();
     expect(controller.getSnapshot().runtime.modelCalls).toBe(1);

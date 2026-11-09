@@ -104,6 +104,43 @@ export function AccountDialog({
               </dd>
             </div>
           </dl>
+          {session.characterIssues.length > 0 && (
+            <section aria-label="Character provider notices">
+              <h3>Your characters</h3>
+              {session.characterIssues
+                .slice()
+                .reverse()
+                .map((issue) => (
+                  <article key={issue.id} className="memory-glimpse">
+                    <strong>
+                      {issue.characterId === 'hubert' ? 'Hubert' : issue.characterId} ·{' '}
+                      {issue.resolvedAt === undefined ? 'Needs attention' : 'Recovered'}
+                    </strong>
+                    <p>{issue.message}</p>
+                    <small>
+                      {issue.workload === 'notebook'
+                        ? 'Notebook'
+                        : issue.workload === 'reflection'
+                          ? 'Reflection'
+                          : 'Decisions'}{' '}
+                      · {new Date(issue.since).toLocaleString()}
+                      {issue.resolvedAt !== undefined && (
+                        <> · Recovered {new Date(issue.resolvedAt).toLocaleString()}</>
+                      )}
+                    </small>
+                    {issue.resolvedAt === undefined && (
+                      <Button
+                        variant="secondary"
+                        busy={pending}
+                        onClick={() => void session.retryCharacterProvider(issue.characterId)}
+                      >
+                        Retry provider
+                      </Button>
+                    )}
+                  </article>
+                ))}
+            </section>
+          )}
           <p className="privacy-note">
             Your email stays private. Character email delivery requires verified contact details and
             explicit consent; it is not connected yet.

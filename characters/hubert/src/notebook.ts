@@ -6,6 +6,7 @@ export interface HubertNotebookState {
   latestAtReal: number;
   lastAtReal: number;
   sourceIds: string[];
+  failedSourceId?: string;
   pending?: { id: string; sourceId: string };
   entries: PublicNotebookEntry[];
 }

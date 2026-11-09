@@ -44,6 +44,51 @@ describe('API request recovery', () => {
       'hubert',
     ]);
   });
+  it('keeps provider notices scoped to a signed-in character owner', async () => {
+    const issue = {
+      id: 'notice',
+      characterId: 'hubert',
+      kind: 'failed',
+      since: 1000,
+      lastAt: 2000,
+      message: 'Provider unavailable.',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: null,
+            managedCharacterIds: ['hubert'],
+            characterIssues: [issue],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'admin', isWorldAdmin: true },
+            characterIssues: [issue],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'owner' },
+            managedCharacterIds: ['hubert'],
+            characterIssues: [
+              issue,
+              { ...issue, characterId: 'another' },
+              { ...issue, since: null },
+            ],
+          }),
+        ),
+    );
+    expect((await getAccount(new AbortController().signal)).characterIssues).toEqual([]);
+    expect((await getAccount(new AbortController().signal)).characterIssues).toEqual([]);
+    expect((await getAccount(new AbortController().signal)).characterIssues).toEqual([issue]);
+  });
   it('times out a stalled body, aborts the connection and allows a later request to succeed', async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;

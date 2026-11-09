@@ -170,3 +170,32 @@ it('reports usage attached to failed provider responses without exposing private
     cachedInputTokens: 0,
   });
 });
+
+it('rechecks a repaired broker connection only after explicit owner recovery', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ error: 'not_authorized' }, { status: 403 }))
+    .mockResolvedValue(Response.json({ value: { type: 'reflect' } }));
+  const api = client(fetcher);
+  const provider = new BrokerDecisionProvider(api);
+  await expect(provider.propose(context)).rejects.toThrow();
+  expect(provider.isAvailable()).toBe(false);
+  await expect(provider.propose(context)).rejects.toThrow('paused');
+  expect(fetcher).toHaveBeenCalledOnce();
+  provider.resetAvailability();
+  expect(provider.isAvailable()).toBe(true);
+  await expect(provider.propose(context)).resolves.toEqual({ type: 'reflect' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('cannot remove the broker service quota by refreshing local availability', async () => {
+  const fetcher = vi.fn(async () =>
+    Response.json({ error: 'daily_limit', retryAfterMs: 60_000 }, { status: 429 }),
+  );
+  const provider = new BrokerDecisionProvider(client(fetcher));
+  await expect(provider.propose(context)).rejects.toThrow('daily_limit');
+  provider.resetAvailability();
+  await expect(provider.propose(context)).rejects.toThrow('daily_limit');
+  expect(provider.isAvailable()).toBe(false);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});

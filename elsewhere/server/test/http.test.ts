@@ -343,6 +343,69 @@ describe('local public/owner API separation', () => {
     expect(artifact.observationHeight).toBe(1.45);
   });
 
+  it('projects bounded research evidence while stripping private extras and unsafe source URLs', async () => {
+    const { url, snapshot } = await start();
+    snapshot.research = Array.from({ length: 10 }, (_, i) => ({
+      id: `research-${i}`,
+      at: 1000,
+      topic: 'Copper fin',
+      query: 'weather vane fin clearance',
+      context: 'Hubert chose to investigate the mechanism.',
+      status: 'read' as const,
+      sources: [
+        ...[
+          'http://example.test/article',
+          'https://user:pass@example.test/article',
+          'javascript:alert(1)',
+          'not a URL',
+        ].map((url, j) => ({
+          id: `unsafe-${j}`,
+          url,
+          title: 'unsafe',
+          snippet: '',
+          status: 'returned' as const,
+        })),
+        ...Array.from({ length: 6 }, (_, j) => ({
+          id: `source-${j}`,
+          url: `https://example.test/article-${j}`,
+          title: 'Source title',
+          snippet: 'Source description',
+          status: 'read' as const,
+          excerpt: 'x'.repeat(4500),
+          retrievedAt: 1000,
+        })),
+      ],
+      outcome: 'One source read.',
+      nextStep: 'No follow-up recorded.',
+    }));
+    Object.assign(snapshot.research[9], {
+      privateIntent: 'PRIVATE-RESEARCH-INTENT',
+      rawPrompt: 'PRIVATE-RESEARCH-PROMPT',
+    });
+    Object.assign(snapshot.research[9].sources[4], {
+      privateCredential: 'PRIVATE-RESEARCH-CREDENTIAL',
+    });
+    const response = await fetch(`${url}/api/world`);
+    const text = await response.text();
+    expect(text).not.toContain('PRIVATE-RESEARCH-');
+    const research = (JSON.parse(text) as PublicSnapshot).research!;
+    expect(research).toHaveLength(8);
+    expect(research[0].id).toBe('research-2');
+    expect(research[7]).toMatchObject({
+      topic: 'Copper fin',
+      query: 'weather vane fin clearance',
+      context: 'Hubert chose to investigate the mechanism.',
+      status: 'read',
+      outcome: 'One source read.',
+      nextStep: 'No follow-up recorded.',
+    });
+    expect(research[7].sources).toHaveLength(5);
+    expect(
+      research[7].sources.every((source) => source.url.startsWith('https://example.test/')),
+    ).toBe(true);
+    expect(research[7].sources[0].excerpt).toHaveLength(4000);
+  });
+
   it('requires a bearer token before advancing state', async () => {
     const { url, tick } = await start();
     expect(
@@ -394,7 +457,29 @@ describe('local public/owner API separation', () => {
     const pause = vi.fn(async () => fixture()),
       resume = vi.fn(async () => fixture()),
       reset = vi.fn(async () => fixture());
+    const retryCharacterProvider = vi.fn(async () => undefined);
+    const getCharacterIssues = vi.fn(() => [
+      {
+        id: 'provider-notice',
+        characterId: 'hubert',
+        kind: 'failed' as const,
+        since: 1000,
+        lastAt: 2000,
+        message: 'PRIVATE-PROVIDER-NOTICE',
+        workload: 'decision' as const,
+      },
+      {
+        id: 'other-notice',
+        characterId: 'another',
+        kind: 'unavailable' as const,
+        since: 1000,
+        lastAt: 2000,
+        message: 'OTHER-CHARACTER-NOTICE',
+      },
+    ]);
     const { url, tick, resolveWish } = await start({
+      getCharacterIssues,
+      retryCharacterProvider,
       pause,
       resume,
       reset,
@@ -447,9 +532,39 @@ describe('local public/owner API separation', () => {
     expect(ownerAccount.user.isWorldAdmin).toBe(false);
     expect(adminAccount.managedCharacterIds).toEqual([]);
     expect(adminAccount.user.isWorldAdmin).toBe(true);
+    expect(ownerAccount.characterIssues).toEqual([
+      expect.objectContaining({ id: 'provider-notice' }),
+    ]);
+    expect(adminAccount.characterIssues).toBeUndefined();
+    const anonymousAccount = await fetch(`${url}/api/account`).then((response) => response.json());
+    expect(anonymousAccount.characterIssues).toBeUndefined();
+    const retry = (
+      actor: string,
+      character = 'hubert',
+      origin: string | null = 'http://127.0.0.1:5173',
+    ) =>
+      fetch(`${url}/api/characters/${character}/provider/retry`, {
+        method: 'POST',
+        headers: {
+          Cookie: actor,
+          'Content-Type': 'application/json',
+          ...(origin ? { Origin: origin } : {}),
+        },
+        body: '{}',
+      });
+    expect((await retry('admin')).status).toBe(403);
+    expect((await retry('visitor')).status).toBe(403);
+    expect((await retry('')).status).toBe(401);
+    expect((await retry('owner', 'another')).status).toBe(403);
+    expect((await retry('owner', 'hubert', null)).status).toBe(403);
+    expect(retryCharacterProvider).not.toHaveBeenCalled();
+    expect((await retry('owner')).status).toBe(200);
+    expect(retryCharacterProvider).toHaveBeenCalledOnce();
+
     const publicText = await fetch(`${url}/api/world`).then((response) => response.text());
     expect(publicText).not.toContain('managedCharacterIds');
     expect(publicText).not.toContain('hubert-owner');
+    expect(publicText).not.toContain('PRIVATE-PROVIDER-NOTICE');
     expect(
       (
         await fetch(`${url}/api/characters`, {
@@ -485,6 +600,34 @@ describe('local public/owner API separation', () => {
     });
     expect(response.status).toBe(403);
     expect(tick).not.toHaveBeenCalled();
+  });
+
+  it('rechecks provider ownership after reading the retry body', async () => {
+    let checks = 0;
+    const retryCharacterProvider = vi.fn(async () => undefined);
+    const { url } = await start({
+      retryCharacterProvider,
+      canManageCharacter: () => ++checks < 2,
+      auth: {
+        handle: async () => {},
+        isWorldAdmin: async () => false,
+        getAccount: async () => ({
+          id: 'former-owner',
+          name: 'Owner',
+          email: 'owner@example.test',
+          emailVerified: true,
+          role: 'user',
+          isWorldAdmin: false,
+        }),
+      },
+    });
+    const response = await fetch(`${url}/api/characters/hubert/provider/retry`, {
+      method: 'POST',
+      headers: { Origin: 'http://127.0.0.1:5173', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    expect(response.status).toBe(403);
+    expect(retryCharacterProvider).not.toHaveBeenCalled();
   });
 
   it('rejects an unapproved origin even when the owner token is present', async () => {

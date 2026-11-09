@@ -59,7 +59,7 @@ it('runs the real sole-Hubert world through a separate private inference port an
     ).init();
     const result = await controller.step();
     expect(dispatches).toBe(1);
-    expect(result.runtime.modelStatus).toContain('validated');
+    expect(result.runtime.modelStatus).toBe('Model connected');
     expect(broker.getState().allowance).toMatchObject({
       calls: 1,
       inputTokens: 123,
@@ -75,7 +75,8 @@ it('runs the real sole-Hubert world through a separate private inference port an
     wrong = await new ElsewhereController(new SqliteSnapshotStore<ControllerState>(':memory:'), {
       modelProvider: wrongProviders.model,
     }).init();
-    expect((await wrong.step()).runtime.modelStatus).toContain('fallback');
+    expect((await wrong.step()).runtime.modelStatus).toContain('unavailable');
+    expect(wrong.getCharacterIssues()[0]).toMatchObject({ kind: 'failed', workload: 'decision' });
     expect(dispatches).toBe(1);
     expect(broker.getState().allowance.calls).toBe(1);
     expect(wrongProviders.model!.isAvailable!()).toBe(false);

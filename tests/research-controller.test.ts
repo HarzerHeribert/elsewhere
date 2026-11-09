@@ -1,11 +1,12 @@
 import { expect, it, vi } from 'vitest';
 import { ElsewhereController, type ControllerState } from '../app/controller';
+import type { SnapshotStore, StoredSnapshot } from '../packages/persistence/src/index';
 import { SqliteSnapshotStore } from '../packages/persistence/src/index';
 import { observeWorld } from '../elsewhere/server/src/world';
 import { readableSources } from '../characters/hubert/src/research';
 import { workingContext } from '../characters/hubert/src/index';
 
-it('lets Hubert choose an observed topic and read it, without transmitting a private note or publishing page text', async () => {
+it('lets Hubert choose an observed topic and read it, publishing explicit research evidence without transmitting a private note', async () => {
   let now = Date.UTC(2026, 10, 9, 12);
   const backing = new SqliteSnapshotStore<ControllerState>(':memory:');
   const source = {
@@ -17,6 +18,7 @@ it('lets Hubert choose an observed topic and read it, without transmitting a pri
   const search = vi.fn(async (input: { query: string }) => {
     expect(input.query).not.toContain('PRIVATE-NOTE-CANARY');
     expect((await backing.load())!.value.hubert.research?.pending?.kind).toBe('search');
+    expect(c.getSnapshot().research?.at(-1)?.status).toBe('searching');
     return {
       kind: 'search' as const,
       receiptId: 'research-search-fixture',
@@ -60,6 +62,7 @@ it('lets Hubert choose an observed topic and read it, without transmitting a pri
     const found = await c.step();
     expect(search).toHaveBeenCalledTimes(1);
     expect(found.events.at(-1)?.type).toBe('web_search');
+    expect(found.research?.at(-1)?.sources[0].status).toBe('returned');
     now += 120001;
     const after = await c.step();
     expect(read).toHaveBeenCalledTimes(1);
@@ -67,7 +70,20 @@ it('lets Hubert choose an observed topic and read it, without transmitting a pri
     const memory = after.memories.find((m) => m.sourceUrl === source.url);
     expect(memory?.summary).toContain('Sparrow biology');
     expect(memory?.sourceUrl).toBe(source.url);
-    expect(JSON.stringify(after)).not.toMatch(/EXTERNAL-PAGE-CANARY|PRIVATE-NOTE-CANARY/);
+    expect(JSON.stringify(after)).not.toContain('PRIVATE-NOTE-CANARY');
+    expect(after.research?.at(-1)).toMatchObject({
+      query: search.mock.calls[0][0].query,
+      status: 'read',
+      sources: [
+        {
+          url: source.url,
+          status: 'read',
+          excerpt: 'EXTERNAL-PAGE-CANARY: an unverified website claim.',
+        },
+      ],
+    });
+    const { research: _publicEvidence, ...rest } = after;
+    expect(JSON.stringify(rest)).not.toContain('EXTERNAL-PAGE-CANARY');
     const saved = (await backing.load())!.value;
     expect(saved.hubert.memories.find((m) => m.source === 'web-reading')?.verified).toBe(false);
     expect(saved.hubert.interests).toEqual(before.interests);
@@ -141,7 +157,11 @@ it('backs off unreadable sources and drops expired offers without inventing a re
   try {
     await c.step();
     now += 120001;
-    await c.step();
+    const deferred = await c.step();
+    expect(deferred.research?.at(-1)).toMatchObject({
+      status: 'deferred',
+      sources: [{ status: 'deferred' }],
+    });
     const state = (await backing.load())!.value.hubert;
     expect(read).toHaveBeenCalledTimes(1);
     expect(state.memories.some((m) => m.source === 'web-reading')).toBe(false);
@@ -150,5 +170,58 @@ it('backs off unreadable sources and drops expired offers without inventing a re
     expect(readableSources(state, now + 24 * 3600000)).toEqual([]);
   } finally {
     await c.close();
+  }
+});
+
+it('restores completed research evidence and marks interrupted research deferred after restart', async () => {
+  class MemoryStore implements SnapshotStore<ControllerState> {
+    saved: StoredSnapshot<ControllerState> | null = null;
+    async load() {
+      return structuredClone(this.saved);
+    }
+    async save(value: ControllerState, expected: number) {
+      this.saved = { version: expected + 1, value: structuredClone(value) };
+      return expected + 1;
+    }
+    async close() {}
+  }
+  const store = new MemoryStore();
+  const first = await new ElsewhereController(store, { now: () => 1000 }).init();
+  await first.close();
+  store.saved!.value.hubert.research = {
+    lastAtReal: 1000,
+    topics: {},
+    readIds: ['source'],
+    pending: { id: 'interrupted', kind: 'read' },
+    episodes: [
+      {
+        id: 'search',
+        at: 1000,
+        topic: 'Robin',
+        query: 'robin behavior',
+        context: 'Following up on a robin encountered in Elsewhere.',
+        status: 'reading',
+        sources: [
+          {
+            id: 'source',
+            url: 'https://example.org/robin',
+            title: 'Robin biology',
+            snippet: 'Bird behavior.',
+            status: 'read',
+            excerpt: 'A retained source excerpt.',
+          },
+        ],
+      },
+    ],
+  };
+  const restarted = await new ElsewhereController(store, { now: () => 2000 }).init();
+  try {
+    expect(restarted.getSnapshot().research?.at(-1)).toMatchObject({
+      status: 'deferred',
+      sources: [{ status: 'read', excerpt: 'A retained source excerpt.' }],
+    });
+    expect((await store.load())!.value.hubert.research?.pending).toBeUndefined();
+  } finally {
+    await restarted.close();
   }
 });

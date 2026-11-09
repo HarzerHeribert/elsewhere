@@ -158,7 +158,9 @@ export function useAccountSession() {
         signal: controller.signal,
       });
       if (!current(version)) return false;
-      setSession((value) => (value ? { ...value, user: null, managedCharacterIds: [] } : value));
+      setSession((value) =>
+        value ? { ...value, user: null, managedCharacterIds: [], characterIssues: [] } : value,
+      );
       setVerificationEmail('');
       return true;
     } catch (reason) {
@@ -170,9 +172,42 @@ export function useAccountSession() {
       if (current(version)) setPending(false);
     }
   }, [begin, current]);
+  const retryCharacterProvider = useCallback(
+    async (characterId: string) => {
+      if (mutating.current) return false;
+      mutating.current = true;
+      const { version, controller } = begin();
+      setPending(true);
+      setError('');
+      try {
+        await requestJson(`/api/characters/${encodeURIComponent(characterId)}/provider/retry`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+          signal: controller.signal,
+        });
+        const value = await getAccount(controller.signal);
+        if (!current(version)) return false;
+        setSession(value);
+        return true;
+      } catch (reason) {
+        if (current(version))
+          setError(reason instanceof Error ? reason.message : 'Provider retry failed.');
+        return false;
+      } finally {
+        mutating.current = false;
+        if (current(version)) setPending(false);
+      }
+    },
+    [begin, current],
+  );
+  const characterIssues = session?.user ? (session.characterIssues ?? []) : [];
   return {
     account: session?.user ?? null,
     capabilities: session,
+    characterIssues,
+    hasCharacterIssue: characterIssues.some((issue) => issue.resolvedAt === undefined),
+    retryCharacterProvider,
     pending,
     error,
     verificationEmail,

@@ -154,7 +154,18 @@ export interface AccountCapabilities {
   requiresEmailVerification: boolean;
 }
 /** Account endpoints are private session responses, never public world metadata. */
+export interface ProviderIssue {
+  id: string;
+  characterId: string;
+  kind: 'unconfigured' | 'unavailable' | 'failed' | 'allowance';
+  workload?: 'decision' | 'notebook' | 'reflection';
+  since: number;
+  lastAt: number;
+  message: string;
+  resolvedAt?: number;
+}
 export interface AccountResponse extends AccountCapabilities {
+  characterIssues?: ProviderIssue[];
   user: AccountSummary | null;
   /** Private session capability, independent from world administration. */
   managedCharacterIds: string[];
@@ -243,7 +254,27 @@ export interface PublicNotebook {
   entries: PublicNotebookEntry[];
   draft?: { id: string; at: number; text: string };
 }
+export interface PublicResearchEpisode {
+  id: string;
+  at: number;
+  topic: string;
+  query: string;
+  context: string;
+  status: 'searching' | 'sources-found' | 'reading' | 'read' | 'deferred';
+  sources: Array<{
+    id: string;
+    url: string;
+    title: string;
+    snippet: string;
+    status: 'returned' | 'read' | 'deferred';
+    excerpt?: string;
+    retrievedAt?: number;
+  }>;
+  outcome?: string;
+  nextStep?: string;
+}
 export interface PublicSnapshot {
+  research?: PublicResearchEpisode[];
   world: PublicWorldState;
   character: PublicCharacterState;
   events: WorldEvent[];

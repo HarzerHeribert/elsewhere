@@ -7,7 +7,7 @@ import {
 } from '../packages/adapters/src/models/expression';
 import { randomUUID, createHash } from 'node:crypto';
 import hubertAppearance from '../characters/hubert/appearance.json' with { type: 'json' };
-import type { PublicSnapshot, WorldState } from '@elsewhere/character-interfaces';
+import type { ProviderIssue, PublicSnapshot, WorldState } from '@elsewhere/character-interfaces';
 import {
   advanceWorld,
   createInitialWorld,
@@ -21,7 +21,6 @@ import {
   advanceHubert,
   applyExternalEvent,
   applyOutcome,
-  chooseAction,
   chooseActionWithProvider,
   createInitialHubert,
   upgradeHubertState,
@@ -31,8 +30,6 @@ import {
   considerWish,
   preserveWishLedger,
   publicWishes,
-  needsRest,
-  needsLocalFollowThrough,
   resolveWish as resolveCharacterWish,
   type HubertState,
 } from '@elsewhere/hubert';
@@ -45,7 +42,6 @@ import {
 } from '@elsewhere/character-runtime';
 import {
   hubertDreamActions,
-  hubertDreamFallback,
   hubertDreamInterpretations,
   hubertDreamSources,
 } from '../characters/hubert/src/dreams';
@@ -55,6 +51,9 @@ import {
   researchTargets,
   readableSources,
   rememberResearch,
+  publicResearch,
+  startResearchEpisode,
+  deferResearchEpisode,
 } from '../characters/hubert/src/research';
 import { settleHubertAttention } from '../characters/hubert/src/attention';
 import type { CharacterResearchPort } from '../characters/interfaces/src/research';
@@ -97,6 +96,9 @@ export interface ControllerState {
     /** Earliest natural completion of the current activity, in simulated world time. */
     activityUntil?: number;
     modelStatus: string;
+    providerIssues?: ProviderIssue[];
+    providerRetryRequested?: boolean;
+    providerWorkloadRetries?: Array<'notebook' | 'reflection'>;
     /** Continuous observed rest only; a restart or pause begins a new session. */
     dreamRest?: { id: string; startedAt: number; startedAtReal: number };
   };
@@ -138,7 +140,7 @@ function initialState(now: number): ControllerState {
       startedAt: now,
       simulatedAt: now,
       lastDecisionAt: now - 60_000,
-      modelStatus: 'Deterministic local planner',
+      modelStatus: 'Waiting for model connection',
     },
     modelAllowance: {
       day: new Date(now).toISOString().slice(0, 10),
@@ -185,6 +187,7 @@ export class ElsewhereController {
       const upgraded = withResidentAppearance(upgradeWorldLayout(this.state.world));
       const upgradedHubert = upgradeHubertState(this.state.hubert);
       if (upgradedHubert.research?.pending) {
+        deferResearchEpisode(upgradedHubert);
         delete upgradedHubert.research.pending;
         upgradedHubert.intent =
           'An interrupted research request has been deferred. Its allowance remains charged.';
@@ -245,6 +248,7 @@ export class ElsewhereController {
         })),
       },
       character: publicCharacter(s.hubert),
+      research: publicResearch(s.hubert),
       notebook: {
         enabled: Boolean(this.options.expressionProvider),
         entries: s.hubert.notebook?.entries ?? [],
@@ -359,10 +363,81 @@ export class ElsewhereController {
   step() {
     return this.serialize(async () => this.advance(true));
   }
+  getCharacterIssues(): ProviderIssue[] {
+    return structuredClone(this.lastCommitted?.runtime.providerIssues ?? []);
+  }
+  retryCharacterProvider() {
+    return this.serialize(async () => {
+      this.options.modelProvider?.resetAvailability?.();
+      this.options.expressionProvider?.resetAvailability?.();
+      this.options.reflectionProvider?.resetAvailability?.();
+      const active = (this.state.runtime.providerIssues ?? []).filter((issue) => !issue.resolvedAt);
+      if (active.some((issue) => issue.workload === 'decision')) {
+        this.state.runtime.providerRetryRequested = true;
+        this.state.runtime.lastDecisionAt = -1;
+        delete this.state.runtime.activityUntil;
+      }
+      this.state.runtime.providerWorkloadRetries = active.flatMap((issue) =>
+        issue.workload && issue.workload !== 'decision' ? [issue.workload] : [],
+      );
+      if (active.some((issue) => issue.workload === 'notebook') && this.state.hubert.notebook) {
+        // An explicit owner retry permits a new charged attempt for the last failed source.
+        const book = this.state.hubert.notebook;
+        if (book.failedSourceId) {
+          book.sourceIds = book.sourceIds.filter((id) => id !== book.failedSourceId);
+          book.lastAtReal = 0;
+        }
+      }
+      if (active.some((issue) => issue.workload === 'reflection'))
+        delete this.state.runtime.dreamRest;
+      await this.commit();
+      return { accepted: true };
+    });
+  }
+  private reportProviderIssue(
+    kind: ProviderIssue['kind'],
+    workload: NonNullable<ProviderIssue['workload']> = 'decision',
+  ) {
+    const issues = (this.state.runtime.providerIssues ??= []);
+    const now = this.wallNow();
+    const messages = {
+      unconfigured: 'No model provider is connected. Connect a provider before retrying.',
+      unavailable:
+        'The model provider is unavailable. Check the connection or sign-in, then retry.',
+      failed:
+        'The provider request failed or returned an invalid response. Check the provider, then retry.',
+      allowance: 'The daily model allowance has been reached. Retry after the allowance resets.',
+    };
+    const existing = issues.find((issue) => issue.workload === workload && !issue.resolvedAt);
+    if (existing) Object.assign(existing, { kind, lastAt: now, message: messages[kind] });
+    else
+      issues.push({
+        id: randomUUID(),
+        characterId: 'hubert',
+        workload,
+        kind,
+        since: now,
+        lastAt: now,
+        message: messages[kind],
+      });
+    this.state.runtime.providerIssues = issues.slice(-12);
+    if (workload === 'decision') {
+      this.state.runtime.modelStatus = 'Hubert is currently unavailable';
+      this.state.hubert.activity = {
+        kind: 'unavailable',
+        label: 'Currently unavailable',
+        startedAt: this.state.runtime.simulatedAt,
+      };
+    }
+  }
+  private resolveProviderIssue(workload: NonNullable<ProviderIssue['workload']>) {
+    for (const issue of this.state.runtime.providerIssues ?? [])
+      if (issue.workload === workload && !issue.resolvedAt) issue.resolvedAt = this.wallNow();
+  }
   private async dreamDuringRest() {
     const s = this.state;
     const nowReal = this.wallNow();
-    if (s.hubert.activity.kind !== 'rest') {
+    if (s.hubert.activity.kind !== 'rest' || !this.options.reflectionProvider) {
       delete s.runtime.dreamRest;
       return;
     }
@@ -371,6 +446,13 @@ export class ElsewhereController {
       startedAt: s.runtime.simulatedAt,
       startedAtReal: nowReal,
     });
+    if (
+      s.runtime.providerIssues?.some(
+        (issue) => issue.workload === 'reflection' && !issue.resolvedAt,
+      ) &&
+      !s.runtime.providerWorkloadRetries?.includes('reflection')
+    )
+      return;
     const sources = hubertDreamSources(s.hubert);
     const begin = beginDreamConsolidation({
       state: s.hubert.dreams,
@@ -384,7 +466,10 @@ export class ElsewhereController {
     await this.commit();
     const observation = observeWorld(s.world, 'hubert', s.runtime.simulatedAt);
     const actions = hubertDreamActions(s.hubert, observation, nowReal, begin.request.sources);
-    let proposal = hubertDreamFallback(actions);
+    s.runtime.providerWorkloadRetries = s.runtime.providerWorkloadRetries?.filter(
+      (workload) => workload !== 'reflection',
+    );
+    let proposal;
     const provider = this.options.reflectionProvider;
     if (provider && provider.isAvailable?.() !== false) {
       const managed = provider.managesAllowance === true;
@@ -401,13 +486,19 @@ export class ElsewhereController {
             episodes: begin.request.sources.map(({ id, summary }) => ({ id, summary })),
             affordances: actions.map(({ id, description }) => ({ id, description })),
           });
+          this.resolveProviderIssue('reflection');
         } catch {
           if (this.halted) throw new Error('Dream dispatch stopped after a persistence failure.');
-          // Energy recovery and a bounded local consolidation do not depend on model availability.
+          this.reportProviderIssue('failed', 'reflection');
         } finally {
           this.modelDispatchActive = false;
         }
-      }
+      } else this.reportProviderIssue('allowance', 'reflection');
+    } else this.reportProviderIssue('unavailable', 'reflection');
+    if (!proposal) {
+      s.hubert.dreams = abandonDreamConsolidation(s.hubert.dreams);
+      await this.commit();
+      return;
     }
     const completed = completeDreamConsolidation({
       state: s.hubert.dreams,
@@ -450,20 +541,26 @@ export class ElsewhereController {
           now - s.runtime.lastDecisionAt >= (this.options.decisionIntervalMs ?? 90_000)));
     if (ready) {
       const observation = observeWorld(s.world, 'hubert', now);
+      const blocked = s.runtime.providerIssues?.some(
+        (issue) => issue.workload === 'decision' && !issue.resolvedAt,
+      );
+      if (blocked && !s.runtime.providerRetryRequested) {
+        await this.commit();
+        return this.getSnapshot();
+      }
+      delete s.runtime.providerRetryRequested;
       let decision;
-      if (
-        this.options.modelProvider &&
-        this.options.modelProvider.isAvailable?.() !== false &&
-        !needsRest(s.hubert) &&
-        !needsLocalFollowThrough(s.hubert)
-      ) {
-        const managed = this.options.modelProvider.managesAllowance === true;
+      const provider = this.options.modelProvider;
+      if (!provider) this.reportProviderIssue('unconfigured');
+      else if (provider.isAvailable?.() === false) this.reportProviderIssue('unavailable');
+      else {
+        const managed = provider.managesAllowance === true;
         const allowance = managed
           ? s.modelAllowance
           : reserveModelCall(s.modelAllowance, this.wallNow(), this.options.modelMaximum ?? 100);
-        if (allowance) {
+        if (!allowance) this.reportProviderIssue('allowance');
+        else {
           s.modelAllowance = allowance;
-          // Legacy adapters reserve here; routed adapters reserve each actual attempt via modelBudget.
           if (!managed) await this.commit();
           this.modelDispatchActive = true;
           try {
@@ -471,25 +568,24 @@ export class ElsewhereController {
               s.hubert,
               observation,
               now,
-              this.options.modelProvider,
+              provider,
               this.wallNow(),
               Boolean(this.options.research),
             );
-            s.runtime.modelStatus =
-              this.options.modelProvider.id === 'routed'
-                ? 'Routed model proposal validated; tools remain policy-controlled'
-                : this.options.modelProvider.id === 'ollama'
-                  ? 'Ollama local proposal validated; tools remain policy-controlled'
-                  : 'Remote proposal validated; tools remain policy-controlled';
+            this.resolveProviderIssue('decision');
+            s.runtime.modelStatus = 'Model connected';
           } catch {
             if (this.halted) throw new Error('Model dispatch stopped after a persistence failure.');
-            s.runtime.modelStatus = 'Provider unavailable or invalid proposal; local fallback';
+            this.reportProviderIssue('failed');
           } finally {
             this.modelDispatchActive = false;
           }
-        } else s.runtime.modelStatus = 'Daily model allowance reached; local fallback';
+        }
       }
-      decision ??= chooseAction(s.hubert, observation, now, this.wallNow());
+      if (!decision) {
+        await this.commit();
+        return this.getSnapshot();
+      }
       s.hubert = decision.state;
       const policy = authorizeCommand(decision.action);
       delete s.runtime.activityUntil;
@@ -595,7 +691,18 @@ export class ElsewhereController {
   }
   private async writeNotebook() {
     const provider = this.options.expressionProvider;
-    if (!provider || provider.isAvailable?.() === false || this.halted || this.state.runtime.paused)
+    if (!provider || this.halted || this.state.runtime.paused) return;
+    if (provider.isAvailable?.() === false) {
+      this.reportProviderIssue('unavailable', 'notebook');
+      await this.commit();
+      return;
+    }
+    if (
+      this.state.runtime.providerIssues?.some(
+        (issue) => issue.workload === 'notebook' && !issue.resolvedAt,
+      ) &&
+      !this.state.runtime.providerWorkloadRetries?.includes('notebook')
+    )
       return;
     const input = notebookInput(this.getSnapshot());
     if (!input.facts.length) return;
@@ -622,12 +729,19 @@ export class ElsewhereController {
       (book.sourceIds.length > 0 && now - book.lastAtReal < 20 * 60_000)
     )
       return;
+    this.state.runtime.providerWorkloadRetries = this.state.runtime.providerWorkloadRetries?.filter(
+      (workload) => workload !== 'notebook',
+    );
     const allowance = reserveModelCall(
       this.state.modelAllowance,
       now,
       this.options.modelMaximum ?? 100,
     );
-    if (!allowance) return;
+    if (!allowance) {
+      this.reportProviderIssue('allowance', 'notebook');
+      await this.commit();
+      return;
+    }
     this.state.modelAllowance = allowance;
     book.day = day;
     book.latestAtReal = now;
@@ -655,6 +769,8 @@ export class ElsewhereController {
       );
       if (invalidDraft || (draft && validatePublicExpression(draft) !== text))
         throw Error('Notebook draft did not match its completed note.');
+      this.resolveProviderIssue('notebook');
+      delete book.failedSourceId;
       if (text)
         book.entries = [
           ...book.entries,
@@ -662,6 +778,8 @@ export class ElsewhereController {
         ].slice(-32);
     } catch {
       if (this.halted) throw Error('Notebook stopped after persistence failure.');
+      book.failedSourceId = sourceId;
+      this.reportProviderIssue('failed', 'notebook');
       // A failed draft is not published and does not become a memory or a fictional success.
     } finally {
       this.publicDraft = undefined;
@@ -704,6 +822,17 @@ export class ElsewhereController {
     const id = 'research-' + randomUUID();
     research.lastAtReal = at;
     research.pending = { id, kind: command.type === 'research' ? 'search' : 'read' };
+    startResearchEpisode(
+      s.hubert,
+      {
+        id,
+        kind: research.pending.kind,
+        target,
+        sourceId: source?.id,
+        placeId: observation.placeId,
+      },
+      now,
+    );
     if (target) {
       research.topics[target.id] = at;
       research.topics = Object.fromEntries(Object.entries(research.topics).slice(-64));
@@ -762,6 +891,7 @@ export class ElsewhereController {
       );
     } catch {
       if (this.halted) throw Error('Research stopped after persistence failure.');
+      deferResearchEpisode(s.hubert, source?.id);
       if (command.type === 'read') {
         research.deferredSources = Object.fromEntries(
           [
@@ -813,11 +943,13 @@ export class ElsewhereController {
     return this.serialize(async () => {
       const allowance = structuredClone(this.state.modelAllowance);
       const routing = structuredClone(this.state.modelRouting);
+      const issues = structuredClone(this.state.runtime.providerIssues);
       const previous = this.state.hubert;
       const worldVersion = this.state.world.version;
       this.state = initialState(this.wallNow());
       // Resetting a fictional life never replenishes real paid-call allowance.
       this.state.modelAllowance = allowance;
+      this.state.runtime.providerIssues = issues;
       if (routing) this.state.modelRouting = routing;
       this.state.hubert = preserveWishLedger(this.state.hubert, previous);
       this.state.hubert.dreams = pruneDreamState(previous.dreams, []);

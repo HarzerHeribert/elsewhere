@@ -4,5 +4,4 @@ export const productCopy = {
   headline: 'A world we share.',
   description:
     'Elsewhere is a simulated world where digital characters make choices, build memories, and interact with people.',
-  invitation: 'Enter the world. Meet its first resident. See what happens when your paths cross.',
 };

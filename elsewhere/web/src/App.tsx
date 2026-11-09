@@ -1,10 +1,8 @@
-import { Button } from './ui/Button';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { villageScenery } from './scenery';
 import { Scene, type CameraMode, type SceneControls } from './Scene';
 import { HubertPortrait } from './HubertPortrait';
 import { ElsewhereBrand } from './ElsewhereBrand';
-import { productCopy } from './productCopy';
 import { StatusBadge } from './ui/StatusBadge';
 import { useVisitor } from './useVisitor';
 import { AccountDialog } from './AccountDialog';
@@ -125,6 +123,18 @@ export function App() {
         visitor.visitor.position.z - resident.position.z,
       ) <= 5,
   );
+  const activeSection =
+    panel === 'character' ? 'residents' : panel === 'place' || panel === 'object' ? 'map' : panel;
+  const panelHeading = useRef<HTMLHeadingElement>(null);
+  const panelTrigger = useRef<HTMLElement | null>(null);
+  const previousPanel = useRef<Panel | null>(null);
+  useEffect(() => {
+    if (panel) panelHeading.current?.focus({ preventScroll: true });
+    else if (previousPanel.current && panelTrigger.current?.isConnected) {
+      panelTrigger.current.focus({ preventScroll: true });
+    }
+    previousPanel.current = panel;
+  }, [panel]);
   const inputPaused = Boolean(panel || settings || about || accountOpen);
   const titles: Record<Panel, string> = {
     residents: 'Residents',
@@ -214,6 +224,9 @@ export function App() {
     visitor.stop();
   }
   function openPanel(p: Panel) {
+    if (!panel || !document.getElementById('world-panel')?.contains(document.activeElement)) {
+      panelTrigger.current = document.activeElement as HTMLElement;
+    }
     release();
     setPanel(p);
   }
@@ -234,12 +247,13 @@ export function App() {
     setFocus(p);
     setPlaceId(id);
     setSelected(null);
-    setPanel('place');
+    openPanel('place');
   }
   async function enterWorld() {
     if (!snapshot) return;
     release();
     if (await visitor.enter()) {
+      panelTrigger.current = null;
       setPanel(null);
       setMode('visitor');
       setSelected(null);
@@ -248,6 +262,7 @@ export function App() {
   async function walkTo(p: Position) {
     if (!snapshot) return;
     if (await visitor.enter()) {
+      panelTrigger.current = null;
       setPanel(null);
       setMode('visitor');
       visitor.move(p);
@@ -257,6 +272,7 @@ export function App() {
     release();
     if (m === 'visitor') void enterWorld();
     else {
+      panelTrigger.current = null;
       setMode(m);
       setPanel(null);
     }
@@ -320,9 +336,9 @@ export function App() {
         />
       </div>
       <div className="world-vignette" aria-hidden="true" />
-      <header className="game-header">
+      <header className="game-header glass">
         <button
-          className="brand glass"
+          className="brand"
           aria-label="About Elsewhere"
           onClick={() => {
             release();
@@ -331,7 +347,7 @@ export function App() {
         >
           <ElsewhereBrand />
         </button>
-        <div className="world-clock glass">
+        <div className="world-clock">
           <StatusBadge
             className={'connection ' + connection}
             tone={connection === 'live' ? 'live' : 'waiting'}
@@ -353,38 +369,8 @@ export function App() {
           </span>
         </div>
         <div className="header-actions">
-          <div className="camera-switch glass" role="group" aria-label="Camera perspective">
-            <button onClick={() => camera('overview')} aria-pressed={mode === 'overview'}>
-              <Icon name="map" />
-              <span>Overview</span>
-            </button>
-            <button
-              onClick={() => camera('visitor')}
-              aria-pressed={mode === 'visitor'}
-              disabled={visitor.busy || !snapshot}
-            >
-              <Icon name="walk" />
-              <span>Walk</span>
-            </button>
-            <button
-              onClick={() => camera('hubert')}
-              aria-pressed={mode === 'hubert'}
-              disabled={!resident}
-            >
-              <Icon name="eye" />
-              <span>Hubert’s eyes</span>
-            </button>
-          </div>
           <button
-            className="square-button glass"
-            aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            onClick={() => void toggleFullscreen()}
-            title="Fullscreen"
-          >
-            <Icon name="expand" />
-          </button>
-          <button
-            className="account-button glass"
+            className="account-button"
             aria-label={account || (import.meta.env.DEV && owner) ? 'Your account' : 'Sign in'}
             onClick={() => {
               release();
@@ -393,38 +379,87 @@ export function App() {
           >
             <Icon name="people" />
             <span>{account ? account.name : 'Sign in'}</span>
+            {accountSession.hasCharacterIssue && (
+              <span role="status" aria-label="Character needs attention">
+                !
+              </span>
+            )}
           </button>
         </div>
       </header>
+      <div className="view-controls glass">
+        <div className="camera-switch" role="group" aria-label="Camera perspective">
+          <button onClick={() => camera('overview')} aria-pressed={mode === 'overview'}>
+            <Icon name="map" />
+            <span>Overview</span>
+          </button>
+          <button
+            onClick={() => camera('visitor')}
+            aria-pressed={mode === 'visitor'}
+            disabled={visitor.busy || !snapshot}
+          >
+            <Icon name="walk" />
+            <span>Walk</span>
+          </button>
+          <button
+            onClick={() => camera('hubert')}
+            aria-pressed={mode === 'hubert'}
+            disabled={!resident}
+          >
+            <Icon name="eye" />
+            <span>Hubert’s eyes</span>
+          </button>
+        </div>
+        <div className="view-tools">
+          <button
+            className="square-button"
+            aria-label="Reset camera"
+            title="Reset camera"
+            onClick={() => {
+              camera('overview');
+              setFocus(null);
+              setResetKey((n) => n + 1);
+            }}
+          >
+            <Icon name="compass" />
+          </button>
+          <button
+            className="square-button"
+            aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            onClick={() => void toggleFullscreen()}
+            title="Fullscreen"
+          >
+            <Icon name="expand" />
+          </button>
+        </div>
+      </div>
       <nav className="world-rail glass" aria-label="World navigation">
         {nav.map((n) => (
           <button
             key={n.id}
-            className={
-              panel === n.id || (n.id === 'residents' && panel === 'character') ? 'active' : ''
-            }
+            className={activeSection === n.id ? 'active' : ''}
             aria-label={n.label}
-            aria-pressed={panel === n.id}
+            aria-pressed={activeSection === n.id}
+            aria-expanded={activeSection === n.id}
+            aria-controls={panel ? 'world-panel' : undefined}
             onClick={() => togglePanel(n.id)}
             title={n.label}
           >
             <Icon name={n.icon} />
             <span className="rail-label">{n.label}</span>
             {n.id === 'wishes' && snapshot?.wishes?.some((w) => w.status === 'pending') && (
-              <i className="rail-dot" />
+              <i className="rail-dot" aria-label="Pending requests" />
             )}
           </button>
         ))}
-        <span className="rail-spacer" />
       </nav>
       {panel && (
-        <aside className="world-panel glass" aria-label="World panel" key={panel}>
+        <aside id="world-panel" className="world-panel glass" aria-label="World panel" key={panel}>
           <div className="panel-header">
             <div>
-              <p className="eyebrow">
-                {panel === 'character' ? 'A life in Elsewhere' : 'Elsewhere'}
-              </p>
-              <h2>{titles[panel]}</h2>
+              <h2 ref={panelHeading} tabIndex={-1}>
+                {titles[panel]}
+              </h2>
             </div>
             <button
               className="square-button subtle"
@@ -509,6 +544,7 @@ export function App() {
                 events={snapshot?.events ?? []}
                 memories={snapshot?.memories ?? []}
                 notebook={snapshot?.notebook}
+                research={snapshot?.research}
                 notices={notices}
                 feed={feed}
                 onFeedChange={setFeed}
@@ -528,22 +564,15 @@ export function App() {
                 fullscreen={fullscreen}
                 onEnterWorld={snapshot ? enterWorld : undefined}
                 onToggleFullscreen={toggleFullscreen}
+                onResetCamera={() => {
+                  camera('overview');
+                  setFocus(null);
+                  setResetKey((n) => n + 1);
+                }}
               />
             )}
           </div>
         </aside>
-      )}
-      {!visitor.visitor && !panel && connection === 'live' && (
-        <section className="arrival-card glass" aria-label="Welcome to Elsewhere">
-          <p className="eyebrow">{productCopy.strapline}</p>
-          <h1>{productCopy.headline}</h1>
-          <p>{productCopy.invitation}</p>
-          <Button onClick={() => void enterWorld()} disabled={visitor.busy}>
-            {visitor.busy ? 'Entering…' : 'Enter world'}
-            <Icon name="arrow" />
-          </Button>
-          <small>Explore freely. Sign in when you want to stay connected.</small>
-        </section>
       )}
       {mode === 'visitor' &&
         visitor.visitor &&
@@ -615,17 +644,6 @@ export function App() {
               <span>↗</span>
             </button>
           )}
-          <button
-            className="square-button glass"
-            aria-label="Reset camera"
-            onClick={() => {
-              camera('overview');
-              setFocus(null);
-              setResetKey((n) => n + 1);
-            }}
-          >
-            <Icon name="compass" />
-          </button>
         </div>
       </div>
       {connection === 'offline' && (
