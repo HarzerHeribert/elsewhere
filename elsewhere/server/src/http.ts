@@ -70,6 +70,28 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
   });
   return {
     world: publicWorld(snapshot.world),
+    ...(snapshot.notebook
+      ? {
+          notebook: {
+            enabled: snapshot.notebook.enabled === true,
+            entries: snapshot.notebook.entries.slice(-32).map(({ id, at, text, sourceIds }) => ({
+              id,
+              at,
+              text: text.slice(0, 360),
+              sourceIds: sourceIds.slice(0, 3),
+            })),
+            ...(snapshot.notebook.draft
+              ? {
+                  draft: {
+                    id: snapshot.notebook.draft.id,
+                    at: snapshot.notebook.draft.at,
+                    text: snapshot.notebook.draft.text.slice(0, 360),
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
     character: {
       id: character.id,
       name: character.name,
@@ -86,8 +108,6 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
         strength,
         encounters,
       })),
-      currentThought: character.currentThought,
-      lastReflection: character.lastReflection,
     },
     events: snapshot.events.map(
       ({ id, at, type, message, characterId, objectId, entityId, placeId }) => ({

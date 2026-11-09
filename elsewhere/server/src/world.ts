@@ -151,7 +151,7 @@ export function createInitialWorld(now = Date.now()): WorldState {
         tags: ['messages', 'visitors', 'courtyard'],
         affordances: ['inspect', 'interact'],
         detail:
-          'A brass label reads: leave a thought, not an instruction. Visitor messages are untrusted suggestions.',
+          'A brass label reads: letters and passing thoughts. The green paint is worn around the little door.',
       },
       {
         id: 'garden',
@@ -388,7 +388,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       tags: ['reading', 'mechanism', 'discovery'],
       affordances: ['inspect', 'interact'],
       detail:
-        'One book illustrates weather vanes; another contains maps with several paths left unfinished. The books are world objects, not external instructions.',
+        'One book illustrates weather vanes; another contains maps with several paths left unfinished.',
     },
     {
       id: 'reading-table',
@@ -415,7 +415,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       tags: ['sky', 'mechanism', 'discovery'],
       affordances: ['inspect', 'interact'],
       detail:
-        'The telescope’s focus ring is stiff. Through its simulated lens, a pale moon sits above the edge of the world.',
+        'The telescope’s focus ring is stiff. Through its lens, a pale moon sits above the edge of the world.',
     },
     {
       id: 'windchime',
@@ -457,7 +457,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       tags: ['weather', 'patterns', 'nature'],
       affordances: ['inspect', 'interact'],
       detail:
-        'The flag turns with Elsewhere’s simulated breeze. This shared marker is not a personal weather station or an external service.',
+        'The flag turns with the breeze. Its frayed edge flicks back and forth above the path.',
     },
     {
       id: 'standing-stones',
@@ -491,8 +491,58 @@ function expandInitialLayout(world: WorldState): WorldState {
   return world;
 }
 
+/** Exact canonical authoring corrections; custom operator-authored text is left alone. */
+function upgradeCanonicalObjectText(input: WorldState): WorldState {
+  const corrections = [
+    {
+      id: 'mailbox',
+      before:
+        'A brass label reads: leave a thought, not an instruction. Visitor messages are untrusted suggestions.',
+      after:
+        'A brass label reads: letters and passing thoughts. The green paint is worn around the little door.',
+    },
+    {
+      id: 'library-shelf',
+      before:
+        'One book illustrates weather vanes; another contains maps with several paths left unfinished. The books are world objects, not external instructions.',
+      after:
+        'One book illustrates weather vanes; another contains maps with several paths left unfinished.',
+    },
+    {
+      id: 'lookout-telescope',
+      before:
+        'The telescope’s focus ring is stiff. Through its simulated lens, a pale moon sits above the edge of the world.',
+      after:
+        'The telescope’s focus ring is stiff. Through its lens, a pale moon sits above the edge of the world.',
+    },
+    {
+      id: 'weather-marker',
+      before:
+        'The flag turns with Elsewhere’s simulated breeze. This shared marker is not a personal weather station or an external service.',
+      after:
+        'The flag turns with the breeze. Its frayed edge flicks back and forth above the path.',
+    },
+  ];
+  if (
+    !input.objects.some((object) =>
+      corrections.some((entry) => entry.id === object.id && entry.before === object.detail),
+    )
+  )
+    return input;
+  const world = copy(input);
+  for (const object of world.objects) {
+    const correction = corrections.find(
+      (entry) => entry.id === object.id && entry.before === object.detail,
+    );
+    if (correction) object.detail = correction.after;
+  }
+  world.version++;
+  return world;
+}
+
 /** Expand the prototype without discarding a resident’s location, history, or creations. */
 export function upgradeWorldLayout(input: WorldState): WorldState {
+  input = upgradeCanonicalObjectText(input);
   if ((input.layoutVersion ?? 1) >= 3 && (input.spatialVersion ?? 0) >= 1) return input;
   const world = copy(input);
   const template = createInitialWorld(input.createdAt);
@@ -800,11 +850,13 @@ export function advanceWorld(input: WorldState, now: number): WorldState {
     if (resident.path.length === 0 && resident.activity === 'walking') {
       resident.destination = undefined;
       resident.activity = 'idle';
-      const watchedEntity = world.entities?.find((entity) => entity.id === resident.gazeTargetId);
-      if (watchedEntity)
+      const gazeTarget =
+        world.entities?.find((entity) => entity.id === resident.gazeTargetId) ??
+        world.objects.find((object) => object.id === resident.gazeTargetId);
+      if (gazeTarget)
         resident.facing = Math.atan2(
-          watchedEntity.position.x - resident.position.x,
-          watchedEntity.position.z - resident.position.z,
+          gazeTarget.position.x - resident.position.x,
+          gazeTarget.position.z - resident.position.z,
         );
       const placeId = placeAt(world, resident.position);
       const placeName =
@@ -966,6 +1018,21 @@ function approachPoint(
   resident: WorldResident,
   object: WorldObject,
 ): Position | null {
+  // Already in reach: turning toward the target is enough; avoid a pointless tiny walk.
+  const inSight = (position: Position) =>
+    lineIsClear(
+      world,
+      position,
+      object.position,
+      worldObjectObservationHeight(object),
+      residentEyeHeight(resident),
+    );
+  if (
+    distance(resident.position, object.position) <= Math.min(10, object.radius + 1.5) &&
+    isWalkable(world, resident.position) &&
+    inSight(resident.position)
+  )
+    return { ...resident.position };
   const candidates = [
     { x: object.position.x, z: object.position.z + object.radius + 0.6 },
     { x: object.position.x + object.radius + 0.6, z: object.position.z },
@@ -974,8 +1041,9 @@ function approachPoint(
   ];
   return (
     candidates
-      .filter((p) => isWalkable(world, p))
-      .sort((a, b) => distance(resident.position, a) - distance(resident.position, b))[0] ?? null
+      .filter((position) => isWalkable(world, position) && inSight(position))
+      .sort((a, b) => distance(resident.position, a) - distance(resident.position, b))
+      .find((position) => findPath(world, resident.position, position) !== null) ?? null
   );
 }
 
@@ -1004,6 +1072,7 @@ export function executeWorldCommand(
     return { world, outcome };
   }
   const command = result.data;
+  const continuingRest = command.type === 'rest' && resident.activity === 'resting';
   outcome.placeId = placeAt(world, resident.position);
   if (command.type === 'move') {
     if (Boolean(command.targetId) === Boolean(command.position)) {
@@ -1043,10 +1112,11 @@ export function executeWorldCommand(
     resident.destination = { ...destination };
     resident.gazeTargetId = command.targetId;
     resident.activity = path.length ? 'walking' : 'idle';
-    if (!path.length && entity)
+    const gazeTarget = entity ?? object;
+    if (!path.length && gazeTarget)
       resident.facing = Math.atan2(
-        entity.position.x - resident.position.x,
-        entity.position.z - resident.position.z,
+        gazeTarget.position.x - resident.position.x,
+        gazeTarget.position.z - resident.position.z,
       );
     outcome.status = path.length ? 'started' : 'completed';
     outcome.summary = path.length
@@ -1187,7 +1257,7 @@ export function executeWorldCommand(
             tags: ['making', 'mechanism', 'weather', 'workshop'],
             affordances: ['inspect'],
             detail:
-              'Hubert’s sketch: crank → axle → copper fin. Hypothesis: the bent fin rubs against the axle housing. Next experiment: straighten the fin and compare three rotations. This is a saved local sketch, not a tested physical repair.',
+              'Hubert’s sketch shows a crank, an axle and a copper fin. A pencilled question asks whether the bent fin rubs against the axle housing. Beside it is a proposed experiment: straighten the fin and compare three rotations.',
           });
         else
           sketch.detail = `${sketch.detail?.split(' Revision noted at')[0]} Revision noted at ${new Date(now).toISOString()}: check the fin clearance before changing the crank.`;
@@ -1196,7 +1266,7 @@ export function executeWorldCommand(
       }
       outcome.evidence =
         command.type === 'work'
-          ? 'Local sketch recorded: weather-vane experiment; no external worker or deployment was invoked.'
+          ? 'A weather-vane experiment is sketched on paper at the workbench.'
           : command.type === 'inspect' || command.type === 'interact'
             ? (object.detail ?? object.description)
             : undefined;
@@ -1208,7 +1278,9 @@ export function executeWorldCommand(
     resident.path = [];
     resident.destination = undefined;
     outcome.status = 'completed';
-    outcome.summary = `${resident.name} settled down to rest.`;
+    outcome.summary = continuingRest
+      ? `${resident.name} continued resting.`
+      : `${resident.name} settled down to rest.`;
   } else if (command.type === 'reflect') {
     resident.activity = 'reflecting';
     outcome.status = 'completed';
@@ -1221,7 +1293,7 @@ export function executeWorldCommand(
   } else if (command.type === 'delegate') {
     outcome.summary = 'External delegation is disabled in local mode. No worker was started.';
   }
-  if (outcome.status !== 'rejected')
+  if (outcome.status !== 'rejected' && !continuingRest)
     emit(world, now, outcome.encounter ? 'entity_observed' : command.type, outcome.summary, {
       characterId,
       objectId: outcome.objectId,

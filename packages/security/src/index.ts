@@ -56,7 +56,7 @@ export function reserveModelCall(
   maximum: number,
 ): ModelAllowance | null {
   const day = new Date(now).toISOString().slice(0, 10);
-  const current = ledger.day === day ? ledger : { day, calls: 0, inputTokens: 0, outputTokens: 0 };
+  const current = ledger.day >= day ? ledger : { day, calls: 0, inputTokens: 0, outputTokens: 0 };
   if (current.calls >= maximum) return null;
   return { ...current, calls: current.calls + 1 };
 }

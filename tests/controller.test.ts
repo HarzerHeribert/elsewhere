@@ -370,7 +370,8 @@ describe('authoritative controller lifecycle', () => {
       kind === 'shell' ? 'invalid proposal' : 'validated',
     );
     if (kind !== 'shell') {
-      expect(snapshot.character.currentThought).toMatch(/disabled|not connected/);
+      expect(snapshot.character.currentThought).toBeUndefined();
+      expect((await store.load())!.value.hubert.intent).toMatch(/disabled|not connected/);
     }
   });
 
@@ -530,7 +531,9 @@ describe('authoritative controller lifecycle', () => {
     await stop(migrated.controller);
     const reopened = await create({}, file);
     expect(reopened.controller.getArtifact('weather-study')).toEqual(artifact);
-    expect((await reopened.store.load())!.version).toBe(advanced.version);
+    expect((await reopened.store.load())!.version).toBe(
+      advanced.version + (advanced.value.runtime.dreamRest ? 1 : 0),
+    );
   });
 });
 
@@ -658,7 +661,7 @@ describe('owner wishes and world upgrades', () => {
     expect(publicState.world.residents[0].eyeHeight).toBe(0.78);
     expect(
       publicState.character.interests.find((interest) => interest.id === 'birds'),
-    ).toMatchObject({ name: 'Birdwatching', strength: 0.82, encounters: 0 });
+    ).toBeUndefined();
     expect(persisted.value.hubert.memories).toEqual(history);
     expect(persisted.value.hubert.stats).toEqual(legacy.hubert.stats);
     expect(persisted.value.hubert.outsideMessages).toEqual(legacy.hubert.outsideMessages);

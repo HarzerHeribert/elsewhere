@@ -9,7 +9,9 @@ import {
   recordProgressOutcome,
   updateWakeImpulse,
   wakingDreamImpulses,
+  type ProgressOpportunity,
 } from '@elsewhere/character-runtime';
+import { assessHubertSpatialAction, hubertActionOffers } from './actionOffers';
 import { dreamActionCommand, hubertDreamActions } from './dreams';
 import type { HubertDecision, HubertState } from './index';
 
@@ -33,49 +35,147 @@ interface AttentionRecorders {
   ): WorldEntity | undefined;
 }
 
+/** Record current feasible opportunities, never infer availability from a remembered object. */
+function currentOpportunity(
+  state: HubertState,
+  action: CharacterCommand,
+  targetId: string | undefined,
+  observation: Observation | undefined,
+  now: number,
+): ProgressOpportunity {
+  if (action.type === 'rest') return { status: 'available' };
+  if (!observation)
+    return {
+      status: 'waiting',
+      retryCondition: 'Observe the current surroundings before choosing a next step.',
+    };
+  const target = hubertActionOffers(state, observation, now, targetId).find(
+    (offer) => offer.id === targetId,
+  );
+  const waitForPerception: ProgressOpportunity = {
+    status: 'waiting',
+    retryCondition:
+      'Find the remembered target and observe it again before assuming an interaction is possible.',
+  };
+  if (action.type === 'reflect') {
+    if (!target || !target.visible) return waitForPerception;
+    const preferred = [
+      ...(!state.inspections[target.id] ? ['inspect'] : []),
+      ...(!state.project.completed ? ['work'] : []),
+      'interact',
+    ].find((type) => target.ready.includes(type as 'inspect' | 'work' | 'interact'));
+    if (preferred)
+      return { status: 'available', smallestStep: { type: preferred, targetKey: target.id } };
+    if (target.nextAction && target.approachFor?.length)
+      return { status: 'available', smallestStep: { type: 'move', targetKey: target.id } };
+    if (target.cooldownUntil && target.cooldownUntil > now)
+      return {
+        status: 'waiting',
+        retryAt: target.cooldownUntil,
+        retryCondition: 'Wait for the activity cooldown or choose another current offer.',
+      };
+    return {
+      status: 'blocked',
+      retryCondition:
+        'No current activity offer supports this idea; reconsider or leave it for later.',
+    };
+  }
+  const assessment = assessHubertSpatialAction(state, observation, action, now);
+  if (assessment.status === 'not-spatial')
+    return {
+      status: 'waiting',
+      retryCondition:
+        'Wait for the capability admission and execution receipt before treating this as an opportunity.',
+    };
+  if (target && !target.visible && target.kind !== 'place' && action.type !== 'move')
+    return waitForPerception;
+  if (assessment.status === 'ready' || assessment.status === 'approach') {
+    const command = assessment.command;
+    return {
+      status: 'available',
+      smallestStep: {
+        type: command.type,
+        ...('targetId' in command && command.targetId ? { targetKey: command.targetId } : {}),
+      },
+    };
+  }
+  if (target?.cooldownUntil && target.cooldownUntil > now)
+    return {
+      status: 'waiting',
+      retryAt: target.cooldownUntil,
+      retryCondition: 'Wait for the activity cooldown or choose another current offer.',
+    };
+  return { status: 'blocked', retryCondition: assessment.reason };
+}
+
 /** Map Hubert's current action and source evidence onto stable runtime intention references. */
-export function trackHubertIntent(state: HubertState, action: CharacterCommand, now: number): void {
+export function trackHubertIntent(
+  state: HubertState,
+  action: CharacterCommand,
+  now: number,
+  observation?: Observation,
+): void {
   const actionTargetId = 'targetId' in action ? action.targetId : undefined;
+  const projectChosen =
+    !state.project.completed &&
+    (state.project.verifiedWorkSessions > 0 ||
+      (state.activity.objectId === 'workbench' && ['work', 'move'].includes(state.activity.kind)));
+  const visibleAlternative =
+    action.type === 'reflect' && !projectChosen && observation
+      ? hubertActionOffers(state, observation, now)
+          .filter(
+            (offer) =>
+              offer.kind === 'object' &&
+              offer.visible &&
+              (offer.ready.some((type) => ['inspect', 'work', 'interact'].includes(type)) ||
+                (offer.nextAction && offer.approachFor?.length)),
+          )
+          .sort(
+            (a, b) =>
+              Number((state.inspections[a.id] ?? 0) > 0) -
+                Number((state.inspections[b.id] ?? 0) > 0) ||
+              a.distance - b.distance ||
+              a.id.localeCompare(b.id),
+          )[0]
+      : undefined;
   const targetId =
     actionTargetId ??
-    (action.type === 'reflect' && !state.project.completed && state.knownObjects.workbench
-      ? 'workbench'
+    (action.type === 'reflect'
+      ? projectChosen &&
+        (state.knownObjects.workbench ||
+          observation?.visibleObjects.some((object) => object.id === 'workbench'))
+        ? 'workbench'
+        : visibleAlternative?.id
       : undefined);
   const intentionKey =
-    (action.type === 'reflect' || targetId === 'workbench') && !state.project.completed
+    (action.type === 'reflect' ? projectChosen : targetId === 'workbench') &&
+    !state.project.completed
       ? `project:${state.project.id}`
       : targetId
         ? `object:${targetId}`
         : 'exploration';
+  const opportunity = currentOpportunity(state, action, targetId, observation, now);
+  const quietWatch =
+    opportunity.status === 'available' &&
+    opportunity.smallestStep?.type === action.type &&
+    (action.type === 'look' ||
+      (action.type === 'inspect' &&
+        !!observation?.visibleEntities?.some((entity) => entity.id === targetId)));
   const kind =
     action.type === 'rest'
       ? 'rest'
-      : action.type === 'inspect' && !!state.knownEntities[targetId ?? '']
+      : quietWatch
         ? 'watch'
-        : action.type === 'look'
-          ? 'watch'
-          : action.type === 'reflect'
-            ? 'deliberate'
-            : 'attempt';
+        : action.type === 'reflect'
+          ? 'deliberate'
+          : 'attempt';
   const decisionId = `decision:${state.turn}`;
-  const target = targetId ? state.knownObjects[targetId] : undefined;
-  const smallType =
-    target && !state.inspections[target.id] && target.affordances.includes('inspect')
-      ? 'inspect'
-      : target?.affordances.includes('work') && !state.project.completed
-        ? 'work'
-        : target?.affordances.includes('interact')
-          ? 'interact'
-          : undefined;
   const recorded = recordProgressDecision(state.progress, {
     id: decisionId,
     at: now,
     intention: { key: intentionKey, ...(targetId ? { targetKey: targetId } : {}) },
     kind,
-    opportunity: {
-      status: 'available',
-      ...(targetId && smallType ? { smallestStep: { type: smallType, targetKey: targetId } } : {}),
-    },
+    opportunity,
     evidence: state.memories
       .filter(
         (memory) =>
@@ -101,32 +201,26 @@ export function followThrough(
   const guidance = state.progressGuidance;
   if (!guidance) return null;
   if (guidance.kind === 'shrink' && guidance.reason === 'repeated-deliberation') {
-    const object = observation.visibleObjects.find(
-      (item) => item.id === guidance.smallestStep?.targetKey,
-    );
+    const targetId = guidance.smallestStep?.targetKey;
     const type = guidance.smallestStep?.type;
-    if (
-      object &&
-      type &&
-      ['inspect', 'work', 'interact'].includes(type) &&
-      object.affordances.includes(type) &&
-      (type === 'inspect' || now - (state.lastObjectUse[object.id] ?? -Infinity) >= 90_000)
-    ) {
-      const close =
-        Math.hypot(
-          object.position.x - observation.position.x,
-          object.position.z - observation.position.z,
-        ) <=
-        object.radius + 1;
-      state.progressGuidance = null;
-      return recorders.recordIntent(
+    if (targetId && type && ['move', 'inspect', 'work', 'interact'].includes(type)) {
+      const assessment = assessHubertSpatialAction(
         state,
-        close
-          ? ({ type, targetId: object.id } as CharacterCommand)
-          : { type: 'move', targetId: object.id },
-        'I can try just one small step with this idea, then decide what I think.',
+        observation,
+        { type, targetId } as CharacterCommand,
         now,
       );
+      if (assessment.status === 'ready' || assessment.status === 'approach') {
+        state.progressGuidance = null;
+        return recorders.recordIntent(
+          state,
+          assessment.command,
+          assessment.status === 'approach'
+            ? assessment.reason
+            : 'I can try just one small step with this idea, then decide what I think.',
+          now,
+        );
+      }
     }
   }
   const deferred = recordProgressDecision(state.progress, {
@@ -138,41 +232,56 @@ export function followThrough(
   });
   state.progress = deferred.ledger;
   state.progressGuidance = null;
-  const bird = recorders.chooseVisibleEntity(state, observation, now);
-  if (bird)
-    return recorders.recordWatchIntent(
+  const candidates = observation.visibleObjects.filter(
+    (item) => item.id !== guidance.targetKey && item.affordances.includes('inspect'),
+  );
+  const fresh = candidates.filter((item) => !state.inspections[item.id]);
+  const chooseObject = (object: (typeof candidates)[number]): HubertDecision | null => {
+    const assessment = assessHubertSpatialAction(
       state,
-      bird,
-      'I will leave that idea for later and watch what this creature does for a while.',
+      observation,
+      { type: 'inspect', targetId: object.id },
       now,
     );
-  const object =
-    observation.visibleObjects.find(
-      (item) =>
-        item.id !== guidance.targetKey &&
-        item.affordances.includes('inspect') &&
-        !state.inspections[item.id],
-    ) ??
-    observation.visibleObjects.find(
-      (item) => item.id !== guidance.targetKey && item.affordances.includes('inspect'),
-    );
-  if (!object)
+    if (assessment.status !== 'ready' && assessment.status !== 'approach') return null;
     return recorders.recordIntent(
       state,
-      { type: 'rest', durationMs: 30_000 },
-      'I can leave that idea for later. I would like a quiet pause.',
+      assessment.command,
+      assessment.status === 'approach'
+        ? assessment.reason
+        : 'I have considered that enough for now. I will try one small thing I can actually see.',
       now,
     );
-  const close =
-    Math.hypot(
-      object.position.x - observation.position.x,
-      object.position.z - observation.position.z,
-    ) <=
-    object.radius + 1;
+  };
+  // A newly noticed object gets room before another familiar creature-watching detour.
+  for (const object of fresh) {
+    const decision = chooseObject(object);
+    if (decision) return decision;
+  }
+  const entity = recorders.chooseVisibleEntity(state, observation, now);
+  if (entity) {
+    const assessment = assessHubertSpatialAction(
+      state,
+      observation,
+      { type: 'inspect', targetId: entity.id },
+      now,
+    );
+    if (assessment.status === 'ready')
+      return recorders.recordWatchIntent(
+        state,
+        entity,
+        'I will leave that idea for later and watch what this creature does for a while.',
+        now,
+      );
+  }
+  for (const object of candidates) {
+    const decision = chooseObject(object);
+    if (decision) return decision;
+  }
   return recorders.recordIntent(
     state,
-    close ? { type: 'inspect', targetId: object.id } : { type: 'move', targetId: object.id },
-    'I have considered that enough for now. I will try one small thing I can actually see.',
+    { type: 'rest', durationMs: 30_000 },
+    'I can leave that idea for later. I would like a quiet pause.',
     now,
   );
 }
@@ -201,8 +310,18 @@ export function wakeImpulseDecision(
       });
       continue;
     }
-    const action = dreamActionCommand(current);
-    if (!action) continue;
+    const proposed = dreamActionCommand(current);
+    if (!proposed) continue;
+    const assessment = assessHubertSpatialAction(state, observation, proposed, now);
+    if (assessment.status !== 'ready' && assessment.status !== 'approach') {
+      state.dreams = updateWakeImpulse(state.dreams, impulse.id, {
+        status: 'deferred',
+        nowReal,
+        untilReal: nowReal + 3_600_000,
+      });
+      continue;
+    }
+    const action = assessment.command;
     state.activeWakeImpulse = impulse.id;
     return recordIntent(
       state,

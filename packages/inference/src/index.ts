@@ -14,6 +14,11 @@ import type { SnapshotStore } from '../../persistence/src/index';
 import { reserveModelCall } from '../../security/src/index';
 import { decisionMessages } from '../../adapters/src/models/shared';
 import {
+  expressionMessages,
+  validatePublicExpression,
+  type PublicExpressionInput,
+} from '../../adapters/src/models/expression';
+import {
   DEFAULT_INFERENCE_TOKEN_BUDGET,
   InferenceTokenBudgetSchema,
   UsageAccountingSchema,
@@ -24,6 +29,9 @@ import {
 } from './usage-budget';
 import {
   BrokerDecisionRequestSchema,
+  BrokerErrorSchema,
+  BrokerExpressionFrameSchema,
+  BrokerExpressionRequestSchema,
   BrokerReflectionRequestSchema,
   BrokerUsageSchema,
   InferenceBindingSchema,
@@ -77,6 +85,11 @@ export interface InferenceBrokerOptions {
   isAvailable?: () => boolean;
   decision: (context: DecisionContext, signal: AbortSignal) => Promise<InferenceResult>;
   reflection: (input: ReflectionInput, signal: AbortSignal) => Promise<InferenceResult>;
+  expression?: (
+    input: PublicExpressionInput,
+    signal: AbortSignal,
+    onDelta: (text: string) => void,
+  ) => Promise<InferenceResult>;
 }
 
 class RequestFailure extends Error {
@@ -237,6 +250,16 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
     );
   function send(response: ServerResponse, status: number, body: unknown) {
     if (response.writableEnded || response.destroyed) return;
+    if (response.headersSent) {
+      const failure = BrokerErrorSchema.safeParse(body);
+      response.end(
+        JSON.stringify({
+          type: 'error',
+          ...(failure.success ? failure.data : { error: 'provider_unavailable' }),
+        }) + '\n',
+      );
+      return;
+    }
     const data = JSON.stringify(body);
     if (status >= 400) response.setHeader('Connection', 'close');
     if (
@@ -253,6 +276,21 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
       'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
     });
     response.end(data);
+  }
+  function sendExpressionFrame(response: ServerResponse, frame: unknown, complete = false) {
+    if (response.writableEnded || response.destroyed) return;
+    const parsed = BrokerExpressionFrameSchema.parse(frame);
+    if (!response.headersSent)
+      response.writeHead(200, {
+        'content-type': 'application/x-ndjson; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'x-accel-buffering': 'no',
+        'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+      });
+    const data = JSON.stringify(parsed) + '\n';
+    if (complete) response.end(data);
+    else response.write(data);
   }
   const server = createServer((request, response) => {
     if (request.method === 'GET' && request.url === '/healthz') {
@@ -274,7 +312,9 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         available() &&
         view.allowance.calls < maximum &&
         !tokenBudgetFailure(view.allowance, view.accounting, tokenBudget.data) &&
-        (allowed('decision') || allowed('reflection'));
+        (allowed('decision') ||
+          allowed('reflection') ||
+          (!!options.expression && allowed('expression')));
       send(response, ready ? 200 : 503, { ready });
       return;
     }
@@ -283,7 +323,9 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         ? 'decision'
         : request.method === 'POST' && request.url === '/v1/reflection'
           ? 'reflection'
-          : undefined;
+          : request.method === 'POST' && request.url === '/v1/expression'
+            ? 'expression'
+            : undefined;
     if (!workload) {
       send(response, 404, { error: 'invalid_request' });
       return;
@@ -296,7 +338,7 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
       send(response, 403, { error: 'not_authorized' });
       return;
     }
-    if (!available()) {
+    if (!available() || (workload === 'expression' && !options.expression)) {
       send(response, 503, { error: 'unavailable', retryAfterMs: 60000 });
       return;
     }
@@ -310,6 +352,9 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
       let reserved = false;
       let dispatched = false;
       let settled = false;
+      let reportedUsage: ModelUsage | undefined;
+      let streamedText = '';
+      let invalidExpressionDelta = false;
       const settle = async (usage: ModelUsage | undefined) => {
         if (settled) return;
         settled = true;
@@ -345,7 +390,9 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         const parsed =
           workload === 'decision'
             ? BrokerDecisionRequestSchema.safeParse(body)
-            : BrokerReflectionRequestSchema.safeParse(body);
+            : workload === 'reflection'
+              ? BrokerReflectionRequestSchema.safeParse(body)
+              : BrokerExpressionRequestSchema.safeParse(body);
         if (!parsed.success) throw new RequestFailure(400, 'invalid_request');
         const decision =
           workload === 'decision'
@@ -355,9 +402,15 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
           workload === 'reflection'
             ? { identity: options.identity, ...BrokerReflectionRequestSchema.parse(body).input }
             : undefined;
+        const expression =
+          workload === 'expression' ? BrokerExpressionRequestSchema.parse(body).input : undefined;
         let messages;
         try {
-          messages = decision ? decisionMessages(decision) : reflectionMessages(reflection!);
+          messages = decision
+            ? decisionMessages(decision)
+            : reflection
+              ? reflectionMessages(reflection)
+              : expressionMessages(options.identity, expression!);
         } catch {
           throw new RequestFailure(400, 'invalid_request');
         }
@@ -419,7 +472,19 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
           dispatched = true;
           result = decision
             ? await options.decision(decision, dispatch.signal)
-            : await options.reflection(reflection!, dispatch.signal);
+            : reflection
+              ? await options.reflection(reflection, dispatch.signal)
+              : await options.expression!(expression!, dispatch.signal, (text) => {
+                  if (dispatch.signal.aborted || response.destroyed || response.writableEnded)
+                    return;
+                  if (typeof text !== 'string' || streamedText.length + text.length > 360) {
+                    invalidExpressionDelta = true;
+                    return;
+                  }
+                  if (!text) return;
+                  streamedText += text;
+                  sendExpressionFrame(response, { type: 'delta', text });
+                });
         } catch (error) {
           const reported =
             error instanceof InferenceDispatchError
@@ -434,15 +499,32 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
           return;
         }
         const reported = BrokerUsageSchema.safeParse(result.usage);
-        await settle(reported.success ? reported.data : undefined);
-        const value = decision
-          ? CharacterCommandSchema.parse(result.value)
-          : validateReflectionProposal(result.value, reflection!);
-        if (!dispatch.signal.aborted)
-          send(response, 200, { value, ...(reported.success ? { usage: reported.data } : {}) });
+        reportedUsage = reported.success ? reported.data : undefined;
+        await settle(reportedUsage);
+        if (invalidExpressionDelta) throw new RequestFailure(400, 'invalid_expression');
+        let value: unknown;
+        if (expression) {
+          try {
+            value = validatePublicExpression(result.value);
+            if (streamedText && validatePublicExpression(streamedText) !== value)
+              throw Error('Mismatched note.');
+          } catch {
+            throw new RequestFailure(400, 'invalid_expression');
+          }
+        } else
+          value = decision
+            ? CharacterCommandSchema.parse(result.value)
+            : validateReflectionProposal(result.value, reflection!);
+        if (!dispatch.signal.aborted) {
+          const completed = { value, ...(reported.success ? { usage: reported.data } : {}) };
+          if (expression) sendExpressionFrame(response, { type: 'complete', ...completed }, true);
+          else send(response, 200, completed);
+        }
       } catch (error) {
-        if (error instanceof RequestFailure) send(response, error.status, { error: error.code });
-        else send(response, 503, { error: 'provider_unavailable', retryAfterMs: 60000 });
+        const usage = reportedUsage ? { usage: reportedUsage } : {};
+        if (error instanceof RequestFailure)
+          send(response, error.status, { error: error.code, ...usage });
+        else send(response, 503, { error: 'provider_unavailable', retryAfterMs: 60000, ...usage });
       } finally {
         clearTimeout(deadline);
         lifetime.signal.removeEventListener('abort', abort);

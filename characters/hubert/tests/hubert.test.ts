@@ -216,7 +216,8 @@ describe('Hubert', () => {
       state = updated;
     }
     expect(state.interactions.bench).toBe(20);
-    expect(state.memories).toHaveLength(20);
+    expect(state.memories).toHaveLength(1);
+    expect(state.memories[0].sourceEventId).toBe('interact:0');
   });
 
   it('migrates previously inflated project progress without rewriting its episode history', () => {
@@ -343,8 +344,10 @@ describe('Hubert', () => {
       knownObjects: [{ id: 'bench', inspections: 1, interactions: 2, cooldownUntil: 100_000 }],
       visitedPlaces: [{ id: 'orchard', lastAt: 8_000 }],
     });
-    expect(context.identity).toContain('individual airframes');
-    expect(context.identity).toContain('host actually supplies those capabilities');
+    expect(context.identity).toMatch(/unclassified nonhuman creature/);
+    expect(context.identity).toMatch(
+      /never claim a tool or observation succeeded without evidence/,
+    );
     expect(state).toEqual(before);
   });
 

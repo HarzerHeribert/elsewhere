@@ -1,3 +1,5 @@
+import type { ExpressionProvider } from '../packages/adapters/src/models/expression';
+import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
 import type { DecisionProvider } from '@elsewhere/character-runtime';
 import { CompatibleDecisionProvider } from '../packages/adapters/src/models/compatible';
 import { OllamaDecisionProvider } from '../packages/adapters/src/models/ollama';
@@ -6,11 +8,13 @@ import {
   ChatGPTClient,
   ChatGPTDecisionProvider,
   ChatGPTReflectionProvider,
+  ChatGPTExpressionProvider,
 } from '../packages/adapters/src/models/chatgpt';
 import {
   BrokerModelClient,
   BrokerDecisionProvider,
   BrokerReflectionProvider,
+  BrokerExpressionProvider,
 } from '../packages/adapters/src/models/broker';
 import {
   CompatibleReflectionProvider,
@@ -34,7 +38,7 @@ export function runtimeProviders(
     onUsage(input: number, output: number): void;
     budgetFor(routing: RoutingConfig): ModelBudgetPort;
   },
-): { model?: DecisionProvider; reflection?: ReflectionProvider } {
+): { model?: DecisionProvider; reflection?: ReflectionProvider; expression?: ExpressionProvider } {
   const common = { timeoutMs: config.MODEL_TIMEOUT_MS, onUsage: ports.onUsage };
   switch (config.MODEL_PROVIDER) {
     case 'local':
@@ -52,6 +56,7 @@ export function runtimeProviders(
       return {
         model: new BrokerDecisionProvider(client),
         reflection: new BrokerReflectionProvider(client),
+        expression: new BrokerExpressionProvider(client),
       };
     }
     case 'chatgpt': {
@@ -64,6 +69,7 @@ export function runtimeProviders(
       return {
         model: new ChatGPTDecisionProvider(client),
         reflection: new ChatGPTReflectionProvider(client),
+        expression: new ChatGPTExpressionProvider(client, HUBERT_IDENTITY),
       };
     }
     case 'ollama': {

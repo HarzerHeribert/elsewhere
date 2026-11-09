@@ -4,6 +4,8 @@ import { CharacterCommandSchema } from '@elsewhere/character-interfaces';
 import {
   BrokerDecisionRequestSchema,
   BrokerErrorSchema,
+  BrokerExpressionFrameSchema,
+  BrokerExpressionRequestSchema,
   BrokerReflectionRequestSchema,
   BrokerResponseSchema,
   decisionWireContext,
@@ -18,6 +20,11 @@ import {
   type ReflectionInput,
   type ReflectionProvider,
 } from './reflection';
+import {
+  validatePublicExpression,
+  type ExpressionProvider,
+  type PublicExpressionInput,
+} from './expression';
 
 export interface BrokerModelOptions {
   baseUrl: string;
@@ -92,7 +99,71 @@ export class BrokerModelClient {
   isAvailable() {
     return (this.options.now ?? Date.now)() >= this.pausedUntil;
   }
-  private async request(workload: InferenceWorkload, body: unknown): Promise<unknown> {
+  private async readExpression(response: Response, onDelta?: (text: string) => void) {
+    if (response.headers.get('content-type')?.split(';')[0] !== 'application/x-ndjson')
+      throw new BrokerModelError('invalid_response');
+    const reader = response.body?.getReader();
+    if (!reader) throw new BrokerModelError('empty_response');
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    let buffer = '',
+      text = '',
+      bytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        bytes += value?.byteLength ?? 0;
+        if (bytes > 64000) throw new BrokerModelError('response_too_large');
+        buffer += decoder.decode(value, { stream: !done });
+        for (;;) {
+          const boundary = buffer.indexOf('\n');
+          if (boundary < 0) break;
+          const line = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 1);
+          if (!line || line.length > 4000) throw new BrokerModelError('invalid_response');
+          let json: unknown;
+          try {
+            json = JSON.parse(line);
+          } catch {
+            throw new BrokerModelError('invalid_response');
+          }
+          const parsed = BrokerExpressionFrameSchema.safeParse(json);
+          if (!parsed.success) throw new BrokerModelError('invalid_response');
+          const frame = parsed.data;
+          if (frame.type === 'delta') {
+            if (text.length + frame.text.length > 360)
+              throw new BrokerModelError('response_too_large');
+            text += frame.text;
+            onDelta?.(frame.text);
+            continue;
+          }
+          if (frame.usage)
+            this.options.onUsage?.(frame.usage.inputTokens, frame.usage.outputTokens);
+          this.options.onUsageDetails?.(frame.usage);
+          if (frame.type === 'error') {
+            if (frame.error !== 'invalid_expression')
+              this.pausedUntil = ['unauthorized', 'not_authorized'].includes(frame.error)
+                ? Number.POSITIVE_INFINITY
+                : (this.options.now ?? Date.now)() + (frame.retryAfterMs ?? 60000);
+            throw new BrokerModelError(frame.error);
+          }
+          const completed = validatePublicExpression(frame.value);
+          if (text && validatePublicExpression(text) !== completed)
+            throw new BrokerModelError('invalid_response');
+          return completed;
+        }
+        if (buffer.length > 4000) throw new BrokerModelError('response_too_large');
+        if (done) throw new BrokerModelError('stream_interrupted');
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+    }
+  }
+  private async request(
+    workload: InferenceWorkload,
+    body: unknown,
+    onDelta?: (text: string) => void,
+  ): Promise<unknown> {
     if (!this.isAvailable()) throw new BrokerModelError('paused');
     const encoded = JSON.stringify(body);
     if (Buffer.byteLength(encoded) > 96000) throw new BrokerModelError('context_too_large');
@@ -108,6 +179,8 @@ export class BrokerModelClient {
         },
         body: encoded,
       });
+      if (workload === 'expression' && response.ok)
+        return await this.readExpression(response, onDelta);
       const reader = response.body?.getReader();
       if (!reader) throw new BrokerModelError('empty_response');
       const chunks: Uint8Array[] = [];
@@ -136,9 +209,12 @@ export class BrokerModelClient {
         if (reported) this.options.onUsage?.(reported.inputTokens, reported.outputTokens);
         this.options.onUsageDetails?.(reported);
         const now = (this.options.now ?? Date.now)();
-        this.pausedUntil = [401, 403].includes(response.status)
-          ? Number.POSITIVE_INFINITY
-          : now + (error.success ? (error.data.retryAfterMs ?? 60000) : 60000);
+        if (
+          !(workload === 'expression' && error.success && error.data.error === 'invalid_expression')
+        )
+          this.pausedUntil = [401, 403].includes(response.status)
+            ? Number.POSITIVE_INFINITY
+            : now + (error.success ? (error.data.retryAfterMs ?? 60000) : 60000);
         throw new BrokerModelError(
           error.success ? error.data.error : 'request_failed',
           response.status,
@@ -168,6 +244,11 @@ export class BrokerModelClient {
     if (!parsed.success) throw new BrokerModelError('invalid_context');
     return this.request('reflection', parsed.data);
   }
+  async expression(input: PublicExpressionInput, onDelta?: (text: string) => void) {
+    const parsed = BrokerExpressionRequestSchema.safeParse({ input });
+    if (!parsed.success) throw new BrokerModelError('invalid_context');
+    return validatePublicExpression(await this.request('expression', parsed.data, onDelta));
+  }
 }
 
 export class BrokerDecisionProvider implements DecisionProvider<CharacterCommand> {
@@ -195,5 +276,15 @@ export class BrokerReflectionProvider implements ReflectionProvider {
     } catch {
       throw new BrokerModelError('invalid_reflection');
     }
+  }
+}
+export class BrokerExpressionProvider implements ExpressionProvider {
+  readonly id = 'broker';
+  constructor(readonly client: BrokerModelClient) {}
+  isAvailable() {
+    return this.client.isAvailable();
+  }
+  express(input: PublicExpressionInput, onDelta?: (text: string) => void) {
+    return this.client.expression(input, onDelta);
   }
 }

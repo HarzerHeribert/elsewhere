@@ -20,6 +20,10 @@ import {
 import type { DecisionContext } from '@elsewhere/character-runtime';
 import type { ModelUsage } from '../packages/models/src/contracts';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
+import {
+  expressionMessages,
+  validatePublicExpression,
+} from '../packages/adapters/src/models/expression';
 import { createUnconfiguredInferenceService } from '../packages/inference/src/unconfigured';
 
 // No dotenv discovery: this process receives only its own explicitly installed secrets.
@@ -94,6 +98,19 @@ try {
         },
         decision: dispatch,
         reflection: dispatch,
+        expression: async (input, signal, onDelta) => {
+          usage = undefined;
+          try {
+            const text = await client.text(
+              expressionMessages(HUBERT_IDENTITY, input),
+              signal,
+              onDelta,
+            );
+            return { value: text, usage };
+          } catch {
+            throw new InferenceDispatchError(usage);
+          }
+        },
       })
     : createUnconfiguredInferenceService(config.INFERENCE_BROKER_TOKEN);
   const close = async () => {

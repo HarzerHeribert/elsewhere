@@ -12,22 +12,22 @@ export interface HubertResearchState {
 }
 export function researchTargets(state: HubertState, observation: Observation, nowReal: number) {
   const all = [
+    ...(observation.visibleEntities ?? []),
+    ...observation.visibleObjects,
     ...Object.values(state.knownEntities),
     ...Object.values(state.knownObjects),
-    ...(observation.visibleEntities ?? []),
   ];
   const seen = new Set<string>();
   return all
     .filter((x) => {
       if (seen.has(x.id)) return false;
       seen.add(x.id);
-      return (
-        !state.research?.topics[x.id] || nowReal - state.research.topics[x.id] >= 6 * 3_600_000
-      );
+      const lastAt = state.research?.topics[x.id];
+      return lastAt === undefined || nowReal - lastAt >= 6 * 3_600_000;
     })
     .sort(
       (a, b) =>
-        Number(b.tags.includes('birds')) - Number(a.tags.includes('birds')) ||
+        (state.research?.topics[a.id] ?? -1) - (state.research?.topics[b.id] ?? -1) ||
         a.id.localeCompare(b.id),
     )
     .slice(0, 6)
@@ -95,7 +95,7 @@ export function rememberResearch(state: HubertState, result: ResearchResult, now
   state.memories.push({
     id: 'memory:' + result.receiptId,
     createdAt: now,
-    summary: `Read “${result.title}” — an external web source, not an Elsewhere sighting.`,
+    summary: `Read the web article “${result.title}”.`,
     sourceEventId: result.receiptId,
     source: 'web-reading',
     verified: false,
@@ -127,7 +127,7 @@ export function rememberResearch(state: HubertState, result: ResearchResult, now
   state.journal.push({
     id: result.receiptId,
     at: now,
-    text: `Read an external source: ${result.title}`,
+    text: `Read the web article “${result.title}”.`,
     kind: 'read',
   });
   state.journal = state.journal.slice(-100);

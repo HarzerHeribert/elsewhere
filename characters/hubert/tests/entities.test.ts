@@ -65,16 +65,14 @@ function encounter(entity = bird, now = 0, id = `encounter:${now}`): WorldOutcom
 }
 
 describe('living entities and developing interests', () => {
-  it('starts with a real birdwatching preference and no invented encounters', () => {
+  it('starts without assigned interests or invented encounters', () => {
     const state = createInitialHubert(0);
-    expect(state.interests.find((interest) => interest.id === 'birds')).toMatchObject({
-      name: 'Birdwatching',
-      strength: 0.82,
-      encounters: 0,
-    });
+    expect(state.interests).toEqual([]);
+    expect(state.dormantInterests).toEqual([]);
     expect(state.memories).toEqual([]);
     expect(state.entityObservations).toEqual({});
-    expect(workingContext(state, observation()).identity).toContain('Birdwatching');
+    expect(workingContext(state, observation()).state.interests).toEqual([]);
+    expect(workingContext(state, observation()).identity).toMatch(/nonhuman creature/);
     expect(workingContext(state, observation()).observations.visibleEntities).toEqual([
       expect.objectContaining({ id: 'courtyard-sparrow' }),
     ]);
@@ -101,6 +99,7 @@ describe('living entities and developing interests', () => {
     });
     const legacy = state as Partial<HubertState>;
     delete legacy.interestSchemaVersion;
+    delete legacy.interestPolicyVersion;
     delete legacy.knownEntities;
     delete legacy.entityObservations;
     delete legacy.watchAttention;
@@ -108,8 +107,9 @@ describe('living entities and developing interests', () => {
     delete legacy.interestEvidence;
     const migrated = upgradeHubertState(state);
     expect(migrated.interests).toHaveLength(8);
-    expect(migrated.interests.find((interest) => interest.id === 'birds')?.encounters).toBe(0);
-    expect(migrated.dormantInterests).toHaveLength(1);
+    expect(migrated.interests).toEqual(state.interests);
+    expect(migrated.interests.some((interest) => interest.id === 'birds')).toBe(false);
+    expect(migrated.dormantInterests).toEqual([]);
     expect(migrated.memories).toEqual(state.memories);
     expect(upgradeHubertState(migrated)).toEqual(migrated);
   });
@@ -267,10 +267,12 @@ describe('living entities and developing interests', () => {
       const advanced = advanceHubert(state, now);
       state = applyOutcome(state, encounter(current, now), observation(current, now), now);
       expect(state.stats.mood).toBe(advanced.stats.mood);
+      expect(state.interests).toEqual(advanced.interests);
     }
-    expect(state.interests.find((interest) => interest.id === 'birds')?.strength).toBe(
-      firstStrength,
-    );
+    expect(
+      state.interests.find((interest) => interest.id === 'birds')!.strength,
+    ).toBeLessThanOrEqual(firstStrength);
+    expect(state.interests.find((interest) => interest.id === 'birds')?.encounters).toBe(1);
     expect(state.memories).toHaveLength(1);
     // A genuinely different behavior still needs a cooldown and a current version.
     const first = applyOutcome(createInitialHubert(0), encounter(), observation(), 0);
@@ -306,22 +308,26 @@ describe('living entities and developing interests', () => {
       observation(familiar, laterTime),
       laterTime,
     );
-    expect(watched.memories).toHaveLength(2);
-    expect(watched.memories[1].salience).toBe(0.2);
+    expect(watched.memories).toHaveLength(1);
     expect(watched.memories[0]).toEqual(originalMemory);
     expect(watched.stats.mood).toBe(advanced.stats.mood);
     expect(watched.stats.boredom).toBe(advanced.stats.boredom);
-    expect(watched.interests).toEqual(first.interests);
+    expect(watched.interests).toEqual(advanced.interests);
+    expect(watched.interests.find((interest) => interest.id === 'birds')?.encounters).toBe(1);
     expect(watched.entityObservations[bird.id].signatures).toEqual(
       first.entityObservations[bird.id].signatures,
     );
     expect(watched.entityObservations[bird.id].sessions).toBe(2);
+    expect(watched.entityObservations[bird.id]).toMatchObject({
+      lastAt: laterTime,
+      lastVersion: familiar.observationVersion,
+    });
   });
 
   it('lets non-bird encounters create interests even when old active tags filled the capacity', () => {
     const initial = createInitialHubert(0);
     initial.interests = [
-      initial.interests[0],
+      { id: 'birds', name: 'Birdwatching', strength: 0.25, encounters: 6 },
       ...Array.from({ length: 7 }, (_, index) => ({
         id: `old-${index}`,
         name: 'Old interest',
@@ -338,13 +344,14 @@ describe('living entities and developing interests', () => {
       tags: ['insects', 'color', 'patterns'],
       behavior: 'flying',
     };
-    const beforeBird = initial.interests.find((interest) => interest.id === 'birds')!.strength;
+    const beforeBird = structuredClone(initial.interests[0]);
     const state = applyOutcome(initial, encounter(butterfly), observation(butterfly), 0);
     expect(state.interests).toHaveLength(8);
     expect(state.interests.some((interest) => interest.id === 'insects')).toBe(true);
     expect(state.interests.some((interest) => interest.id === 'color')).toBe(true);
     expect(state.dormantInterests.length).toBeGreaterThan(0);
-    expect(state.interests.find((interest) => interest.id === 'birds')?.strength).toBe(beforeBird);
+    expect(state.interests.some((interest) => interest.id === 'birds')).toBe(false);
+    expect(state.dormantInterests).toContainEqual(beforeBird);
     expect(state.interests.find((interest) => interest.id === 'insects')?.encounters).toBe(1);
   });
 
@@ -411,7 +418,8 @@ describe('living entities and developing interests', () => {
       tags: ['making'],
       affordances: ['inspect'],
     };
-    for (let index = 0; index < 40; index++)
+    let firstStrength = 0;
+    for (let index = 0; index < 40; index++) {
       state = applyOutcome(
         state,
         {
@@ -426,9 +434,13 @@ describe('living entities and developing interests', () => {
         { ...observation(), visibleEntities: [] },
         index * 200_000,
       );
+      if (index === 0)
+        firstStrength = state.interests.find((interest) => interest.id === 'making')!.strength;
+    }
     expect(state.interests.find((interest) => interest.id === 'making')?.encounters).toBe(1);
-    expect(state.interests.find((interest) => interest.id === 'making')?.strength).toBeCloseTo(
-      0.63,
-    );
+    expect(
+      state.interests.find((interest) => interest.id === 'making')!.strength,
+    ).toBeLessThanOrEqual(firstStrength);
+    expect(state.memories).toHaveLength(1);
   });
 });

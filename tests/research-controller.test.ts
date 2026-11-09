@@ -65,7 +65,8 @@ it('lets Hubert choose an observed topic and read it, without transmitting a pri
     expect(read).toHaveBeenCalledTimes(1);
     expect(after.events.at(-1)?.type).toBe('web_read');
     const memory = after.memories.find((m) => m.sourceUrl === source.url);
-    expect(memory?.summary).toContain('external web source');
+    expect(memory?.summary).toContain('Sparrow biology');
+    expect(memory?.sourceUrl).toBe(source.url);
     expect(JSON.stringify(after)).not.toMatch(/EXTERNAL-PAGE-CANARY|PRIVATE-NOTE-CANARY/);
     const saved = (await backing.load())!.value;
     expect(saved.hubert.memories.find((m) => m.source === 'web-reading')?.verified).toBe(false);

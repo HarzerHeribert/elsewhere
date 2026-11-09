@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PublicExpressionInputSchema } from '../../adapters/src/models/expression';
 import type { JsonObject, DecisionContext } from '@elsewhere/character-runtime';
 import { ReflectionInputSchema } from '../../adapters/src/models/reflection';
 import { canonicalJson } from '../../models/src/data';
@@ -24,7 +25,7 @@ export function encodeInferenceBinding(binding: InferenceBinding): string {
   if (!parsed.success) throw new Error('Private inference binding is invalid.');
   return Buffer.from(JSON.stringify(parsed.data)).toString('base64url');
 }
-export type InferenceWorkload = 'decision' | 'reflection';
+export type InferenceWorkload = 'decision' | 'reflection' | 'expression';
 
 /** Iterative bounds avoid handing deeply nested JSON to recursive validation/formatting. */
 function boundedJsonObject(value: Record<string, unknown>): boolean {
@@ -95,6 +96,9 @@ export const BrokerReflectionRequestSchema = z
     input: ReflectionInputSchema.omit({ identity: true }),
   })
   .strict();
+export const BrokerExpressionRequestSchema = z
+  .object({ input: PublicExpressionInputSchema })
+  .strict();
 
 export function decisionWireContext(context: DecisionContext) {
   const { identity: _identity, ...data } = context;
@@ -126,6 +130,7 @@ export const BrokerErrorSchema = z
       'unauthorized',
       'not_authorized',
       'invalid_request',
+      'invalid_expression',
       'request_too_large',
       'busy',
       'unavailable',
@@ -141,3 +146,16 @@ export const BrokerErrorSchema = z
     usage: BrokerUsageSchema.optional(),
   })
   .strict();
+
+/** Only deliberately authored public text crosses this stream, never provider reasoning events. */
+export const BrokerExpressionFrameSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('delta'), text: z.string().min(1).max(360) }).strict(),
+  z
+    .object({
+      type: z.literal('complete'),
+      value: z.string().max(360),
+      usage: BrokerUsageSchema.optional(),
+    })
+    .strict(),
+  BrokerErrorSchema.extend({ type: z.literal('error') }),
+]);

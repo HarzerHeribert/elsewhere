@@ -101,6 +101,7 @@ async function initialize() {
     simulationRate: config.SIMULATION_RATE,
     modelProvider: providers.model,
     reflectionProvider: providers.reflection,
+    expressionProvider: providers.expression,
     modelMaximum: config.MODEL_MAX_CALLS_PER_DAY,
     research: config.RESEARCH_BROKER_URL
       ? new ResearchClient({

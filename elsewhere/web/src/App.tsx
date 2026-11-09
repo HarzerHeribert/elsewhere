@@ -75,7 +75,7 @@ export function App() {
     [placeId, setPlaceId] = useState<string | null>(null),
     [focus, setFocus] = useState<Position | null>(null),
     [resetKey, setResetKey] = useState(0);
-  const [feed, setFeed] = useState<'events' | 'memories'>('events'),
+  const [feed, setFeed] = useState<'events' | 'memories' | 'notebook'>('events'),
     [message, setMessage] = useState(''),
     [messageStatus, setMessageStatus] = useState(''),
     [sending, setSending] = useState(false);
@@ -449,6 +449,11 @@ export function App() {
                 character={character}
                 recalledMemory={snapshot?.recalledMemory}
                 artifacts={snapshot?.artifacts}
+                notebook={snapshot?.notebook}
+                onNotebook={() => {
+                  setFeed('notebook');
+                  openPanel('activity');
+                }}
                 onMessage={() => openPanel('messages')}
                 onViewpoint={() => camera('hubert')}
                 onMemories={() => {
@@ -503,6 +508,7 @@ export function App() {
               <ActivityPanel
                 events={snapshot?.events ?? []}
                 memories={snapshot?.memories ?? []}
+                notebook={snapshot?.notebook}
                 notices={notices}
                 feed={feed}
                 onFeedChange={setFeed}

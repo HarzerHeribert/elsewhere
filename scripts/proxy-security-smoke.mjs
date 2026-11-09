@@ -207,7 +207,18 @@ try {
     (await (await fetch('http://127.0.0.1:' + upstreamPort + '/metrics')).json()).hits,
     2,
   );
+  assert.equal((await request('/v1/expression')).status, 401);
+  assert.equal(
+    (await request('/v1/expression', { authorization: 'Bearer ' + researchToken })).status,
+    401,
+  );
+  assert.equal((await request('/v1/expression', { authorization: 'Bearer ' + token })).status, 200);
+  assert.equal(
+    (await (await fetch('http://127.0.0.1:' + upstreamPort + '/metrics')).json()).hits,
+    3,
+  );
   result = {
+    expressionGuarded: true,
     researchCredentialSeparated: true,
     proxyFixturePassed: true,
     unauthorizedRejectedBeforeUpstream: true,
