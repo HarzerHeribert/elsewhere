@@ -33,6 +33,8 @@ it('serves public development files while denying private state and keys, includ
     server: {
       ...config.server,
       port: 0,
+      // Vite falls back to 5173 for zero; allow an unused port beside a running local UI.
+      strictPort: false,
       hmr: false,
       proxy: undefined,
       watch: null,
