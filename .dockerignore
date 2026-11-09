@@ -7,6 +7,7 @@
 !app/**
 !scripts/
 !scripts/inference-operator.ts
+!scripts/auth-operator.ts
 !characters/
 !characters/**
 !packages/

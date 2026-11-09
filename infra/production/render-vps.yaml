@@ -1,0 +1,57 @@
+# Existing personal VPS supplies private inference; this creates only world + PostgreSQL.
+# Supply the real owner account ID after provisioning it with the private operator CLI.
+services:
+  - type: web
+    name: elsewhere-runtime
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: 0.5c-512mb
+    region: frankfurt
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 90
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: SIMULATION_RATE
+        value: '1'
+      - key: MODEL_PROVIDER
+        value: broker
+      - key: MODEL_MAX_CALLS_PER_DAY
+        value: '20'
+      - key: MODEL_TIMEOUT_MS
+        value: '40000'
+      - key: HUBERT_OWNER_USER_ID
+        sync: false
+      - key: INFERENCE_BROKER_URL
+        sync: false
+      - key: INFERENCE_BROKER_TOKEN
+        sync: false
+      - key: INFERENCE_BROKER_CA_PEM
+        sync: false
+      - key: ALLOW_NEW_LIFE
+        value: 'false'
+      - key: WEB_ORIGIN
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: API_PROXY_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: elsewhere-state
+          property: connectionString
+databases:
+  - name: elsewhere-state
+    databaseName: elsewhere
+    user: elsewhere
+    region: frankfurt
+    plan: 0.1c-256mb
+    diskSizeGB: 5
+    ipAllowList: []

@@ -17,7 +17,7 @@ COPY app app
 COPY characters characters
 COPY packages packages
 COPY elsewhere/server elsewhere/server
-COPY scripts/inference-operator.ts scripts/inference-operator.ts
+COPY scripts/inference-operator.ts scripts/auth-operator.ts scripts/
 RUN pnpm build:server
 
 FROM dependencies AS production-dependencies
@@ -30,6 +30,7 @@ COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_m
 COPY --from=build --chown=node:node /app/dist/server.mjs ./dist/server.mjs
 COPY --from=build --chown=node:node /app/dist/inference.mjs ./dist/inference.mjs
 COPY --from=build --chown=node:node /app/dist/inference-operator.mjs ./dist/inference-operator.mjs
+COPY --from=build --chown=node:node /app/dist/auth-operator.mjs ./dist/auth-operator.mjs
 RUN install -d -o node -g node -m 0700 /var/lib/elsewhere-inference /home/node/.ssh && usermod -s /bin/bash node
 USER node
 EXPOSE 4000

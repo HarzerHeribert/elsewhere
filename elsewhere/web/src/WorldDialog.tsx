@@ -1,4 +1,3 @@
-import { useState, type FormEvent } from 'react';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { Modal } from './Modal';
 import type { useOwnerActions } from './useOwnerActions';
@@ -18,46 +17,29 @@ export function WorldDialog({
   canManageCharacter: boolean;
   onClose: () => void;
 }) {
-  const [credential, setCredential] = useState(admin.owner);
-  function save(event: FormEvent) {
-    event.preventDefault();
-    admin.saveOwner(credential);
-  }
   return (
     <Modal titleId="modal-title" onClose={onClose}>
       {kind === 'owner' ? (
         <>
           <p className="eyebrow">Behind the scenes</p>
-          <h2 id="modal-title">Owner controls</h2>
-          <p>
-            Run <code>pnpm owner</code> in the project terminal for your private local owner link.
-          </p>
-          <form onSubmit={save}>
-            <label htmlFor="owner-credential">Owner credential</label>
-            <input
-              id="owner-credential"
-              type="password"
-              autoComplete="off"
-              value={credential}
-              onChange={(event) => setCredential(event.target.value)}
-            />
-            <button className="primary-button">Save for this tab</button>
-          </form>
+          <h2 id="modal-title">World settings</h2>
           {(admin.owner || isWorldAdmin || canManageCharacter) && (
             <div className="owner-actions">
-              <button
-                className="secondary-button"
-                disabled={admin.busy}
-                onClick={() =>
-                  void admin.ownerAction(snapshot?.runtime.paused ? 'resume' : 'pause')
-                }
-              >
-                {snapshot?.runtime.paused ? 'Resume life' : 'Pause life'}
-              </button>
+              {(admin.owner || isWorldAdmin) && (
+                <button
+                  className="secondary-button"
+                  disabled={admin.busy || !snapshot}
+                  onClick={() =>
+                    void admin.ownerAction(snapshot?.runtime.paused ? 'resume' : 'pause')
+                  }
+                >
+                  {snapshot?.runtime.paused ? 'Resume life' : 'Pause life'}
+                </button>
+              )}
               {(admin.owner || canManageCharacter) && (
                 <button
                   className="secondary-button"
-                  disabled={admin.busy}
+                  disabled={admin.busy || !snapshot}
                   onClick={() => void admin.ownerAction('tick')}
                 >
                   Advance one decision
@@ -68,7 +50,6 @@ export function WorldDialog({
                   className="text-button"
                   onClick={() => {
                     admin.saveOwner('');
-                    setCredential('');
                   }}
                 >
                   Disconnect
@@ -81,8 +62,7 @@ export function WorldDialog({
           </p>
           <p className="privacy-note">
             Character owners manage their resident. World administrators can pause or resume the
-            world, without gaining ownership or access to a resident's connected accounts. Your
-            credential stays in this tab.
+            world. Connected accounts are governed by separate character permissions.
           </p>
         </>
       ) : (

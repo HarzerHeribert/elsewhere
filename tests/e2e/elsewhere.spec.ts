@@ -1,4 +1,9 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { isolatedAppEnvironment } from '../../scripts/test-environment';
 import type { PublicSnapshot, VisitorSessionView } from '@elsewhere/character-interfaces';
 import { createInitialWorld } from '../../elsewhere/server/src/world';
 
@@ -42,6 +47,13 @@ async function openPanel(page: Page, name: string) {
 async function closePanel(page: Page) {
   await page.getByRole('button', { name: 'Close panel', exact: true }).click();
   await expect(panel(page)).not.toBeVisible();
+}
+async function openWorldSettings(page: Page) {
+  await page.getByRole('button', { name: 'Your account', exact: true }).click();
+  await page.getByRole('button', { name: 'World settings', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'World settings', exact: true });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 type VisitorCredential = { visitorId: string; token: string };
 async function credential(page: Page): Promise<VisitorCredential> {
@@ -111,6 +123,8 @@ test('the game fills the viewport and offers contextual object and character ins
   page.on('pageerror', (error) => errors.push(error.message));
   await visit(page);
   await expectFullViewport(page);
+  await expect(page.getByRole('button', { name: 'Owner controls', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'World settings', exact: true })).toHaveCount(0);
   await expect(panel(page)).not.toBeVisible();
   const actualRenderer = await page.locator('.scene-canvas canvas').evaluate((element) => {
     const gl = (element as HTMLCanvasElement).getContext('webgl2');
@@ -247,11 +261,7 @@ test('the owner link enables pause, step and resume without leaving a credential
 }) => {
   await visit(page, `/#owner=${TEST_OWNER}`);
   await expect(page).toHaveURL(`${origin}/`);
-  await page
-    .getByRole('navigation', { name: 'World navigation' })
-    .getByRole('button', { name: 'Owner controls', exact: true })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Owner controls' });
+  const dialog = await openWorldSettings(page);
   await expect(dialog.getByRole('button', { name: 'Resume life', exact: true })).toBeVisible();
   const before = await snapshot(request);
   await dialog.getByRole('button', { name: 'Advance one decision', exact: true }).click();
@@ -997,7 +1007,7 @@ test('a delayed account refresh cannot overwrite a newer completed sign-in', asy
 
 test('every modal contains keyboard focus and restores its opening control', async ({ page }) => {
   await visit(page);
-  for (const name of ['Owner controls', 'About Elsewhere', 'Sign in']) {
+  for (const name of ['About Elsewhere', 'Sign in']) {
     const trigger = page.getByRole('button', { name, exact: true });
     await trigger.click();
     const dialog = page.getByRole('dialog');
@@ -1260,4 +1270,78 @@ test('rebuilding scenery does not replay old controls or substitute another resi
     )
     .toBe(false);
   await expect(page.getByRole('button', { name: 'Hubert’s eyes', exact: true })).toBeDisabled();
+});
+
+function createPrivateOperatorLink(info: TestInfo) {
+  const directory = info.config.metadata.testDataDirectory as string;
+  const suffix = randomUUID();
+  const input = join(directory, `operator-input-${suffix}.json`);
+  const output = join(directory, `operator-link-${suffix}.json`);
+  writeFileSync(
+    input,
+    JSON.stringify({ name: 'Operator fixture', email: `operator-${suffix}@example.invalid` }),
+    { mode: 0o600, flag: 'wx' },
+  );
+  execFileSync(
+    process.execPath,
+    ['--import', 'tsx', 'scripts/auth-operator.ts', 'create', '--input', input, '--output', output],
+    {
+      env: isolatedAppEnvironment({
+        dataDirectory: directory,
+        port: 4015,
+        webPort: 5175,
+        ownerToken: TEST_OWNER,
+      }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 15000,
+    },
+  );
+  return JSON.parse(readFileSync(output, 'utf8')) as { url: string; userId: string };
+}
+
+test('a private operator link requires confirmation, leaves no browser token storage, and grants no character ownership', async ({
+  page,
+}, info) => {
+  const link = createPrivateOperatorLink(info);
+  const token = new URLSearchParams(new URL(link.url).hash.slice(1)).get('sign-in')!;
+  let verifications = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/auth/one-time-token/verify')) verifications++;
+  });
+  await page.goto(link.url);
+  await expect(
+    page.getByRole('button', { name: 'Continue with private sign-in', exact: true }),
+  ).toBeVisible();
+  expect(new URL(page.url()).hash).toBe('');
+  expect(verifications).toBe(0);
+  await page.getByRole('button', { name: 'Continue with private sign-in', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Hello, Operator fixture', exact: true }),
+  ).toBeVisible();
+  expect(verifications).toBe(1);
+  const account = await page.request.get('/api/account');
+  expect(await account.json()).toMatchObject({
+    user: { id: link.userId, isWorldAdmin: true, emailVerified: false },
+    managedCharacterIds: [],
+  });
+  expect(
+    await page.evaluate(() =>
+      JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
+    ),
+  ).not.toContain(token);
+  await page.getByRole('button', { name: 'Close account dialog', exact: true }).click();
+  await openWorldSettings(page);
+  await page.getByRole('button', { name: 'Resume life', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Pause life', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Advance one decision', exact: true }),
+  ).not.toBeVisible();
+  await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('button', { name: 'Your account', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+  await page.goto(link.url);
+  await page.getByRole('button', { name: 'Continue with private sign-in', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Invalid token');
+  expect(new URL(page.url()).hash).toBe('');
 });
