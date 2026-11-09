@@ -40,7 +40,8 @@
     "start:inference": "node dist/inference.mjs",
     "dev:inference": "tsx app/inference-main.ts",
     "build:research": "esbuild app/research-main.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:linkedom --external:ipaddr.js --outfile=dist/research.mjs",
-    "start:research": "node dist/research.mjs"
+    "start:research": "node dist/research.mjs",
+    "github:setup": "tsx scripts/github-setup.ts"
   },
   "dependencies": {
     "@elsewhere/character-interfaces": "workspace:*",

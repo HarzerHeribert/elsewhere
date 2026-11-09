@@ -277,7 +277,19 @@ export interface PublicResearchEpisode {
   outcome?: string;
   nextStep?: string;
 }
+export interface PublicCreation {
+  id: string;
+  characterId: string;
+  title: string;
+  description: string;
+  url: string;
+  kind: 'repository' | 'website' | 'document' | 'image' | 'other';
+  createdAt: number;
+  pinnedAt?: number;
+  provenance: 'character' | 'owner';
+}
 export interface PublicSnapshot {
+  creations?: PublicCreation[];
   research?: PublicResearchEpisode[];
   world: PublicWorldState;
   character: PublicCharacterState;

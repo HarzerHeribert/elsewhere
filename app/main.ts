@@ -75,6 +75,8 @@ const server = createApiServer({
   reset: () => controller!.reset(),
   submitMessage: (text, actor) => controller!.submitMessage(text, actor),
   getArtifact: (id) => controller!.getArtifact(id),
+  createCreation: (input) => controller!.createCreation(input),
+  pinCreation: (id, pinned) => controller!.pinCreation(id, pinned),
   resolveWish: (id, decision) => controller!.resolveWish(id, decision),
 });
 server.requestTimeout = 20_000;

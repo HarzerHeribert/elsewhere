@@ -1,3 +1,5 @@
+import { addCreation, publicCreations, setCreationPinned } from '../packages/creations/src/index';
+import type { CreateCreationInput } from '../characters/interfaces/src/creations';
 import { applyInterestChoice } from '../characters/hubert/src/interestChoices';
 import { InvalidDecisionError } from '@elsewhere/character-runtime';
 import { BrokerModelError } from '../packages/adapters/src/models/broker';
@@ -9,7 +11,12 @@ import {
 } from '../packages/adapters/src/models/expression';
 import { randomUUID, createHash } from 'node:crypto';
 import hubertAppearance from '../characters/hubert/appearance.json' with { type: 'json' };
-import type { ProviderIssue, PublicSnapshot, WorldState } from '@elsewhere/character-interfaces';
+import type {
+  ProviderIssue,
+  PublicCreation,
+  PublicSnapshot,
+  WorldState,
+} from '@elsewhere/character-interfaces';
 import {
   advanceWorld,
   createInitialWorld,
@@ -108,6 +115,7 @@ export interface ControllerState {
   modelAllowance: ModelAllowance;
   modelRouting?: RoutingLedger;
   weatherSamples: WeatherSample[];
+  creations?: PublicCreation[];
   artifactCreatedAt: number | null;
   artifactSamples?: WeatherSample[];
 }
@@ -252,6 +260,7 @@ export class ElsewhereController {
       },
       character: publicCharacter(s.hubert),
       research: publicResearch(s.hubert),
+      creations: publicCreations(s.creations ?? [], s.hubert.id),
       notebook: {
         enabled: Boolean(this.options.expressionProvider),
         entries: s.hubert.notebook?.entries ?? [],
@@ -263,17 +272,7 @@ export class ElsewhereController {
       memories: publicMemories(s.hubert),
       recalledMemory: recalledMemory(s.hubert, s.runtime.simulatedAt),
       wishes: publicWishes(s.hubert),
-      artifacts: s.artifactCreatedAt
-        ? [
-            {
-              id: 'weather-study',
-              name: 'A small study of the weather',
-              description: 'An SVG chart made from Elsewhere’s simulated weather observations.',
-              url: '/api/artifacts/weather-study',
-              createdAt: s.artifactCreatedAt,
-            },
-          ]
-        : [],
+      artifacts: [], // Legacy prototype downloads remain available by their original URL.
       runtime: {
         mode:
           this.options.modelProvider?.id === 'ollama'
@@ -550,14 +549,6 @@ export class ElsewhereController {
     s.world = advanceWorld(s.world, now);
     s.hubert = advanceHubert(s.hubert, now);
     await this.dreamDuringRest();
-    // A tiny independent local service: measurements continue without a viewer or model.
-    const phase = (now - s.runtime.startedAt) / 60_000;
-    s.weatherSamples.push({
-      at: now,
-      temperature: 18 + Math.sin(phase / 9) * 3,
-      wind: 3 + Math.sin(phase / 4) * 1.5,
-    });
-    s.weatherSamples = s.weatherSamples.slice(-240);
     const resident = s.world.residents.find((r) => r.id === 'hubert');
     const ready =
       resident &&
@@ -597,6 +588,7 @@ export class ElsewhereController {
               provider,
               this.wallNow(),
               Boolean(this.options.research),
+              s.creations ?? [],
             );
             this.resolveProviderIssue('decision');
             s.runtime.invalidDecisionCount = 0;
@@ -654,7 +646,52 @@ export class ElsewhereController {
       const policy = authorizeCommand(decision.action);
       delete s.runtime.activityUntil;
       if (policy.allowed) {
-        if (policy.command.type === 'reconsider') {
+        if (policy.command.type === 'pin_creation') {
+          const command = policy.command;
+          try {
+            const before = s.creations?.find(
+              (creation) =>
+                creation.id === command.creationId && creation.characterId === s.hubert.id,
+            );
+            s.creations = setCreationPinned(
+              s.creations ?? [],
+              s.hubert.id,
+              command.creationId,
+              command.pinned,
+              now,
+            );
+            s.hubert.lastOutcome = {
+              id: randomUUID(),
+              at: now,
+              action: command.type,
+              status: 'completed',
+              summary: command.pinned
+                ? 'Pinned a recorded creation link.'
+                : 'Unpinned a recorded creation link.',
+            };
+            s.hubert.activity = { kind: command.type, label: 'Curating creations', startedAt: now };
+            if (before && (before.pinnedAt !== undefined) !== command.pinned) {
+              s.world.events.push({
+                id: s.hubert.lastOutcome.id,
+                at: now,
+                type: command.pinned ? 'creation_pinned' : 'creation_unpinned',
+                characterId: s.hubert.id,
+                message: `${publicCharacter(s.hubert).name} ${command.pinned ? 'pinned' : 'unpinned'} “${before.title}” on the Creations shelf.`,
+              });
+              s.world.events = s.world.events.slice(-100);
+              s.world.version++;
+            }
+          } catch {
+            s.hubert.lastOutcome = {
+              id: randomUUID(),
+              at: now,
+              action: command.type,
+              status: 'rejected',
+              summary: 'That creation is unavailable or the pin limit was reached.',
+            };
+          }
+          s.runtime.activityUntil = now + 90_000;
+        } else if (policy.command.type === 'reconsider') {
           const choice = policy.command;
           const result = applyInterestChoice(s.hubert, policy.command, this.wallNow());
           s.hubert = result.state;
@@ -735,19 +772,6 @@ export class ElsewhereController {
         this.wallNow(),
         s.world,
       );
-    }
-    if (s.hubert.project.completed && !s.artifactCreatedAt) {
-      s.artifactCreatedAt = now;
-      s.artifactSamples = structuredClone(s.weatherSamples);
-      s.world.events.push({
-        id: `artifact:${now}`,
-        at: now,
-        type: 'artifact_created',
-        message:
-          'Hubert finished a local weather study. Its SVG chart can be opened from the artifact shelf.',
-        characterId: 'hubert',
-        placeId: 'workshop',
-      });
     }
     await this.commit();
     await this.writeNotebook();
@@ -1009,11 +1033,13 @@ export class ElsewhereController {
       const routing = structuredClone(this.state.modelRouting);
       const issues = structuredClone(this.state.runtime.providerIssues);
       const invalidDecisionCount = this.state.runtime.invalidDecisionCount;
+      const creations = structuredClone(this.state.creations);
       const previous = this.state.hubert;
       const worldVersion = this.state.world.version;
       this.state = initialState(this.wallNow());
       // Resetting a fictional life never replenishes real paid-call allowance.
       this.state.modelAllowance = allowance;
+      this.state.creations = creations;
       this.state.runtime.providerIssues = issues;
       this.state.runtime.invalidDecisionCount = invalidDecisionCount;
       if (routing) this.state.modelRouting = routing;
@@ -1076,6 +1102,31 @@ export class ElsewhereController {
       this.state.hubert = next;
       await this.commit();
       return this.getSnapshot();
+    });
+  }
+  createCreation(input: CreateCreationInput) {
+    return this.serialize(async () => {
+      this.state.creations = addCreation(this.state.creations ?? [], input, {
+        id: 'creation-' + randomUUID(),
+        characterId: this.state.hubert.id,
+        createdAt: this.state.runtime.simulatedAt,
+        provenance: 'owner',
+      });
+      await this.commit();
+      return { accepted: true };
+    });
+  }
+  pinCreation(creationId: string, pinned: boolean) {
+    return this.serialize(async () => {
+      this.state.creations = setCreationPinned(
+        this.state.creations ?? [],
+        this.state.hubert.id,
+        creationId,
+        pinned,
+        this.state.runtime.simulatedAt,
+      );
+      await this.commit();
+      return { accepted: true };
     });
   }
   getArtifact(id: string): { contentType: string; body: string } | null {

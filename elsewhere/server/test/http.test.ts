@@ -602,6 +602,154 @@ describe('local public/owner API separation', () => {
     expect(tick).not.toHaveBeenCalled();
   });
 
+  it('lets only the signed-in character owner register and pin creation links', async () => {
+    const createCreation = vi.fn(async (input) => ({ id: 'bird-guide', ...input }));
+    const pinCreation = vi.fn(async (_id, _pinned) => ({ accepted: true }));
+    const { url } = await start({
+      createCreation,
+      pinCreation,
+      canManageCharacter: (userId, characterId) => userId === 'owner' && characterId === 'hubert',
+      auth: {
+        handle: async () => {},
+        isWorldAdmin: async () => true,
+        getAccount: async (req) =>
+          req.headers.cookie
+            ? {
+                id: String(req.headers.cookie),
+                name: 'Account',
+                email: 'account@example.com',
+                emailVerified: true,
+                role: 'admin',
+                isWorldAdmin: true,
+              }
+            : null,
+      },
+    });
+    const details = {
+      title: 'Bird guide',
+      description: 'Field notes',
+      kind: 'document',
+      url: 'https://example.com/birds',
+    };
+    const post = (
+      actor: string,
+      suffix = '',
+      body: unknown = details,
+      character = 'hubert',
+      origin: string | null = 'http://127.0.0.1:5173',
+    ) =>
+      fetch(`${url}/api/characters/${character}/creations${suffix}`, {
+        method: 'POST',
+        headers: {
+          Cookie: actor,
+          'Content-Type': 'application/json',
+          ...(origin ? { Origin: origin } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+    expect((await post('')).status).toBe(401);
+    expect((await post('admin')).status).toBe(403);
+    expect((await post('owner', '', details, 'another')).status).toBe(403);
+    expect((await post('owner', '', details, 'hubert', null)).status).toBe(403);
+    expect((await post('owner', '', { ...details, ownerUserId: 'owner' })).status).toBe(400);
+    expect((await post('owner', '', { ...details, url: 'javascript:alert(1)' })).status).toBe(400);
+    expect(createCreation).not.toHaveBeenCalled();
+    expect((await post('owner')).status).toBe(201);
+    expect(createCreation).toHaveBeenCalledWith(details);
+    expect((await post('admin', '/bird-guide/pin', { pinned: true })).status).toBe(403);
+    expect(
+      (await post('owner', '/bird-guide/pin', { pinned: true, characterId: 'other' })).status,
+    ).toBe(400);
+    expect((await post('owner', '/bird-guide/pin', { pinned: true })).status).toBe(200);
+    expect(pinCreation).toHaveBeenCalledWith('bird-guide', true);
+  });
+
+  it('rechecks creation ownership after reading the request body', async () => {
+    let checks = 0;
+    const createCreation = vi.fn(async () => ({ accepted: true }));
+    const { url } = await start({
+      createCreation,
+      canManageCharacter: () => ++checks < 2,
+      auth: {
+        handle: async () => {},
+        isWorldAdmin: async () => false,
+        getAccount: async () => ({
+          id: 'former-owner',
+          name: 'Former owner',
+          email: 'former@example.com',
+          emailVerified: true,
+          role: 'user',
+          isWorldAdmin: false,
+        }),
+      },
+    });
+    const response = await fetch(`${url}/api/characters/hubert/creations`, {
+      method: 'POST',
+      headers: { Origin: 'http://127.0.0.1:5173', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Guide',
+        description: '',
+        url: 'https://example.com/guide',
+        kind: 'document',
+      }),
+    });
+    expect(response.status).toBe(403);
+    expect(createCreation).not.toHaveBeenCalled();
+  });
+
+  it('projects only the current character’s public creations without private extras', async () => {
+    const { url, snapshot } = await start();
+    snapshot.creations = [
+      {
+        id: 'guide',
+        characterId: 'hubert',
+        title: 'Guide',
+        description: 'Field notes',
+        url: 'https://example.com/guide',
+        kind: 'document',
+        createdAt: 1000,
+        pinnedAt: 2000,
+        provenance: 'character',
+      },
+      {
+        id: 'other',
+        characterId: 'another',
+        title: 'PRIVATE-OTHER-CREATION',
+        description: '',
+        url: 'https://example.com/other',
+        kind: 'other',
+        createdAt: 1000,
+        provenance: 'owner',
+      },
+      {
+        id: 'unsafe',
+        characterId: 'hubert',
+        title: 'Unsafe',
+        description: '',
+        url: 'javascript:alert(1)',
+        kind: 'other',
+        createdAt: 1000,
+        provenance: 'owner',
+      },
+    ];
+    Object.assign(snapshot.creations[0], { secret: 'PRIVATE-CREATION-EXTRA' });
+    const text = await fetch(`${url}/api/world`).then((response) => response.text());
+    expect(text).not.toContain('PRIVATE-');
+    expect(JSON.parse(text).creations).toEqual([
+      {
+        id: 'guide',
+        characterId: 'hubert',
+        title: 'Guide',
+        description: 'Field notes',
+        url: 'https://example.com/guide',
+        kind: 'document',
+        createdAt: 1000,
+        pinnedAt: 2000,
+        provenance: 'character',
+      },
+    ]);
+  });
+
   it('rechecks provider ownership after reading the retry body', async () => {
     let checks = 0;
     const retryCharacterProvider = vi.fn(async () => undefined);

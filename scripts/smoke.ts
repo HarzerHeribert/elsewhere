@@ -175,11 +175,19 @@ try {
     snapshot.world.objects.some((object) => object.id === 'weather-vane-sketch'),
     'A verified work action should produce a persistent sketch',
   );
-  assert(snapshot.artifacts?.length, 'Completed project should publish an actual artifact');
+  assert.deepEqual(
+    snapshot.artifacts,
+    [],
+    'Workbench sessions must not invent a published artifact',
+  );
+  assert.deepEqual(
+    snapshot.creations,
+    [],
+    'Only explicitly registered creations belong on the shelf',
+  );
   assert(fixtureCalls > 0, 'Activities must come from explicit provider requests');
-  const artifact = await fetch(`${base}${snapshot.artifacts[0].url}`);
-  assert.equal(artifact.status, 200);
-  assert((await artifact.text()).includes('<svg'));
+  const artifact = await fetch(`${base}/api/artifacts/weather-study`);
+  assert.equal(artifact.status, 404, 'New lives must not synthesize the old chart');
   const privateNote = 'smoke-private-note-do-not-publish-8362';
   const delivered = await fetch(`${base}/api/messages`, {
     method: 'POST',
@@ -195,7 +203,7 @@ try {
   const after = await fetch(`${base}/api/world`).then((response) => response.text());
   assert.equal(after, before, 'Restart must recover the exact committed public state');
   console.log(
-    'Smoke passed: actual service startup, explicit fixture-provider activity, owner authorization, origin checks, private messages, SVG artifact, and restart persistence.',
+    'Smoke passed: actual service startup, explicit fixture-provider activity, owner authorization, origin checks, private messages, explicit-only creations, and restart persistence.',
   );
 } finally {
   await stop();
