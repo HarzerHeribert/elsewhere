@@ -39,7 +39,7 @@ pnpm chatgpt check       # One isolated Hubert turn; never opens his saved world
 pnpm dev:chatgpt         # Run the saved life with GPT-6 Luna, capped at 20 calls/day
 ```
 
-Decisions and dreams share the call cap. Provider limits pause subscription requests without stopping local life or changing billing. Credentials remain in private, ignored operator storage; visitors never receive them. Direct OAuth mode is local only; hosted Hubert uses a separate private inference service and a protected session handoff. See [setup and quota controls](docs/architecture/chatgpt-plan.md) and [ownership and hosted deployment](docs/architecture/ownership-and-hosting.md).
+Decisions and dreams share the call cap. Provider limits pause subscription requests without stopping local life or changing billing. Credentials remain in private, ignored operator storage; visitors never receive them. Direct OAuth mode is local only; hosted Hubert uses a separate private inference service and a protected session handoff. See [setup and quota controls](docs/architecture/chatgpt-plan.md), [ownership and hosted deployment](docs/architecture/ownership-and-hosting.md), or [your own VPS](docs/architecture/vps-inference.md).
 
 To use owner controls, run this in a second terminal:
 

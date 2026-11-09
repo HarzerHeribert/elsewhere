@@ -52,6 +52,10 @@ export const chatGPTTransferStateSchema = z
     state: z.enum(['pending', 'delegated', 'received']),
     ownerUserId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),
     destination: z.string().max(200).optional(),
+    container: z
+      .string()
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/)
+      .optional(),
   })
   .strict();
 export const chatGPTAccountSchema = z

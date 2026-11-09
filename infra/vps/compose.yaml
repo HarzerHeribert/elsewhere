@@ -1,0 +1,42 @@
+# Run from a checkout on the VPS. Create .env.vps.local privately first.
+# The host's existing reverse proxy reaches 127.0.0.1:4100; Docker exposes no public port.
+name: elsewhere-hubert-inference
+services:
+  inference:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: elsewhere-inference:local
+    container_name: hubert-inference
+    command: ['node', 'dist/inference.mjs']
+    restart: unless-stopped
+    env_file: .env.vps.local
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '4100'
+      INFERENCE_DATA_ROOT: /var/lib/elsewhere-inference
+    ports:
+      - '127.0.0.1:4100:4100'
+    volumes:
+      - inference-private:/var/lib/elsewhere-inference
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  inference-private:

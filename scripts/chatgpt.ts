@@ -20,6 +20,7 @@ async function main() {
       model: { type: 'string', default: 'gpt-6-luna' },
       'no-browser': { type: 'boolean' },
       destination: { type: 'string' },
+      container: { type: 'string' },
       'owner-user-id': { type: 'string' },
     },
   });
@@ -84,6 +85,7 @@ async function main() {
         throw new ChatGPTError('transfer_requires_destination_and_owner_user_id');
       const result = await transferChatGPTSession(session.store, {
         destination: values.destination,
+        container: values.container,
         ownerUserId: values['owner-user-id'],
       });
       console.log(
