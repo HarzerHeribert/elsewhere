@@ -31,7 +31,7 @@ export function PasskeySettings({ session }: { session: AccountSession }) {
   if (!session.account || !session.capabilities?.passkeyAuthEnabled) return null;
   const owner = session.account.isWorldAdmin || session.capabilities.managedCharacterIds.length > 0;
   const required = session.capabilities.ownerControlsRequirePasskey === true;
-  const unlocked = session.capabilities.ownerControlsUnlocked !== false;
+  const unlocked = !required || session.capabilities.ownerControlsUnlocked === true;
   const verified = session.capabilities.passkeyVerifiedRecently === true;
   const locked = required && !unlocked;
   const hasFallback =

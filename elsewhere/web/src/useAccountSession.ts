@@ -198,7 +198,7 @@ export function useAccountSession() {
         setSession(confirmed);
         if (
           confirmed.user?.id !== expectedUser ||
-          Boolean(confirmed.ownerControlsRequirePasskey) !== required
+          confirmed.ownerControlsRequirePasskey !== required
         )
           throw new Error(
             'The account security change could not be confirmed. Refresh your account and try again.',

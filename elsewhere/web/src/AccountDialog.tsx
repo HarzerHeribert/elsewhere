@@ -28,7 +28,7 @@ export function AccountDialog({
   const form = useRef<HTMLFormElement>(null);
   const ownerControlsLocked =
     capabilities?.ownerControlsRequirePasskey === true &&
-    capabilities?.ownerControlsUnlocked === false;
+    capabilities?.ownerControlsUnlocked !== true;
   useEffect(() => {
     form.current?.querySelector<HTMLInputElement>('input')?.focus();
   }, [mode]);
