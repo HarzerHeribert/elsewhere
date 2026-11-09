@@ -7,6 +7,7 @@ export function useAccountSession() {
   const [pending, setPending] = useState(false),
     [error, setError] = useState('');
   const [verificationEmail, setVerificationEmail] = useState('');
+  const [operatorSignInToken, setOperatorSignInToken] = useState('');
   const active = useRef(false),
     generation = useRef(0),
     request = useRef<AbortController | null>(null),
@@ -39,6 +40,16 @@ export function useAccountSession() {
 
   useEffect(() => {
     active.current = true;
+    const readPrivateLink = () => {
+      const fragment = new URLSearchParams(location.hash.slice(1));
+      const token = fragment.get('sign-in');
+      if (token !== null) {
+        history.replaceState(null, '', location.pathname + location.search);
+        if (fragment.size === 1 && /^[a-zA-Z0-9_-]{32}$/.test(token)) setOperatorSignInToken(token);
+      }
+    };
+    readPrivateLink();
+    window.addEventListener('hashchange', readPrivateLink);
     void refresh();
     const check = () => {
       if (!document.hidden) void refresh();
@@ -50,11 +61,44 @@ export function useAccountSession() {
       active.current = false;
       ++generation.current;
       request.current?.abort();
+      window.removeEventListener('hashchange', readPrivateLink);
       window.removeEventListener('focus', check);
       document.removeEventListener('visibilitychange', check);
       clearInterval(timer);
     };
   }, [refresh]);
+
+  const signInWithOperatorLink = useCallback(async () => {
+    if (mutating.current || !operatorSignInToken) return false;
+    mutating.current = true;
+    const { version, controller } = begin();
+    setPending(true);
+    setError('');
+    try {
+      await requestJson('/api/auth/one-time-token/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: operatorSignInToken }),
+        signal: controller.signal,
+      });
+      const value = await getAccount(controller.signal);
+      if (!value.user)
+        throw new Error('Your session could not be confirmed. Request a new private sign-in link.');
+      if (!current(version)) return false;
+      setSession(value);
+      return true;
+    } catch (reason) {
+      if (current(version))
+        setError(
+          reason instanceof Error ? reason.message : 'Private sign-in failed. Request a new link.',
+        );
+      return false;
+    } finally {
+      mutating.current = false;
+      setOperatorSignInToken('');
+      if (current(version)) setPending(false);
+    }
+  }, [begin, current, operatorSignInToken]);
 
   const authenticate = useCallback(
     async (
@@ -135,6 +179,9 @@ export function useAccountSession() {
     refresh,
     authenticate,
     signOut,
+    operatorSignInToken,
+    signInWithOperatorLink,
+    dismissOperatorSignIn: () => setOperatorSignInToken(''),
     dismissVerification: () => {
       setVerificationEmail('');
       setError('');

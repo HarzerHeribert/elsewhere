@@ -1,6 +1,16 @@
 # First public deployment
 
-Cloudflare is the preferred production target. The public source repository is [HarzerHeribert/elsewhere](https://github.com/HarzerHeribert/elsewhere), under the operator's personal GitHub account; no organization is required. The existing Node/PostgreSQL deployment foundation is implemented and tested, while the Cloudflare-native runtime below is planned adapter work. No cloud runtime or live connector account has been created. The operator's Cloudflare grant eligibility, account connection and public origin still need verification before provisioning.
+Cloudflare is the preferred production target. The public source repository is [HarzerHeribert/elsewhere](https://github.com/HarzerHeribert/elsewhere), under the operator's personal GitHub account; no organization is required. The portable Node/PostgreSQL runtime and personal-VPS inference profile are implemented, while the Cloudflare-native runtime below remains planned adapter work. Actual resource IDs, credit eligibility, credentials and activation records belong in private operator storage.
+
+## World with private VPS inference
+
+Use `infra/production/render-vps.yaml` for one Render world runtime and a private PostgreSQL database while the existing personal VPS supplies inference. This profile does not add a Render inference service. Select the alternative `render-hosted.yaml` only when deliberately moving inference onto Render; never apply both profiles to create duplicate services.
+
+Back up and validate the existing life before importing it into an empty database, retain the source, and pause the hosted copy while wiring it up. Keep `ALLOW_NEW_LIFE=false`. Provision the named human operator through the [private account command](../../packages/auth/README.md#private-operator-setup); configure its actual generated ID separately in `HUBERT_OWNER_USER_ID` on both world and broker. Email remains unverified until genuine verification delivery exists. Public password signup stays disabled without that sender. Signed-in accounts with management permission find World settings inside their account dialog; no public owner entry or credential form is exposed.
+
+The world receives only the broker URL, dedicated service credential and optional public certificate pin. Vercel receives only `ELSEWHERE_API_ORIGIN` and `API_PROXY_SECRET`. Provider OAuth credentials remain on the private inference host. After stopping local use, perform the documented SSH/Docker session handoff, retain the VPS host identity and let that host own refreshes. Remove any temporary external database migration rule after maintenance.
+
+Verify actual same-origin API responses through Vercel, denial of unauthenticated direct-origin access, private owner capabilities, guest walking, a bounded real model action, and persisted state/allowance through a runtime restart before resuming ordinary life. Deployment alone does not enable payment, wallet, social publishing, mail or coding-worker connectors.
 
 ## Preferred Cloudflare deployment
 

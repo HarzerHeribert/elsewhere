@@ -5,9 +5,13 @@ import type { useAccountSession } from './useAccountSession';
 export function AccountDialog({
   session,
   onClose,
+  onOpenManagement,
+  privateLocalAccess = false,
 }: {
   session: ReturnType<typeof useAccountSession>;
   onClose: () => void;
+  onOpenManagement?: () => void;
+  privateLocalAccess?: boolean;
 }) {
   const { account, capabilities, pending, error, verificationEmail } = session;
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -37,13 +41,34 @@ export function AccountDialog({
       <h2 id="account-title">
         {account
           ? 'Hello, ' + account.name
-          : verificationEmail
-            ? 'Check your email.'
-            : mode === 'signup'
-              ? 'A name for your visits.'
-              : 'Welcome back.'}
+          : privateLocalAccess
+            ? 'Private local session'
+            : verificationEmail
+              ? 'Check your email.'
+              : mode === 'signup'
+                ? 'A name for your visits.'
+                : 'Welcome back.'}
       </h2>
-      {account ? (
+      {session.operatorSignInToken ? (
+        <>
+          <p>
+            This private link signs you into the operator account it was issued for. It can be used
+            once and expires after 15 minutes.
+          </p>
+          {account && (
+            <p>You are currently signed in as {account.name}. Continuing switches accounts.</p>
+          )}
+          <button
+            className="primary-button full-width"
+            disabled={pending}
+            onClick={() => void session.signInWithOperatorLink()}
+          >
+            {pending ? 'Signing in…' : 'Continue with private sign-in'}
+          </button>
+        </>
+      ) : !account && privateLocalAccess ? (
+        <p>A private development session is connected for this tab.</p>
+      ) : account ? (
         <>
           <p>
             You are signed in as <strong>{account.name}</strong>.
@@ -190,6 +215,11 @@ export function AccountDialog({
             </button>
           </p>
         </>
+      )}
+      {onOpenManagement && (
+        <button className="secondary-button full-width" onClick={onOpenManagement}>
+          World settings
+        </button>
       )}
       <p role="alert" className="auth-error">
         {error}

@@ -81,6 +81,29 @@ describe.runIf(Boolean(connectionString))('Better Auth PostgreSQL portability', 
       await reopened.setWorldAdmin(signupData.user.id, false);
       expect(await reopened.isWorldAdmin(asNodeRequest(cookie))).toBe(false);
       expect((await reopened.getAccount(asNodeRequest(cookie)))?.role).toBe('user');
+      const operatorId = await reopened.createOperatorAccount({
+        name: 'Operator fixture',
+        email: 'operator-fixture@example.invalid',
+      });
+      const link = await reopened.issueOperatorSignIn(operatorId);
+      const oneTime = new URLSearchParams(new URL(link.url).hash.slice(1)).get('sign-in');
+      const claims = await Promise.all(
+        [0, 1].map(() =>
+          reopened.webHandler(
+            new Request(`${origin}/api/auth/one-time-token/verify`, {
+              method: 'POST',
+              headers: { origin, 'content-type': 'application/json' },
+              body: JSON.stringify({ token: oneTime }),
+            }),
+          ),
+        ),
+      );
+      expect(claims.map((response) => response.status).sort()).toEqual([200, 400]);
+      expect(
+        await reopened.getAccount(
+          asNodeRequest(cookiesFrom(claims.find((response) => response.status === 200)!)),
+        ),
+      ).toMatchObject({ id: operatorId, emailVerified: false, isWorldAdmin: true });
       const tables = await admin.query(
         'SELECT table_name FROM information_schema.tables WHERE table_schema=$1',
         [schema],

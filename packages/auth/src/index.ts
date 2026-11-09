@@ -8,6 +8,7 @@ import { betterAuth } from 'better-auth';
 import { getMigrations } from 'better-auth/db/migration';
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node';
 import { admin } from 'better-auth/plugins';
+import { oneTimeToken } from 'better-auth/plugins/one-time-token';
 import type { AccountSummary } from '@elsewhere/character-interfaces';
 export type { AccountSummary } from '@elsewhere/character-interfaces';
 export { authOptionsFromEnvironment } from './environment';
@@ -80,6 +81,11 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   // Local development has no email sender. Public password auth remains off until delivery exists.
   const passwordAuthEnabled = !production || Boolean(options.sendVerificationEmail);
   const allowedOrigins = new Set([base.origin, ...options.trustedOrigins]);
+  const operatorTokens = oneTimeToken({
+    disableClientRequest: true,
+    storeToken: 'hashed',
+    expiresIn: 15,
+  });
   const auth = betterAuth({
     appName: 'Elsewhere',
     baseURL: base.origin,
@@ -133,6 +139,7 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     },
     plugins: [
       admin({ defaultRole: 'user', adminRoles: ['admin'], adminUserIds: [...explicitAdmins] }),
+      operatorTokens,
     ],
   });
   try {
@@ -158,6 +165,8 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       return failure(400, 'Invalid authentication route.');
     if (path === '/api/auth/admin' || path.startsWith('/api/auth/admin/'))
       return failure(403, 'Account-administration endpoints are not enabled.');
+    if (path === '/api/auth/one-time-token/generate')
+      return failure(403, 'Sign-in links are issued only by the private operator command.');
     const origin = request.headers.get('origin');
     if (origin && !allowedOrigins.has(origin)) return failure(403, 'Origin is not permitted.');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !origin)
@@ -185,13 +194,23 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       } catch {
         return failure(400, 'Authentication request was interrupted.');
       }
-      return auth.handler(
+      const response = await auth.handler(
         new Request(request.url, {
           method: request.method,
           headers: request.headers,
           body: Buffer.concat(chunks),
         }),
       );
+      if (path === '/api/auth/one-time-token/verify' && response.ok) {
+        const headers = new Headers(response.headers);
+        headers.set('content-type', 'application/json');
+        headers.set('cache-control', 'no-store');
+        headers.delete('content-length');
+        await response.body?.cancel();
+        // The ordinary HttpOnly cookie is sufficient; never return its raw session token to JS.
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+      }
+      return response;
     }
     return auth.handler(request);
   };
@@ -220,6 +239,41 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   async function isWorldAdmin(req: IncomingMessage) {
     return (await getAccount(req))?.isWorldAdmin ?? false;
   }
+  /** Trusted operator only: no HTTP endpoint creates privileged users or grants character ownership. */
+  async function createOperatorAccount(input: { email: string; name: string }) {
+    if (!input.name.trim() || input.name.length > 60 || input.email.length > 254)
+      throw new Error('Invalid operator identity.');
+    const { user } = await auth.api.createUser({
+      body: { email: input.email, name: input.name.trim(), role: 'admin' },
+    });
+    return user.id;
+  }
+  /** Recovery link for an explicitly provisioned operator, with ordinary revocable auth sessions. */
+  async function issueOperatorSignIn(userId: string) {
+    const context = await auth.$context;
+    const user = await context.internalAdapter.findUserById(userId);
+    if (
+      !user ||
+      ('banned' in user && user.banned) ||
+      !('role' in user) ||
+      typeof user.role !== 'string' ||
+      !user.role.split(',').includes('admin')
+    )
+      throw new Error('An existing world operator account is required.');
+    const session = await context.internalAdapter.createSession(userId);
+    if (!session) throw new Error('Operator session could not be created.');
+    try {
+      const { token } = await operatorTokens.endpoints.generateOneTimeToken({
+        context: { ...context, session: { user, session } },
+      });
+      const url = new URL(base.origin);
+      url.hash = new URLSearchParams({ 'sign-in': token }).toString();
+      return { url: url.href, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() };
+    } catch {
+      await context.internalAdapter.deleteSession(session.token);
+      throw new Error('Operator sign-in link could not be issued.');
+    }
+  }
   // Deliberately not mounted as an HTTP endpoint. Only a trusted out-of-band owner command may call it.
   async function setWorldAdmin(userId: string, enabled = true): Promise<void> {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(userId)) throw new Error('Invalid user identifier.');
@@ -243,6 +297,8 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     getAccount,
     isWorldAdmin,
     setWorldAdmin,
+    createOperatorAccount,
+    issueOperatorSignIn,
     passwordAuthEnabled,
     requiresEmailVerification: production,
     close: async () => {

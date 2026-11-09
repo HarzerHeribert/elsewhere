@@ -62,6 +62,9 @@ export function App() {
   const canManageCharacter =
     !!account &&
     !!accountSession.capabilities?.managedCharacterIds.includes(snapshot?.character.id ?? 'hubert');
+  const canOpenManagement = Boolean(
+    account?.isWorldAdmin || canManageCharacter || (import.meta.env.DEV && owner),
+  );
   const [cameraMode, setMode] = useState<CameraMode>('overview'),
     [panel, setPanel] = useState<Panel | null>(null);
   const [selected, setSelected] = useState<string | null>(null),
@@ -80,6 +83,9 @@ export function App() {
     [locked, setLocked] = useState(false),
     [discovered, setDiscovered] = useState<string[]>([]);
   const [accountOpen, setAccountOpen] = useState(false);
+  useEffect(() => {
+    if (accountSession.operatorSignInToken) setAccountOpen(true);
+  }, [accountSession.operatorSignInToken]);
   const [controlCommand, setControlCommand] = useState<WorldControlCommand | null>(null);
   const main = useRef<HTMLElement>(null),
     controls = useRef<SceneControls | null>(null);
@@ -378,7 +384,7 @@ export function App() {
           </button>
           <button
             className="account-button glass"
-            aria-label={account ? 'Your account' : 'Sign in'}
+            aria-label={account || (import.meta.env.DEV && owner) ? 'Your account' : 'Sign in'}
             onClick={() => {
               release();
               setAccountOpen(true);
@@ -409,17 +415,6 @@ export function App() {
           </button>
         ))}
         <span className="rail-spacer" />
-        <button
-          aria-label="Owner controls"
-          title="Owner controls"
-          onClick={() => {
-            release();
-            setSettings(true);
-          }}
-        >
-          <Icon name="gear" />
-          <span className="rail-label">Owner</span>
-        </button>
       </nav>
       {panel && (
         <aside className="world-panel glass" aria-label="World panel" key={panel}>
@@ -647,7 +642,7 @@ export function App() {
           {visitor.status}
         </p>
       )}
-      {(settings || about) && (
+      {((settings && canOpenManagement) || about) && (
         <WorldDialog
           kind={settings ? 'owner' : 'about'}
           snapshot={snapshot}
@@ -661,7 +656,23 @@ export function App() {
         />
       )}
       {accountOpen && (
-        <AccountDialog session={accountSession} onClose={() => setAccountOpen(false)} />
+        <AccountDialog
+          session={accountSession}
+          privateLocalAccess={import.meta.env.DEV && Boolean(owner)}
+          onOpenManagement={
+            canOpenManagement
+              ? () => {
+                  release();
+                  setAccountOpen(false);
+                  setSettings(true);
+                }
+              : undefined
+          }
+          onClose={() => {
+            accountSession.dismissOperatorSignIn();
+            setAccountOpen(false);
+          }}
+        />
       )}
     </main>
   );

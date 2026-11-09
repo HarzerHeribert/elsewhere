@@ -22,6 +22,10 @@ Connector proposals contain opaque binding/capability/resource IDs. The host sup
 
 The service can also run on an existing personal VPS; see [VPS setup and SSH/Docker handoff](vps-inference.md). Render is an optional deployment profile rather than a runtime dependency.
 
+For the world on Render with inference on that existing VPS, use `infra/production/render-vps.yaml`: it creates only the web runtime and PostgreSQL, with explicit external broker URL, service credential and optional public certificate pin. The older `render-hosted.yaml` profile instead creates an additional Render inference service; do not apply both profiles or duplicate a working broker.
+
+Without a verification-mail sender, a trusted operator can create their named account and a private short-lived sign-in link using [the account operator command](../../packages/auth/README.md#private-operator-setup). This leaves email unverified and public password signup disabled. The resulting actual account ID is configured separately as Hubert's owner in both the public world's registry and the private broker. Neither a first signup, a matching email nor a platform-admin role establishes that resource binding.
+
 ```mermaid
 flowchart LR
   visitor[Public visitor] --> web[Vercel web]

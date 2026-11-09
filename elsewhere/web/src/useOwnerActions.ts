@@ -3,6 +3,15 @@ import { ApiError, requestJson } from './worldApi';
 
 function initialOwner() {
   const token = new URLSearchParams(location.hash.slice(1)).get('owner');
+  if (!import.meta.env.DEV) {
+    if (token) history.replaceState(null, '', location.pathname + location.search);
+    try {
+      sessionStorage.removeItem('elsewhere.owner');
+    } catch {
+      /* No local credential to restore. */
+    }
+    return '';
+  }
   if (token) {
     try {
       sessionStorage.setItem('elsewhere.owner', token);
@@ -36,7 +45,7 @@ export function useOwnerActions(
     };
   }, []);
   const saveOwner = useCallback((value: string) => {
-    const token = value.trim();
+    const token = import.meta.env.DEV ? value.trim() : '';
     setOwner(token);
     try {
       if (token) sessionStorage.setItem('elsewhere.owner', token);

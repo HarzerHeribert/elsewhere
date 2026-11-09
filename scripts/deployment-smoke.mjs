@@ -272,6 +272,82 @@ try {
     'Unconfigured account mail must keep public signup disabled.',
   );
   assert.deepEqual(account.managedCharacterIds, []);
+  docker(
+    'exec',
+    first,
+    'node',
+    '-e',
+    `require('node:fs').writeFileSync('/tmp/operator-input.json',JSON.stringify({name:'Container operator fixture',email:'container-operator@example.invalid'}),{mode:0o600,flag:'wx'})`,
+  );
+  docker(
+    'exec',
+    first,
+    'node',
+    'dist/auth-operator.mjs',
+    'create',
+    '--input',
+    '/tmp/operator-input.json',
+    '--output',
+    '/tmp/operator-link.json',
+  );
+  const operatorLink = JSON.parse(
+    docker(
+      'exec',
+      first,
+      'node',
+      '-e',
+      "process.stdout.write(require('node:fs').readFileSync('/tmp/operator-link.json','utf8'))",
+    ),
+  );
+  const privateSignIn = await fetch(`${a}/api/auth/one-time-token/verify`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      Origin: 'https://elsewhere.example',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      token: new URLSearchParams(new URL(operatorLink.url).hash.slice(1)).get('sign-in'),
+    }),
+  });
+  assert.equal(privateSignIn.status, 200, 'Private operator link failed in the production image.');
+  assert.deepEqual(
+    await privateSignIn.json(),
+    { ok: true },
+    'Private sign-in exposed session data.',
+  );
+  const operatorCookie = privateSignIn.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  const operatorAccount = await (
+    await fetch(`${a}/api/account`, { headers: { ...headers, Cookie: operatorCookie } })
+  ).json();
+  assert.equal(operatorAccount.user.id, operatorLink.userId);
+  assert.equal(operatorAccount.user.isWorldAdmin, true);
+  assert.equal(operatorAccount.user.emailVerified, false);
+  assert.deepEqual(
+    operatorAccount.managedCharacterIds,
+    [],
+    'Admin sign-in silently created character ownership.',
+  );
+  assert.equal(
+    (
+      await fetch(`${a}/api/auth/one-time-token/verify`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          Origin: 'https://elsewhere.example',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: new URLSearchParams(new URL(operatorLink.url).hash.slice(1)).get('sign-in'),
+        }),
+      })
+    ).status,
+    400,
+    'Private sign-in token could be replayed.',
+  );
   assert.equal(
     docker(
       'exec',
