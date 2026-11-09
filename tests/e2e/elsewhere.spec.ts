@@ -353,6 +353,50 @@ test('a visitor walks independently, stops on key release and keeps their creden
   ).toBe(401);
 });
 
+test('walking responds before delayed movement acknowledgement and respects reduced motion', async ({
+  page,
+}) => {
+  await visit(page);
+  const own = await enterWorld(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // Hold the action request itself: any visible movement must come from local input.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/api/visitors/${own.visitorId}/action`, async (route) => {
+    await held;
+    await route.continue();
+  });
+  const camera = () =>
+    page.locator('.scene-canvas').evaluate(
+      (element) =>
+        JSON.parse((element as HTMLElement).dataset.cameraPosition!) as {
+          x: number;
+          y: number;
+          z: number;
+        },
+    );
+  const before = await camera();
+  await page.keyboard.down('w');
+  try {
+    await expect
+      .poll(
+        async () => {
+          const current = await camera();
+          return Math.hypot(current.x - before.x, current.z - before.z);
+        },
+        { timeout: 1500, intervals: [16, 32, 50] },
+      )
+      .toBeGreaterThan(0.15);
+    expect((await camera()).y).toBeCloseTo(1.55, 3);
+  } finally {
+    await page.keyboard.up('w');
+    release();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+});
+
 test('mobile movement controls move the visitor in the expected direction', async ({
   page,
   request,

@@ -4,7 +4,12 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { VisitorSessionView, WorldObject } from '@elsewhere/character-interfaces';
 import { worldObjectObservationHeight } from '@elsewhere/character-interfaces/spatial';
 import type { Snapshot, Position } from './types';
-import { directWalkTarget, predictApprovedPath } from './sceneMotion';
+import {
+  directWalkTarget,
+  predictApprovedPath,
+  stepLocalMovement,
+  WORLD_PREDICTION_MS,
+} from './sceneMotion';
 import { WORLD_ASSETS, worldAssetLoader } from './worldAssets';
 import { createAtmosphere } from './atmosphere';
 import { buildVillageArchitecture, type VillageArchitecture } from './architecture';
@@ -236,10 +241,12 @@ export function Scene(props: Props) {
       for (const x of [-0.13, 0.13]) sphere(0.035, 0x293e34, x, 1.42, 0.33, group);
       box(0.13, 0.025, 0.03, COLORS.clay, 0, 1.27, 0.346, group);
       const feet: THREE.Mesh[] = [];
+      const arms: THREE.Mesh[] = [];
       for (const x of [-0.18, 0.18]) feet.push(box(0.2, 0.25, 0.3, 0x796951, x, 0.07, 0.03, group));
       group.userData.feet = feet;
       group.userData.stepPhase = 0;
-      for (const x of [-0.4, 0.4]) box(0.13, 0.42, 0.14, color, x, 0.52, 0, group);
+      for (const x of [-0.4, 0.4]) arms.push(box(0.13, 0.42, 0.14, color, x, 0.52, 0, group));
+      group.userData.arms = arms;
       cylinder(0.4, 0.08, hat, 0, 1.6, 0, group);
       scene.add(group);
       resources.capture(group);
@@ -265,9 +272,15 @@ export function Scene(props: Props) {
       controlSeen = live.current.control?.serial ?? 0,
       last = performance.now(),
       lastMove = 0,
+      stoppingSince = -Infinity,
       lastLook = 0,
       lastDiagnostics = 0,
       frame = 0;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let gaitPhase = 0,
+      gaitWeight = 0;
+    const lastEyePosition = new THREE.Vector3();
+    let eyeInitialized = false;
     const viewFrustum = new THREE.Frustum(),
       viewProjection = new THREE.Matrix4();
     const receipts = new Map<string, { stamp: number; at: number }>();
@@ -282,6 +295,7 @@ export function Scene(props: Props) {
       !isTyping(document.activeElement);
     const movementHeld = () => [...keys].some((key) => movementKeys.has(key));
     function halt() {
+      stoppingSince = performance.now();
       keys.clear();
       live.current.onStop?.();
     }
@@ -292,6 +306,7 @@ export function Scene(props: Props) {
         ['w', 'a', 's', 'd', 'q', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)
       ) {
         event.preventDefault();
+        if (!movementHeld() && movementKeys.has(key)) lastMove = -Infinity;
         keys.add(key);
       }
     };
@@ -299,7 +314,7 @@ export function Scene(props: Props) {
       const key = event.key.toLowerCase(),
         wasMoving = keys.has(key) && movementKeys.has(key);
       keys.delete(key);
-      if (wasMoving && !movementHeld()) live.current.onStop?.();
+      if (wasMoving && !movementHeld()) halt();
     };
     const blur = () => halt();
     const visibility = () => {
@@ -410,7 +425,10 @@ export function Scene(props: Props) {
           new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
           new THREE.Vector3(),
         );
-        if (destination) live.current.onMove({ x: destination.x, z: destination.z });
+        if (destination) {
+          stoppingSince = -Infinity;
+          live.current.onMove({ x: destination.x, z: destination.z });
+        }
       }
     };
     const dblclick = () => {
@@ -426,12 +444,16 @@ export function Scene(props: Props) {
       if (!visitor || data.paused || !data.snapshot) return;
       const magnitude = Math.hypot(forward, side) || 1,
         scale = 1.25 / magnitude;
-      const target = directWalkTarget(data.snapshot.world, visitor.position, {
-        x: visitor.position.x + (Math.sin(yaw) * forward - Math.cos(yaw) * side) * scale,
-        z: visitor.position.z + (Math.cos(yaw) * forward + Math.sin(yaw) * side) * scale,
+      const model = visitorAvatars.get(visitor.visitorId);
+      const from = model ? { x: model.position.x, z: model.position.z } : visitor.position;
+      const target = directWalkTarget(data.snapshot.world, from, {
+        x: from.x + (Math.sin(yaw) * forward - Math.cos(yaw) * side) * scale,
+        z: from.z + (Math.cos(yaw) * forward + Math.sin(yaw) * side) * scale,
       });
-      if (target) data.onMove(target);
-      else data.onStop?.();
+      if (target) {
+        stoppingSince = -Infinity;
+        data.onMove(target);
+      } else data.onStop?.();
     }
     function nudge(action: WorldControlAction) {
       if (live.current.paused) return;
@@ -552,7 +574,7 @@ export function Scene(props: Props) {
           data.snapshot!.world.updatedAt,
           now,
           0.0022 * (data.snapshot?.runtime.simulationRate ?? 1),
-          800,
+          data.snapshot!.runtime.paused ? 0 : WORLD_PREDICTION_MS,
         );
         placeActorModel(hubert, target, dt, data.snapshot?.world, [
           resident.position,
@@ -575,8 +597,47 @@ export function Scene(props: Props) {
         const own = data.visitor?.visitorId === visitor.id,
           source = own ? data.visitor! : visitor,
           stamp = own ? data.visitor!.observedAt : data.snapshot!.world.updatedAt;
-        const target = predicted(visitor.id, source.position, source.path, stamp, now);
-        placeActorModel(model, target, dt, data.snapshot?.world, [source.position, ...source.path]);
+        let target = predicted(
+          visitor.id,
+          source.position,
+          source.path,
+          stamp,
+          now,
+          0.0032,
+          own ? 800 : WORLD_PREDICTION_MS,
+        );
+        const forward =
+          (keys.has('w') || keys.has('arrowup') ? 1 : 0) -
+          (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
+        const side = (keys.has('d') ? 1 : 0) - (keys.has('a') ? 1 : 0);
+        const localInput =
+          own &&
+          canWalk() &&
+          (forward !== 0 || side !== 0) &&
+          now - (receipts.get(visitor.id)?.at ?? now) < 800;
+        // Brake immediately while the final stop travels to the server. Reconcile
+        // with its stopped position once acknowledged, or after a bounded timeout.
+        if (own && !movementHeld() && source.path.length && now - stoppingSince < 800)
+          target = { x: model.position.x, z: model.position.z };
+        if (localInput && model.userData.placed) {
+          target = stepLocalMovement(
+            data.snapshot!.world,
+            { x: model.position.x, z: model.position.z },
+            source.position,
+            yaw,
+            forward,
+            side,
+            dt,
+          );
+        }
+        placeActorModel(
+          model,
+          target,
+          dt,
+          data.snapshot?.world,
+          [source.position, ...source.path],
+          Boolean(localInput),
+        );
         model.rotation.y = own ? yaw : visitor.facing;
         model.visible = !(data.mode === 'visitor' && own);
       }
@@ -600,6 +661,8 @@ export function Scene(props: Props) {
           camera.position.set(39, 46, 53);
           orbit.target.set(0, 0, 0);
         }
+        eyeInitialized = false;
+        gaitWeight = 0;
         modeSeen = data.mode;
       }
       if (data.resetKey !== resetSeen) {
@@ -643,7 +706,25 @@ export function Scene(props: Props) {
         const own = visitorAvatars.get(data.visitor.visitorId),
           position =
             own?.position ?? new THREE.Vector3(data.visitor.position.x, 0, data.visitor.position.z);
-        camera.position.copy(position).add(new THREE.Vector3(0, 1.55, 0));
+        const travelled = eyeInitialized
+          ? Math.hypot(position.x - lastEyePosition.x, position.z - lastEyePosition.z)
+          : 0;
+        lastEyePosition.copy(position);
+        eyeInitialized = true;
+        const walking = Math.min(1, travelled / Math.max(dt * 3.2, 0.001));
+        gaitPhase += Math.min(travelled, 0.2) * 7.5;
+        gaitWeight += (walking - gaitWeight) * (1 - Math.exp(-dt * 18));
+        const weight = reducedMotion.matches || data.paused ? 0 : gaitWeight;
+        const sway = Math.sin(gaitPhase) * 0.018 * weight;
+        camera.position
+          .copy(position)
+          .add(
+            new THREE.Vector3(
+              Math.cos(yaw) * sway,
+              1.55 + Math.sin(gaitPhase * 2) * 0.025 * weight,
+              -Math.sin(yaw) * sway,
+            ),
+          );
         camera.lookAt(
           camera.position
             .clone()
@@ -655,6 +736,7 @@ export function Scene(props: Props) {
               ),
             ),
         );
+        camera.rotateZ(Math.sin(gaitPhase) * 0.003 * weight);
         camera.fov = 70;
       } else if (data.mode === 'hubert') {
         orbit.enabled = false;
@@ -690,7 +772,7 @@ export function Scene(props: Props) {
       let wildlifeTime = runtime?.simulatedAt ?? 0;
       if (runtime) {
         const receipt = receipts.get('hubert'),
-          age = receipt ? Math.min(1200, now - receipt.at) : 0,
+          age = receipt ? Math.min(WORLD_PREDICTION_MS, now - receipt.at) : 0,
           worldTime =
             runtime.simulatedAt + (runtime.paused ? 0 : age * (runtime.simulationRate ?? 1)),
           phase = (worldTime - runtime.startedAt) / 60000,
@@ -724,6 +806,8 @@ export function Scene(props: Props) {
           data.selected,
           camera.position,
           data.mode === 'overview',
+          now,
+          data.snapshot!.world.updatedAt,
         );
         renderer.domElement.dataset.wildlife = JSON.stringify(wildlife.positions());
         atmosphere.update(runtime.simulatedAt);

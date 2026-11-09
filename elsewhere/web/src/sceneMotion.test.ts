@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type { WorldState } from '@elsewhere/character-interfaces';
-import { predictApprovedPath, directWalkTarget, clearSegment } from './sceneMotion';
+import {
+  predictApprovedPath,
+  directWalkTarget,
+  clearSegment,
+  stepLocalMovement,
+  WORLD_PREDICTION_MS,
+} from './sceneMotion';
 const world = {
   bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
   obstacles: [{ id: 'wall', minX: 1, maxX: 1.5, minZ: -2, maxZ: 2, height: 2 }],
@@ -59,5 +65,29 @@ describe('bounded scene locomotion', () => {
     expect(clearSegment(pond, { x: 15.5, z: 10 }, { x: 17, z: 10 })).toBe(true);
     expect(clearSegment(pond, { x: 14, z: 14 }, { x: 26, z: 14 })).toBe(false);
     expect(clearSegment(world, { x: 0.72, z: 0 }, { x: 0.72, z: 0.5 })).toBe(true);
+  });
+});
+
+describe('responsive local input', () => {
+  it('moves on the first frame, normalizes diagonals, and handles small collision steps', () => {
+    const start = { x: 0, z: 0 };
+    const forward = stepLocalMovement(world, start, start, 0, 1, 0, 1 / 60);
+    const diagonal = stepLocalMovement(world, start, start, 0, 1, 1, 1 / 60);
+    expect(forward.z).toBeCloseTo(3.2 / 60);
+    expect(Math.hypot(diagonal.x, diagonal.z)).toBeCloseTo(forward.z);
+    const wall = { x: 0.72, z: 0 };
+    expect(stepLocalMovement(world, wall, wall, Math.PI / 2, 1, 0, 1 / 60)).toEqual(wall);
+  });
+  it('bounds visual lead during latency and does not move without input', () => {
+    const authority = { x: 0, z: 0 },
+      ahead = { x: 0, z: 1.24 };
+    expect(stepLocalMovement(world, ahead, authority, 0, 1, 0, 0.016)).toEqual(ahead);
+    expect(stepLocalMovement(world, ahead, authority, 0, 0, 0, 0.016)).toEqual(ahead);
+  });
+  it('keeps approved public routes moving throughout a normal poll interval', () => {
+    const sample = (age: number) =>
+      predictApprovedPath({ x: 0, z: 0 }, [{ x: 0, z: 20 }], age, 0.0022, WORLD_PREDICTION_MS);
+    expect(sample(1500).z).toBeGreaterThan(sample(1200).z);
+    expect(sample(10000)).toEqual(sample(WORLD_PREDICTION_MS));
   });
 });

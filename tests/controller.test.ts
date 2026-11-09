@@ -44,6 +44,57 @@ afterEach(async () => {
 });
 
 describe('authoritative controller lifecycle', () => {
+  it('paces natural decisions while physics and needs continue between model calls', async () => {
+    const propose = vi.fn(async () => ({ type: 'reflect' }));
+    const { controller } = await create({
+      simulationStepMs: 10_000,
+      modelProvider: { id: 'fixture', propose },
+    });
+    for (let index = 0; index < 3; index++) await controller.tick();
+    expect(propose).toHaveBeenCalledTimes(1);
+    const before = controller.getSnapshot();
+    for (let index = 0; index < 8; index++) await controller.tick();
+    expect(propose).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().runtime.tick).toBe(before.runtime.tick + 8);
+    expect(controller.getSnapshot().character.energy).toBeLessThan(before.character.energy);
+    await controller.tick();
+    expect(propose).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves a chosen rest duration across restart instead of deciding again every interval', async () => {
+    const file = databaseFile();
+    const propose = vi
+      .fn()
+      .mockResolvedValueOnce({ type: 'rest', durationMs: 180_000 })
+      .mockResolvedValue({ type: 'reflect' });
+    const options = { simulationStepMs: 10_000, modelProvider: { id: 'fixture', propose } };
+    const first = await create(options, file);
+    await first.controller.step();
+    expect(propose).toHaveBeenCalledTimes(1);
+    await stop(first.controller);
+    const restarted = await create(options, file);
+    for (let index = 0; index < 17; index++) await restarted.controller.tick();
+    expect(propose).toHaveBeenCalledTimes(1);
+    expect(restarted.controller.getSnapshot().character.activity).toBe('Resting for a while');
+    await restarted.controller.tick();
+    expect(propose).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not interrupt travel even when another decision would otherwise be due', async () => {
+    const propose = vi.fn(async () => ({ type: 'move', targetId: 'library' }));
+    const { controller, store } = await create({
+      simulationStepMs: 100,
+      decisionIntervalMs: 1000,
+      modelProvider: { id: 'fixture', propose },
+    });
+    await controller.step();
+    const before = controller.getSnapshot().world.residents[0]!.position;
+    expect((await store.load())!.value.world.residents[0]!.path.length).toBeGreaterThan(0);
+    for (let index = 0; index < 10; index++) await controller.tick();
+    expect(propose).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().world.residents[0]!.position).not.toEqual(before);
+  });
+
   it('keeps quota-paused subscription providers from consuming daily calls or blocking local life', async () => {
     const propose = vi.fn();
     const { controller, store } = await create({

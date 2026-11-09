@@ -19,6 +19,8 @@ services:
         value: 0.0.0.0
       - key: SIMULATION_RATE
         value: '1'
+      - key: DECISION_INTERVAL_MS
+        value: '90000'
       - key: MODEL_PROVIDER
         value: broker
       - key: MODEL_MAX_CALLS_PER_DAY
