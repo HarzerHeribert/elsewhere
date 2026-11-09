@@ -44,6 +44,8 @@ const proposalSchema = z
 export type ReflectionInput = z.infer<typeof ReflectionInputSchema>;
 export type ReflectionProposal = z.infer<typeof proposalSchema>;
 export interface ReflectionProvider {
+  /** Refresh local connection state only; provider and host budgets remain authoritative. */
+  resetAvailability?(): void;
   isAvailable?(): boolean;
   readonly id: string;
   readonly managesAllowance?: boolean;

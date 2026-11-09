@@ -6,6 +6,7 @@ import {
   VisitorMessageSchema,
   type AccountSummary,
   type PublicSnapshot,
+  type ProviderIssue,
 } from '@elsewhere/character-interfaces';
 import { publicWorld } from './world.js';
 import { VisitorError, VisitorRegistry } from './visitors.js';
@@ -38,6 +39,8 @@ export interface ApiDependencies {
   isReady?(): boolean;
   /** Derived from trusted ownership records, independently of the account's admin role. */
   canManageCharacter?(userId: string, characterId: string): boolean | Promise<boolean>;
+  getCharacterIssues?(): ProviderIssue[] | Promise<ProviderIssue[]>;
+  retryCharacterProvider?(): Promise<unknown>;
   getSnapshot(): PublicSnapshot | Promise<PublicSnapshot>;
   tick(): Promise<PublicSnapshot>;
   pause(): Promise<PublicSnapshot>;
@@ -90,6 +93,39 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
                 }
               : {}),
           },
+        }
+      : {}),
+    ...(snapshot.research
+      ? {
+          research: snapshot.research.slice(-8).map((episode) => ({
+            id: episode.id,
+            at: episode.at,
+            topic: episode.topic.slice(0, 180),
+            query: episode.query.slice(0, 240),
+            context: episode.context.slice(0, 360),
+            status: episode.status,
+            sources: episode.sources
+              .filter((source) => {
+                try {
+                  const url = new URL(source.url);
+                  return url.protocol === 'https:' && !url.username && !url.password;
+                } catch {
+                  return false;
+                }
+              })
+              .slice(0, 5)
+              .map((source) => ({
+                id: source.id,
+                url: source.url,
+                title: source.title.slice(0, 180),
+                snippet: source.snippet.slice(0, 600),
+                status: source.status,
+                ...(source.excerpt ? { excerpt: source.excerpt.slice(0, 4000) } : {}),
+                ...(source.retrievedAt !== undefined ? { retrievedAt: source.retrievedAt } : {}),
+              })),
+            ...(episode.outcome ? { outcome: episode.outcome.slice(0, 360) } : {}),
+            ...(episode.nextStep ? { nextStep: episode.nextStep.slice(0, 360) } : {}),
+          })),
         }
       : {}),
     character: {
@@ -423,7 +459,10 @@ export function createApiServer(deps: ApiDependencies) {
         return;
       }
       const owner = authenticated(req, deps.adminToken);
-      const controlRoute = req.method === 'POST' && pathname.startsWith('/api/admin/');
+      const providerRetry =
+        /^\/api\/characters\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/provider\/retry$/.exec(pathname);
+      const controlRoute =
+        req.method === 'POST' && (pathname.startsWith('/api/admin/') || !!providerRetry);
       const visitorRoute = /^\/api\/visitors\/(visitor-[a-f0-9-]{36})(\/action)?$/.exec(pathname);
       const visitorRequest =
         visitorRoute &&
@@ -540,7 +579,57 @@ export function createApiServer(deps: ApiDependencies) {
           passwordAuthEnabled: deps.auth.passwordAuthEnabled ?? true,
           requiresEmailVerification: deps.auth.requiresEmailVerification ?? false,
           managedCharacterIds: managesCharacter ? [characterId] : [],
+          ...(managesCharacter
+            ? {
+                characterIssues: ((await deps.getCharacterIssues?.()) ?? [])
+                  .filter((issue) => issue.characterId === characterId)
+                  .slice(-16)
+                  .map(
+                    ({ id, characterId, kind, workload, since, lastAt, message, resolvedAt }) => ({
+                      id,
+                      characterId,
+                      kind,
+                      workload,
+                      since,
+                      lastAt,
+                      message,
+                      ...(resolvedAt === undefined ? {} : { resolvedAt }),
+                    }),
+                  ),
+              }
+            : {}),
         });
+        return;
+      }
+      if (req.method === 'POST' && providerRetry) {
+        const account = deps.auth ? await deps.auth.getAccount(req) : null;
+        if (!account) throw new HttpError(401, 'Sign in as the character owner to retry.');
+        const characterId = providerRetry[1];
+        const managesCharacter = async () =>
+          characterId === (await deps.getSnapshot()).character.id &&
+          (await deps.canManageCharacter?.(account.id, characterId)) === true;
+        if (!(await managesCharacter()))
+          throw new HttpError(403, 'Character ownership is required.');
+        if (!origin || !origins.has(origin))
+          throw new HttpError(
+            403,
+            'A trusted origin is required for session-authenticated changes.',
+          );
+        if (!owner) {
+          releaseVerification?.();
+          enter(controls, `user:${account.id}`);
+        }
+        if (!consume(`provider-retry:${account.id}`, 5, Date.now(), controlLimits))
+          throw new HttpError(429, 'Please wait before retrying the provider again.');
+        const body = await readJson(req, bodyTimeoutMs);
+        if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length)
+          throw new HttpError(400, 'Provider retry body must be an empty object.');
+        if (!(await managesCharacter()))
+          throw new HttpError(403, 'Character ownership is required.');
+        if (!deps.retryCharacterProvider)
+          throw new HttpError(503, 'Provider retry is unavailable.');
+        await deps.retryCharacterProvider();
+        send(200, { accepted: true });
         return;
       }
       if (req.method === 'GET' && pathname === '/api/world') {

@@ -61,6 +61,8 @@ const server = createApiServer({
   proxySecret: config.production ? process.env.API_PROXY_SECRET : undefined,
   isReady: () => ready,
   getSnapshot: () => controller!.getSnapshot(),
+  getCharacterIssues: () => controller!.getCharacterIssues(),
+  retryCharacterProvider: () => controller!.retryCharacterProvider(),
   tick: () => controller!.step(),
   pause: () => controller!.pause(),
   resume: () => controller!.resume(),

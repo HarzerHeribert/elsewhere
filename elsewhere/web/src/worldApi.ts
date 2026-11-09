@@ -1,4 +1,8 @@
-import type { AccountResponse, PublicSnapshot } from '@elsewhere/character-interfaces';
+import type {
+  AccountResponse,
+  PublicSnapshot,
+  ProviderIssue,
+} from '@elsewhere/character-interfaces';
 
 export class ApiError extends Error {
   constructor(
@@ -84,17 +88,36 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
   const value = await requestJson<AccountResponse>('/api/account', { cache: 'no-store', signal });
   if (typeof value?.enabled !== 'boolean')
     throw new Error('The account service returned an invalid response.');
+  const managedCharacterIds =
+    value.user && Array.isArray(value.managedCharacterIds)
+      ? value.managedCharacterIds.filter(
+          (id): id is string =>
+            typeof id === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id),
+        )
+      : [];
+  const characterIssues = Array.isArray(value.characterIssues)
+    ? value.characterIssues
+        .filter(
+          (issue): issue is ProviderIssue =>
+            !!issue &&
+            managedCharacterIds.includes(issue.characterId) &&
+            typeof issue.id === 'string' &&
+            typeof issue.message === 'string' &&
+            ['unconfigured', 'unavailable', 'failed', 'allowance'].includes(issue.kind) &&
+            Number.isFinite(issue.since) &&
+            Number.isFinite(issue.lastAt) &&
+            (issue.resolvedAt === undefined || Number.isFinite(issue.resolvedAt)) &&
+            (issue.workload === undefined ||
+              ['decision', 'notebook', 'reflection'].includes(issue.workload)),
+        )
+        .slice(-16)
+    : [];
   return {
     user: value.user ?? null,
     enabled: value.enabled,
     passwordAuthEnabled: value.passwordAuthEnabled === true,
     requiresEmailVerification: value.requiresEmailVerification === true,
-    managedCharacterIds:
-      value.user && Array.isArray(value.managedCharacterIds)
-        ? value.managedCharacterIds.filter(
-            (id): id is string =>
-              typeof id === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id),
-          )
-        : [],
+    managedCharacterIds,
+    characterIssues,
   };
 }

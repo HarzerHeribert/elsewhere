@@ -6,7 +6,7 @@ Elsewhere explores what happens when agents inhabit a simulated world that peopl
 
 Hubert is the first resident. He is the starting point for the idea: digital characters with their own ongoing activity, sharing a place with people rather than existing only inside a conversation window.
 
-This monorepo contains a working **local prototype**: a full-viewport explorable world with a workshop, courtyard, orchard, pond, library and lookout; living wildlife; overview and first-person exploration; contextual sidebar panels; encounters; real Better Auth accounts; a persistent character loop; associative memory; bounded wishes; private visitor notes; owner controls; and a small artifact Hubert can produce. The default planner is deterministic and makes **no paid requests**. A native local Ollama profile is also available.
+This monorepo contains a working **local prototype**: a full-viewport explorable world with a workshop, courtyard, orchard, pond, library and lookout; living wildlife; overview and first-person exploration; contextual sidebar panels; encounters; real Better Auth accounts; a persistent character loop; associative memory; bounded wishes; private visitor notes; owner controls; and a small artifact Hubert can produce. Autonomous decisions require a connected model. The default unconfigured profile makes **no paid requests** and leaves Hubert unavailable until a provider is connected. A native local Ollama profile is available.
 
 The [feature and ownership ledger](docs/architecture/features.md) distinguishes working capabilities from agreed next work and records which repeated ideas share one system.
 
@@ -41,7 +41,7 @@ pnpm chatgpt check       # One isolated Hubert turn; never opens his saved world
 pnpm dev:chatgpt         # Run the saved life with GPT-6 Luna, capped at 20 calls/day
 ```
 
-Decisions and dreams share the call cap. Provider limits pause subscription requests without stopping local life or changing billing. Credentials remain in private, ignored operator storage; visitors never receive them. Direct OAuth mode is local only; hosted Hubert uses a separate private inference service and a protected session handoff. See [setup and quota controls](docs/architecture/chatgpt-plan.md), [ownership and hosted deployment](docs/architecture/ownership-and-hosting.md), or [your own VPS](docs/architecture/vps-inference.md).
+Decisions and dreams share the call cap. Provider limits stop new autonomous decisions and notify the character owner in their signed-in account panel. The world continues; no scripted planner takes over. Credentials remain in private, ignored operator storage; visitors never receive them. Direct OAuth mode is local only; hosted Hubert uses a separate private inference service and a protected session handoff. See [setup and quota controls](docs/architecture/chatgpt-plan.md), [ownership and hosted deployment](docs/architecture/ownership-and-hosting.md), or [your own VPS](docs/architecture/vps-inference.md).
 
 To use owner controls, run this in a second terminal:
 
@@ -53,7 +53,7 @@ Open the private link it prints. It supplies a generated owner credential throug
 
 No `.env` file is needed. Copy `.env.example` to `.env` only to override settings. Credentials and lived state belong in ignored local storage, never Git. Node currently prints an experimental warning for its built-in SQLite module. World snapshots use that module; Better Auth uses its own SQLite adapter. The local profile needs no Docker or external database.
 
-For multiple models, the optional `routed` profile selects approved models by workload, capability, quality, latency and conservative cost. It preserves stable prompt prefixes and supports Cloudflare session affinity or explicit compatible-provider cache keys. Every actual attempt reserves allowance durably; fresh actions are never replayed from a response cache. See [routing configuration and cache boundaries](docs/architecture/deployment.md#workload-model-routing-and-caches). Only the next-action consumer is integrated today; other workload policies are ready for their future consumers. The default local launch makes no paid calls.
+For multiple models, the optional `routed` profile selects approved models by workload, capability, quality, latency and conservative cost. It preserves stable prompt prefixes and supports Cloudflare session affinity or explicit compatible-provider cache keys. Every actual attempt reserves allowance durably; fresh actions are never replayed from a response cache. See [routing configuration and cache boundaries](docs/architecture/deployment.md#workload-model-routing-and-caches). Only the next-action consumer is integrated today; other workload policies are ready for their future consumers. The default unconfigured launch makes no paid calls or autonomous choices.
 
 ## Guided private setup
 
@@ -81,8 +81,9 @@ Only `pnpm dev:configured` reads Hubert's saved model profile; its key is delive
 - Switch freely between **Overview**, **Walk** and **Hubert’s eyes**. The map and object directory live in the left sidebar.
 - Open **Residents**, select Hubert, or approach him on foot and press **E** to see his live stats and activity. Encounter cards use his actual public state, not fabricated dialogue.
 - Open **Messages** to leave a private note; **Activity** contains public events, visit notifications and memories. The field journal in **Map** records places visited during this walk.
-- Watch verified activity, mood/energy, interests and source-linked memories.
-- Look for the courtyard sparrow, orchard robin, pond duck and garden butterfly. Click an animal or open **Map → Other lives here** to see its current activity. Hubert starts with a strong interest in birdwatching; actual encounters can strengthen it or develop other interests. His profile shows interest strengths and encounter counts.
+- Watch verified activity, mood/energy, interests and source-linked memories. Routine activity is compacted with repeat counts. Expand research in Activity to see the actual query, returned and read sources, and source excerpts; conclusions and follow-up are shown only when recorded.
+- Character owners see provider problems in their signed-in account panel, with an account indicator and a Retry action. World administrators do not inherit access to another character’s provider notices.
+- Look for the courtyard sparrow, orchard robin, pond duck and garden butterfly. Click an animal or open **Map → Other lives here** to see its current activity. Hubert discovers interests through encounters and can set them aside or revisit them. His profile shows interest strengths and encounter counts.
 - Return to the page later: objects, state and memories persist in `.data/elsewhere.sqlite`.
 - Leave a note. Its raw contents remain private and cannot grant tools or change permissions.
 - Use owner controls to pause, advance a step, and resume.
@@ -193,9 +194,9 @@ MODEL_MAX_CALLS_PER_DAY=100
 MODEL_TIMEOUT_MS=15000
 ```
 
-The endpoint must support text chat completions and JSON action responses. Invalid output, provider failure or exhausted allowance falls back to local planning. Every attempted request is durably reserved before dispatch; resetting Hubert does not replenish the same day's allowance. Dollar cost is shown as unknown rather than falsely reported as zero. This call-count allowance is **not a guaranteed currency spending cap**: also set provider-side limits.
+The endpoint must support text chat completions and JSON action responses. Invalid output, provider failure or exhausted allowance stops new decisions and records a persistent owner-only account notice. The owner can retry after fixing the connection or waiting for the allowance reset. Every attempted request is durably reserved before dispatch; resetting Hubert does not replenish the same day's allowance. Dollar cost is shown as unknown rather than falsely reported as zero. This call-count allowance is **not a guaranteed currency spending cap**: also set provider-side limits.
 
-The native `ollama` adapter uses `/api/chat` on loopback only, constrains output with a JSON schema, and disables thinking output for the small test model. The provided local development profile allows up to 1,000 local proposals per real day, with fallback to deterministic planning when the allowance is exhausted. No wallet or paid-model key is involved.
+The native `ollama` adapter uses `/api/chat` on loopback only, constrains output with a JSON schema, and disables thinking output for the small test model. The provided local development profile allows up to 1,000 local proposals per real day, with decisions stopping and an owner notice when the allowance is exhausted. No wallet or paid-model key is involved.
 
 Relevant character context and recent private visitor notes can be sent to the configured model provider. No credentials are sent in model context. Network transport is HTTPS, except explicitly configured loopback development endpoints; redirects are rejected. There are no automatic retries. Response size, output tokens, input context and request duration are bounded.
 

@@ -14,6 +14,11 @@ import {
 import { advanceHubert, createInitialHubert, workingContext } from '../characters/hubert/src/index';
 
 const epoch = Date.UTC(2026, 10, 9, 12);
+const modelProvider = {
+  id: 'notebook-test',
+  managesAllowance: true,
+  propose: async () => ({ type: 'reflect' }),
+};
 class MemoryStore implements SnapshotStore<ControllerState> {
   saved: StoredSnapshot<ControllerState> | null = null;
   async load() {
@@ -65,7 +70,11 @@ async function fixture(options: ControllerOptions = {}) {
     emotionalContext: { mood: 60, frustration: 5 },
     salience: 0.5,
   });
-  const controller = await new ElsewhereController(store, { now: () => epoch, ...options }).init();
+  const controller = await new ElsewhereController(store, {
+    now: () => epoch,
+    modelProvider,
+    ...options,
+  }).init();
   return { store, controller };
 }
 it('streams only explicitly public expression after a durable reservation, then retains its completed entry', async () => {
@@ -107,6 +116,7 @@ it('does not pay to rewrite unchanged facts after reflection, a new day, restart
   const express = vi.fn(async () => 'I want to understand that wobble.');
   const { store, controller } = await fixture({
     now: () => now,
+    modelProvider,
     expressionProvider: { id: 'fixture', express },
   });
   await controller.tick();
@@ -118,6 +128,7 @@ it('does not pay to rewrite unchanged facts after reflection, a new day, restart
   await controller.close();
   const restarted = await new ElsewhereController(store, {
     now: () => now,
+    modelProvider,
     expressionProvider: { id: 'fixture', express },
   }).init();
   try {
@@ -199,6 +210,7 @@ it('does not reopen a full note day after future unchanged facts and a clock rol
   const express = vi.fn(async () => 'A quiet observation.');
   const { controller, store } = await fixture({
     now: () => now,
+    modelProvider,
     expressionProvider: { id: 'fixture', express },
   });
   await controller.tick();
@@ -207,6 +219,7 @@ it('does not reopen a full note day after future unchanged facts and a clock rol
   const previous = store.saved!.value.hubert.notebook!;
   const next = await new ElsewhereController(store, {
     now: () => now,
+    modelProvider,
     expressionProvider: { id: 'fixture', express },
   }).init();
   try {
@@ -225,6 +238,7 @@ it('does not reopen a full note day after future unchanged facts and a clock rol
     await next.close();
     const restarted = await new ElsewhereController(store, {
       now: () => now,
+      modelProvider,
       expressionProvider: { id: 'fixture', express },
     }).init();
     try {
@@ -273,4 +287,33 @@ it('brings only the latest authored questions back into planning without treatin
   expect(JSON.stringify(context.state.recentNotebook)).toContain('small mechanisms');
   expect(JSON.stringify(context.state.recentNotebook)).not.toContain('An old question.');
   expect(state.memories).toEqual([]);
+});
+
+it('keeps a writing failure separate from decisions and retries its source only when the owner requests it', async () => {
+  const express = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('PRIVATE-WRITING-ERROR'))
+    .mockResolvedValue('Could the crooked fin explain the wobble?');
+  const { controller, store } = await fixture({ expressionProvider: { id: 'fixture', express } });
+  try {
+    await controller.tick();
+    expect(controller.getCharacterIssues()[0]).toMatchObject({
+      workload: 'notebook',
+      kind: 'failed',
+    });
+    expect(controller.getSnapshot().notebook?.entries).toEqual([]);
+    await controller.step();
+    expect(express).toHaveBeenCalledTimes(1);
+    expect(store.saved!.value.hubert.turn).toBeGreaterThan(0);
+    expect(JSON.stringify(controller.getSnapshot())).not.toContain('PRIVATE-WRITING');
+    await controller.retryCharacterProvider();
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBeUndefined();
+    await controller.tick();
+    expect(express).toHaveBeenCalledTimes(2);
+    expect(controller.getSnapshot().notebook?.entries[0].text).toContain('crooked fin');
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(epoch);
+    expect(store.saved!.value.modelAllowance.calls).toBe(2);
+  } finally {
+    await controller.close();
+  }
 });

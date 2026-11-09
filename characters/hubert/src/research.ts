@@ -1,4 +1,4 @@
-import type { Observation } from '@elsewhere/character-interfaces';
+import type { Observation, PublicResearchEpisode } from '@elsewhere/character-interfaces';
 import type { ResearchResult, ResearchSearchResult } from '../../interfaces/src/research';
 import type { HubertState } from './index';
 
@@ -9,6 +9,7 @@ export interface HubertResearchState {
   readIds: string[];
   deferredSources?: Record<string, number>;
   pending?: { id: string; kind: 'search' | 'read' };
+  episodes?: PublicResearchEpisode[];
 }
 export function researchTargets(state: HubertState, observation: Observation, nowReal: number) {
   const all = [
@@ -87,6 +88,7 @@ export function researchContext(
 }
 export function rememberResearch(state: HubertState, result: ResearchResult, now: number) {
   const research = state.research!;
+  recordResearchResult(state, result, now);
   if (result.kind === 'search') return;
   if (research.readIds.includes(result.sourceId)) return;
   research.readIds = [...research.readIds, result.sourceId].slice(-64);
@@ -131,4 +133,130 @@ export function rememberResearch(state: HubertState, result: ResearchResult, now
     kind: 'read',
   });
   state.journal = state.journal.slice(-100);
+}
+
+/** Public context comes from an encountered target, never the character's private intent. */
+export function startResearchEpisode(
+  state: HubertState,
+  input: {
+    id: string;
+    kind: 'search' | 'read';
+    target?: { id: string; label: string; query: string };
+    sourceId?: string;
+    placeId: string;
+  },
+  now: number,
+) {
+  const research = state.research!;
+  research.episodes ??= [];
+  if (input.kind === 'search' && input.target) {
+    research.episodes = [
+      ...research.episodes,
+      {
+        id: input.id,
+        at: now,
+        topic: input.target.label,
+        query: input.target.query,
+        context: `Following up on ${input.target.label} encountered in Elsewhere.`,
+        status: 'searching',
+        sources: [],
+      },
+    ].slice(-8) as PublicResearchEpisode[];
+  } else {
+    const episode = research.episodes.at(-1);
+    if (episode?.sources.some((source) => source.id === input.sourceId)) {
+      episode.status = 'reading';
+      delete episode.outcome;
+      delete episode.nextStep;
+    }
+  }
+}
+
+function recordResearchResult(state: HubertState, result: ResearchResult, now: number) {
+  const research = state.research!;
+  research.episodes ??= [];
+  if (result.kind === 'search') {
+    let episode = research.episodes.find((item) => item.id === research.pending?.id);
+    if (!episode) {
+      episode = {
+        id: result.receiptId,
+        at: now,
+        topic: research.search?.label ?? result.query,
+        query: result.query,
+        context: 'A web search selected by Hubert.',
+        status: 'sources-found',
+        sources: [],
+      };
+      research.episodes = [...research.episodes, episode].slice(-8);
+    }
+    episode.query = result.query;
+    episode.status = 'sources-found';
+    episode.sources = result.sources.map((source) => ({ ...source, status: 'returned' }));
+    episode.outcome = `${result.sources.length} search results returned. No pages read yet.`;
+    episode.nextStep = result.sources.length
+      ? 'Hubert can choose a source to read on a later decision.'
+      : 'No sources were returned.';
+    return;
+  }
+  const episode = research.episodes
+    .slice()
+    .reverse()
+    .find((item) => item.sources.some((source) => source.id === result.sourceId));
+  if (!episode) return;
+  const source = episode.sources.find((item) => item.id === result.sourceId)!;
+  Object.assign(source, {
+    url: result.url,
+    title: result.title,
+    status: 'read',
+    excerpt: result.excerpt,
+    retrievedAt: result.fetchedAt,
+  });
+  episode.status = 'read';
+  episode.outcome = `${episode.sources.filter((item) => item.status === 'read').length} of ${episode.sources.length} sources read. Excerpts are source claims, not verified findings.`;
+  episode.nextStep = 'No follow-up action has been recorded for this research.';
+}
+
+export function deferResearchEpisode(state: HubertState, sourceId?: string) {
+  const episode = state.research?.episodes?.at(-1);
+  if (!episode) return;
+  episode.status = 'deferred';
+  episode.outcome = 'The research request was unavailable; no new result was recorded.';
+  episode.nextStep = 'Research has been left for later.';
+  const source = episode.sources.find((item) => item.id === sourceId);
+  if (source && source.status !== 'read') source.status = 'deferred';
+}
+
+function safePublicUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+/** Explicit allowlist projection: private prompts, visitor messages and intent never leave state. */
+export function publicResearch(state: HubertState): PublicResearchEpisode[] {
+  return (state.research?.episodes ?? []).slice(-8).map((episode) => ({
+    id: episode.id,
+    at: episode.at,
+    topic: episode.topic.slice(0, 180),
+    query: episode.query.slice(0, 240),
+    context: episode.context.slice(0, 360),
+    status: episode.status,
+    sources: episode.sources
+      .filter((source) => safePublicUrl(source.url))
+      .slice(0, 5)
+      .map((source) => ({
+        id: source.id,
+        url: source.url,
+        title: source.title.slice(0, 180),
+        snippet: source.snippet.slice(0, 600),
+        status: source.status,
+        ...(source.excerpt ? { excerpt: source.excerpt.slice(0, 4000) } : {}),
+        ...(source.retrievedAt !== undefined ? { retrievedAt: source.retrievedAt } : {}),
+      })),
+    ...(episode.outcome ? { outcome: episode.outcome.slice(0, 360) } : {}),
+    ...(episode.nextStep ? { nextStep: episode.nextStep.slice(0, 360) } : {}),
+  }));
 }

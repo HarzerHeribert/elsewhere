@@ -204,17 +204,18 @@ describe('fresh-context dream integration regressions', () => {
     }
   });
 
-  it('uses real impulse expiry when an unavailable provider destination falls back locally', async () => {
+  it('does not replace an unavailable provider destination with a dream impulse', async () => {
     const h = dreamFixture();
-    const decision = await chooseActionWithProvider(
-      h.state,
-      h.observation,
-      h.now,
-      { id: 'fixture', propose: async () => ({ type: 'move', targetId: 'unknown-destination' }) },
-      epoch,
-    );
-    expect(decision.action).toEqual(dreamActionCommand(h.action));
-    expect(decision.state.activeWakeImpulse).toBe(h.state.dreams.impulses[0].id);
+    await expect(
+      chooseActionWithProvider(
+        h.state,
+        h.observation,
+        h.now,
+        { id: 'fixture', propose: async () => ({ type: 'move', targetId: 'unknown-destination' }) },
+        epoch,
+      ),
+    ).rejects.toThrow('Provider proposed an unavailable action');
+    expect(h.state.activeWakeImpulse).toBeNull();
   });
 
   it('settles a model-selected waking impulse through the normal world receipt', async () => {
@@ -249,6 +250,12 @@ describe('fresh-context dream integration regressions', () => {
       now: () => now,
       simulationStepMs: 300_000,
       reflectionProvider: { id: 'fixture', reflect },
+      modelProvider: {
+        id: 'rest-fixture',
+        localOnly: true,
+        managesAllowance: true,
+        propose: async () => ({ type: 'rest' }),
+      },
     }).init();
     await controller.tick();
     now += 120_000;
@@ -267,6 +274,12 @@ describe('fresh-context dream integration regressions', () => {
       now: () => now,
       simulationStepMs: 300_000,
       reflectionProvider: { id: 'fixture', reflect },
+      modelProvider: {
+        id: 'rest-fixture',
+        localOnly: true,
+        managesAllowance: true,
+        propose: async () => ({ type: 'rest' }),
+      },
     }).init();
     expect((await store.load())!.value.hubert.dreams.pending).toBeNull();
     expect((await store.load())!.value.hubert.dreams.ledger).toEqual(

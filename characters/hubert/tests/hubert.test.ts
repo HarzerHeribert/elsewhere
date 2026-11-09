@@ -276,15 +276,16 @@ describe('Hubert', () => {
     expect(valid.action).toEqual({ type: 'look', targetId: 'bench' });
   });
 
-  it('falls back when a model guesses an object outside its observed or remembered knowledge', async () => {
+  it('rejects an unknown model target without choosing a local substitute', async () => {
     const state = createInitialHubert(0);
-    const decision = await chooseActionWithProvider(state, observation, 0, {
-      id: 'guessing-model',
-      propose: async () => ({ type: 'move', targetId: 'reading-table' }),
-    });
-    expect(decision.action).toEqual(chooseAction(state, observation, 0).action);
-    expect(decision.action).not.toEqual({ type: 'move', targetId: 'reading-table' });
-    expect(decision.state.knownObjects).not.toHaveProperty('reading-table');
+    const before = structuredClone(state);
+    await expect(
+      chooseActionWithProvider(state, observation, 0, {
+        id: 'guessing-model',
+        propose: async () => ({ type: 'move', targetId: 'reading-table' }),
+      }),
+    ).rejects.toThrow('Provider proposed an unavailable action');
+    expect(state).toEqual(before);
   });
 
   it.each(['bench', 'reading-table', 'library'])(
@@ -309,23 +310,42 @@ describe('Hubert', () => {
     },
   );
 
-  it('keeps mandatory low-energy rest ahead of model proposals and continues recovery', async () => {
+  it('lets the model choose even during low energy and ongoing rest', async () => {
     const initial = createInitialHubert(0);
     initial.stats.energy = 12;
-    const propose = vi.fn(async () => ({ type: 'work', targetId: 'workbench' }));
+    const propose = vi.fn(async () => ({ type: 'look', targetId: 'bench' }));
     const decision = await chooseActionWithProvider(initial, observation, 0, {
       id: 'stub',
       propose,
     });
-    expect(decision.action.type).toBe('rest');
-    expect(propose).not.toHaveBeenCalled();
+    expect(decision.action).toEqual({ type: 'look', targetId: 'bench' });
+    expect(propose).toHaveBeenCalledTimes(1);
+    decision.state.activity.kind = 'rest';
     decision.state.stats.energy = 50;
-    const recovering = await chooseActionWithProvider(decision.state, observation, 0, {
+    const next = await chooseActionWithProvider(decision.state, observation, 0, {
       id: 'stub',
       propose,
     });
-    expect(recovering.action.type).toBe('rest');
-    expect(propose).not.toHaveBeenCalled();
+    expect(next.action).toEqual({ type: 'look', targetId: 'bench' });
+    expect(propose).toHaveBeenCalledTimes(2);
+  });
+
+  it('provides repeated-failure guidance to the model without choosing on its behalf', async () => {
+    const state = createInitialHubert(0);
+    state.progressGuidance = {
+      kind: 'select-alternative',
+      intentionKey: 'project:weather-study',
+      reason: 'repeated-failure',
+      count: 3,
+      alternativesLimit: 2,
+    };
+    const propose = vi.fn(async () => ({ type: 'look', targetId: 'bench' }));
+    const decision = await chooseActionWithProvider(state, observation, 0, {
+      id: 'stub',
+      propose,
+    });
+    expect(propose).toHaveBeenCalledOnce();
+    expect(decision.action).toEqual({ type: 'look', targetId: 'bench' });
   });
 
   it('shares remembered planning facts and completion without rewriting episodes or identity', () => {
@@ -351,15 +371,15 @@ describe('Hubert', () => {
     expect(state).toEqual(before);
   });
 
-  it('applies the same recent work cooldown to provider and local decisions', async () => {
+  it('rejects unavailable work without substituting a local activity', async () => {
     const state = createInitialHubert(0);
     state.lastObjectUse.workbench = 0;
-    const decision = await chooseActionWithProvider(state, observation, 10_000, {
-      id: 'stub',
-      propose: async () => ({ type: 'work', targetId: 'workbench' }),
-    });
-    expect(decision.action).not.toEqual({ type: 'work', targetId: 'workbench' });
-    expect(decision.action).toEqual(chooseAction(state, observation, 10_000).action);
+    await expect(
+      chooseActionWithProvider(state, observation, 10_000, {
+        id: 'stub',
+        propose: async () => ({ type: 'work', targetId: 'workbench' }),
+      }),
+    ).rejects.toThrow('Provider proposed an unavailable action');
   });
 
   it('rejects replay of a retained source episode after the recent receipt ledger rotates', () => {

@@ -113,21 +113,6 @@ svg {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
-.game-header {
-  position: absolute;
-  left: 22px;
-  right: 22px;
-  top: max(20px, env(safe-area-inset-top));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  pointer-events: none;
-  z-index: 10;
-}
-.game-header > * {
-  pointer-events: auto;
-}
 .brand {
   display: flex;
   align-items: center;
@@ -148,19 +133,6 @@ svg {
   letter-spacing: 0;
   margin-top: 5px;
   color: var(--ew-text-muted);
-}
-.world-clock {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: var(--ew-space-3);
-  padding: 13px var(--ew-space-4);
-  border-radius: var(--ew-radius-control);
-  font-size: var(--ew-text-caption);
-  white-space: nowrap;
-  color: var(--ew-text);
 }
 .connection {
   display: flex;
@@ -187,56 +159,6 @@ svg {
   height: 18px;
   background: var(--ew-surface-muted);
 }
-.world-clock > span:last-child {
-  font-variant-numeric: tabular-nums;
-  display: flex;
-  gap: var(--ew-space-3);
-}
-.world-clock small {
-  font-size: var(--ew-text-caption);
-  color: var(--ew-text-muted);
-}
-.header-actions {
-  display: flex;
-  gap: 9px;
-  align-items: center;
-}
-.camera-switch {
-  display: flex;
-  padding: var(--ew-space-1);
-  border-radius: var(--ew-radius-control);
-  gap: 2px;
-}
-.camera-switch button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 9px var(--ew-space-3);
-  border-radius: var(--ew-radius-small);
-  font-size: var(--ew-text-caption);
-  background: transparent;
-  color: var(--ew-text-muted);
-  transition:
-    background 0.18s,
-    color 0.18s,
-    box-shadow 0.18s;
-}
-.camera-switch svg {
-  width: 16px;
-  height: 16px;
-}
-.camera-switch button[aria-pressed='true'] {
-  background: var(--ew-selected);
-  color: var(--ew-text);
-  box-shadow:
-    0 1px 4px color-mix(in srgb, var(--ew-ink) 9%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--ew-ink) 30%, transparent);
-}
-.camera-switch button:hover {
-  color: var(--ew-text);
-  background: color-mix(in srgb, var(--ew-surface) 50%, transparent);
-}
 .square-button {
   display: grid;
   place-items: center;
@@ -260,77 +182,6 @@ svg {
 }
 .subtle:hover {
   background: var(--ew-surface-muted);
-}
-.world-rail {
-  position: absolute;
-  top: 106px;
-  left: 22px;
-  bottom: 24px;
-  width: 66px;
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  padding: 9px 5px;
-  border-radius: var(--ew-radius-panel);
-  z-index: 12;
-  max-height: 570px;
-}
-.world-rail button {
-  position: relative;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 5px;
-  flex-shrink: 0;
-  width: 54px;
-  height: 61px;
-  border-radius: var(--ew-radius-control);
-  color: var(--ew-text-muted);
-  transition:
-    background 0.18s,
-    color 0.18s;
-}
-.world-rail button:hover {
-  background: var(--ew-surface-muted);
-  color: var(--ew-text);
-}
-.world-rail button.active {
-  background: var(--ew-selected);
-  color: var(--ew-text);
-}
-.rail-label {
-  font-size: var(--ew-text-caption);
-  font-weight: 500;
-}
-.rail-spacer {
-  flex: 1;
-  min-height: 8px;
-}
-.rail-dot {
-  position: absolute;
-  top: 9px;
-  right: 12px;
-  width: 5px;
-  height: 5px;
-  background: var(--ew-accent);
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--ew-line);
-}
-.world-panel {
-  position: absolute;
-  z-index: 11;
-  left: 103px;
-  top: 106px;
-  bottom: 24px;
-  width: 330px;
-  max-width: calc(100vw - 126px);
-  border-radius: var(--ew-radius-panel);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  animation: panel-in 0.23s cubic-bezier(0.2, 0.75, 0.25, 1);
 }
 .panel-header {
   display: flex;
@@ -967,36 +818,6 @@ kbd {
   border-radius: var(--ew-radius-small);
   color: var(--ew-text-muted);
 }
-.arrival-card {
-  position: absolute;
-  left: 114px;
-  bottom: 108px;
-  border-radius: var(--ew-radius-panel);
-  padding: 26px 30px;
-  z-index: 5;
-  animation: panel-in 0.6s ease;
-  max-width: 350px;
-  background: color-mix(in srgb, var(--ew-surface) 89%, transparent);
-}
-.arrival-card h1 {
-  font-family: var(--serif);
-  font-size: 36px;
-  letter-spacing: -1px;
-  font-weight: normal;
-  margin: var(--ew-space-3) 0;
-}
-.arrival-card > p:not(.eyebrow) {
-  font-size: var(--ew-text-small);
-  line-height: 1.9;
-  color: var(--ew-text-muted);
-  margin: 0 0 var(--ew-space-5);
-}
-.arrival-card > small {
-  display: block;
-  font-size: var(--ew-text-caption);
-  color: var(--ew-text-muted);
-  margin-top: 18px;
-}
 .encounter-card {
   position: absolute;
   bottom: 102px;
@@ -1061,79 +882,6 @@ kbd {
     0 1px 3px color-mix(in srgb, var(--ew-ink) 40%, transparent);
   pointer-events: none;
 }
-.walk-controls {
-  position: absolute;
-  right: 24px;
-  bottom: 100px;
-  display: grid;
-  grid-template-columns: repeat(3, 34px);
-  gap: var(--ew-space-1);
-  padding: var(--ew-space-2);
-  border-radius: var(--ew-radius-control);
-  z-index: 8;
-  opacity: 0.75;
-  transition: opacity 0.2s;
-}
-.walk-controls:hover {
-  opacity: 1;
-}
-.walk-controls button {
-  height: 31px;
-  border-radius: var(--ew-radius-small);
-  background: color-mix(in srgb, var(--ew-surface) 78%, transparent);
-  border: 1px solid var(--ew-line);
-  font-size: 17px;
-  color: var(--ew-text-muted);
-}
-.walk-controls button:active {
-  background: var(--ew-selected);
-}
-.walk-controls .stop-walking {
-  grid-column: 1/-1;
-  font-size: var(--ew-text-caption);
-  height: 24px;
-}
-.world-bottom {
-  position: absolute;
-  bottom: max(22px, env(safe-area-inset-bottom));
-  left: 111px;
-  right: 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 15px;
-  z-index: 8;
-  pointer-events: none;
-}
-.world-bottom > * {
-  pointer-events: auto;
-}
-.location-chip {
-  display: flex;
-  gap: 11px;
-  align-items: center;
-  border-radius: var(--ew-radius-control);
-  padding: 11px var(--ew-space-4);
-  color: var(--ew-text-muted);
-  min-width: 190px;
-}
-.location-chip strong {
-  display: block;
-  font-size: var(--ew-text-caption);
-  font-weight: 500;
-  color: var(--ew-text);
-}
-.location-chip small {
-  display: block;
-  font-size: var(--ew-text-caption);
-  margin-top: 5px;
-  color: var(--ew-text-muted);
-}
-.bottom-actions {
-  display: flex;
-  gap: var(--ew-space-2);
-  align-items: center;
-}
 .mouse-capture {
   display: flex;
   gap: 17px;
@@ -1145,17 +893,6 @@ kbd {
 }
 .mouse-capture span {
   font-size: 15px;
-}
-.connection-toast {
-  position: absolute;
-  right: 22px;
-  top: 90px;
-  padding: var(--ew-space-3) var(--ew-space-4);
-  font-size: var(--ew-text-caption);
-  color: var(--ew-text-muted);
-  border-radius: var(--ew-radius-control);
-  z-index: 20;
-  max-width: 300px;
 }
 .canvas-fallback {
   position: absolute;
@@ -1266,66 +1003,12 @@ kbd {
     translate: 0 0;
   }
 }
-@media (min-width: 1450px) {
-  .world-rail {
-    left: 28px;
-    top: 114px;
-  }
-  .world-panel {
-    left: 109px;
-    top: 114px;
-    width: 350px;
-  }
-  .game-header {
-    left: 28px;
-    right: 28px;
-    top: 24px;
-  }
-  .arrival-card {
-    left: 126px;
-  }
-  .world-bottom {
-    left: 120px;
-  }
-}
 @media (max-width: 1150px) {
-  .world-clock {
-    position: static;
-    transform: none;
-    margin-left: auto;
-  }
-  .world-clock .connection,
-  .world-clock .clock-divider {
-    display: none;
-  }
-  .game-header {
-    gap: 10px;
-  }
   .brand small {
     font-size: var(--ew-text-caption);
   }
-  .camera-switch button {
-    padding: 9px;
-  }
-  .camera-switch button span {
-    font-size: var(--ew-text-caption);
-  }
-  .world-clock {
-    gap: 9px;
-  }
-  .world-clock > span:last-child {
-    gap: var(--ew-space-2);
-  }
-  .world-panel {
-    width: 310px;
-  }
 }
 @media (max-width: 800px) {
-  .game-header {
-    left: 14px;
-    right: 14px;
-    top: 14px;
-  }
   .brand {
     padding: 9px var(--ew-space-3);
     gap: 9px;
@@ -1334,67 +1017,11 @@ kbd {
   .brand > span:last-child {
     font-size: 23px;
   }
-  .brand small,
-  .world-clock {
+  .brand small {
     display: none;
-  }
-  .header-actions {
-    margin-left: auto;
-    gap: 6px;
-  }
-  .camera-switch button {
-    padding: var(--ew-space-2) 10px;
-    min-height: 32px;
-  }
-  .header-actions > .square-button {
-    width: 38px;
-    height: 40px;
-  }
-  .world-rail {
-    left: 14px;
-    top: 86px;
-    bottom: 20px;
-    width: 58px;
-    max-height: 510px;
-    padding: 7px var(--ew-space-1);
-    border-radius: var(--ew-radius-control);
-  }
-  .world-rail button {
-    width: 48px;
-    height: 55px;
-  }
-  .world-panel {
-    left: 85px;
-    top: 86px;
-    bottom: 20px;
-    width: 310px;
-    max-width: calc(100vw - 100px);
-    border-radius: var(--ew-radius-control);
-  }
-  .world-bottom {
-    left: 86px;
-    right: 16px;
-    bottom: 20px;
-  }
-  .arrival-card {
-    left: 86px;
-    bottom: 104px;
-    padding: var(--ew-space-6);
-    max-width: 320px;
-  }
-  .arrival-card h1 {
-    font-size: 32px;
-  }
-  .location-chip {
-    min-width: 0;
-    padding: 11px 13px;
   }
   .mouse-capture {
     padding: var(--ew-space-3);
-  }
-  .walk-controls {
-    bottom: 93px;
-    right: 16px;
   }
   .encounter-card {
     bottom: 105px;
@@ -1413,87 +1040,12 @@ kbd {
   }
 }
 @media (max-width: 580px) {
-  .game-header {
-    left: 10px;
-    right: 10px;
-    top: max(10px, env(safe-area-inset-top));
-    gap: 7px;
-  }
   .brand {
     padding: var(--ew-space-2) 10px;
     gap: 7px;
   }
   .brand > span:last-child {
     font-size: 21px;
-  }
-  .header-actions {
-    gap: 5px;
-  }
-  .camera-switch {
-    padding: 3px;
-    border-radius: var(--ew-radius-control);
-    gap: 0;
-  }
-  .camera-switch button {
-    padding: 7px 9px;
-    gap: 0;
-    min-height: 31px;
-  }
-  .camera-switch button svg {
-    width: 16px;
-    height: 16px;
-  }
-  .camera-switch button span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-  }
-  .header-actions > .square-button {
-    width: 34px;
-    height: 37px;
-    border-radius: var(--ew-radius-control);
-  }
-  .world-rail {
-    left: 10px;
-    top: 74px;
-    bottom: auto;
-    width: 47px;
-    max-height: none;
-    min-height: 411px;
-    padding: 5px 2px;
-    border-radius: var(--ew-radius-control);
-  }
-  .world-rail button {
-    width: 40px;
-    height: 50px;
-    gap: var(--ew-space-1);
-  }
-  .world-rail button svg {
-    width: 18px;
-    height: 18px;
-  }
-  .rail-label {
-    font-size: var(--ew-text-caption);
-  }
-  .rail-spacer {
-    min-height: 8px;
-  }
-  .rail-dot {
-    top: 7px;
-    right: 7px;
-    width: 4px;
-    height: 4px;
-  }
-  .world-panel {
-    left: 66px;
-    right: 10px;
-    width: auto;
-    max-width: none;
-    top: 74px;
-    bottom: 16px;
-    border-radius: var(--ew-radius-control);
   }
   .panel-header {
     padding: var(--ew-space-5) 17px 17px;
@@ -1507,76 +1059,8 @@ kbd {
   .panel-intro {
     font-size: var(--ew-text-caption);
   }
-  .world-bottom {
-    left: 67px;
-    right: 10px;
-    bottom: max(13px, env(safe-area-inset-bottom));
-    gap: var(--ew-space-2);
-  }
-  .location-chip {
-    padding: 10px 11px;
-    border-radius: var(--ew-radius-control);
-    gap: var(--ew-space-2);
-    min-width: 0;
-  }
-  .location-chip strong {
-    font-size: var(--ew-text-caption);
-  }
-  .location-chip small {
-    font-size: var(--ew-text-caption);
-    max-width: 165px;
-    line-height: 1.5;
-  }
-  .location-chip svg {
-    width: 15px;
-  }
-  .bottom-actions > .square-button {
-    width: 35px;
-    height: 39px;
-    border-radius: var(--ew-radius-control);
-  }
   .mouse-capture {
     display: none;
-  }
-  .arrival-card {
-    left: 67px;
-    right: 12px;
-    bottom: 95px;
-    max-width: 305px;
-    padding: 23px;
-    border-radius: var(--ew-radius-control);
-  }
-  .arrival-card .eyebrow {
-    font-size: var(--ew-text-caption);
-    letter-spacing: 1.1px;
-  }
-  .arrival-card h1 {
-    font-size: 29px;
-    margin: 13px 0;
-  }
-  .arrival-card > p:not(.eyebrow) {
-    font-size: var(--ew-text-caption);
-    line-height: 1.8;
-  }
-  .arrival-card > small {
-    font-size: var(--ew-text-caption);
-  }
-  .walk-controls {
-    right: 12px;
-    bottom: 89px;
-    grid-template-columns: repeat(3, 35px);
-    gap: 3px;
-    padding: 7px;
-    border-radius: var(--ew-radius-control);
-    opacity: 1;
-  }
-  .walk-controls button {
-    height: 34px;
-    font-size: 18px;
-  }
-  .walk-controls .stop-walking {
-    font-size: var(--ew-text-caption);
-    height: 23px;
   }
   .encounter-card {
     left: 67px;
@@ -1605,13 +1089,6 @@ kbd {
   .encounter-card > button > span {
     display: none;
   }
-  .panel-open .world-bottom,
-  .panel-open .walk-controls {
-    visibility: hidden;
-  }
-  .world-panel .world-map {
-    padding: 9px;
-  }
   .message-form > div {
     gap: var(--ew-space-2);
   }
@@ -1636,39 +1113,8 @@ kbd {
   .modal h2 {
     font-size: 30px;
   }
-  .connection-toast {
-    left: 67px;
-    right: 12px;
-    top: 73px;
-    max-width: none;
-    font-size: var(--ew-text-caption);
-  }
   .large-copy {
     font-size: 21px;
-  }
-}
-@media (max-height: 650px) and (min-width: 581px) {
-  .world-rail {
-    top: 88px;
-    bottom: 15px;
-    max-height: none;
-  }
-  .world-rail button {
-    height: 48px;
-  }
-  .world-panel {
-    top: 88px;
-    bottom: 15px;
-  }
-  .world-bottom {
-    bottom: 15px;
-  }
-  .arrival-card {
-    padding: var(--ew-space-5);
-    bottom: 89px;
-  }
-  .arrival-card h1 {
-    font-size: 28px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1679,25 +1125,6 @@ kbd {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-.account-button {
-  display: flex;
-  align-items: center;
-  gap: var(--ew-space-2);
-  border-radius: var(--ew-radius-control);
-  padding: var(--ew-space-3);
-  font-size: var(--ew-text-caption);
-  max-width: 140px;
-  min-height: 42px;
-}
-.account-button > span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.account-button > svg {
-  width: 16px;
-  height: 16px;
 }
 .account-details {
   font-size: var(--ew-text-small);
@@ -1731,35 +1158,10 @@ kbd {
 .auth-error:empty {
   display: none;
 }
-@media (max-width: 1250px) {
-  .world-clock {
-    display: none;
-  }
-}
 @media (max-width: 580px) {
-  .account-button {
-    width: 34px;
-    height: 37px;
-    min-height: 0;
-    padding: 9px;
-    border-radius: var(--ew-radius-control);
-  }
-  .account-button > span {
-    display: none;
-  }
-  .account-button > svg {
-    width: 15px;
-    height: 15px;
-  }
   .account-dialog h2 {
     font-size: 27px;
   }
-  .header-actions {
-    gap: var(--ew-space-1);
-  }
-}
-.panel-open .walk-controls {
-  display: none;
 }
 /* Wildlife belongs to the world; interest strength belongs to a resident. */
 .wildlife-directory {

@@ -1,3 +1,5 @@
+import { activityRows } from '../activityFeed';
+import { ResearchDetails } from './ResearchDetails';
 import { NotebookPanel } from './NotebookPanel';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { formatTime } from '../formatTime';
@@ -6,6 +8,7 @@ export function ActivityPanel({
   events,
   memories,
   notebook,
+  research,
   notices,
   feed,
   onFeedChange,
@@ -13,6 +16,7 @@ export function ActivityPanel({
   events: PublicSnapshot['events'];
   memories: PublicSnapshot['memories'];
   notebook?: PublicSnapshot['notebook'];
+  research?: PublicSnapshot['research'];
   notices: ReadonlyArray<{ id: string; title: string; text: string }>;
   feed: 'events' | 'memories' | 'notebook';
   onFeedChange: (feed: 'events' | 'memories' | 'notebook') => void;
@@ -57,17 +61,29 @@ export function ActivityPanel({
           ))}
         </div>
       )}
+      {feed === 'events' && Boolean(research?.length) && <ResearchDetails episodes={research!} />}
+      {feed === 'memories' && (
+        <p className="panel-intro">Experiences Hubert retains for later decisions.</p>
+      )}
       <div className="notes-list">
         {feed === 'events'
-          ? [...(events ?? [])]
-              .reverse()
-              .slice(0, 20)
-              .map((e) => (
-                <article className="note-row" key={e.id}>
-                  <time>{formatTime(e.at)}</time>
-                  <p>{e.message}</p>
-                </article>
-              ))
+          ? activityRows(events ?? []).map(({ event: e, text, count }) => (
+              <article className="note-row" key={e.id}>
+                <time>{formatTime(e.at)}</time>
+                <div>
+                  <p>
+                    {text}
+                    {count > 1 && <small> · {count} times</small>}
+                  </p>
+                  {text !== e.message && (
+                    <details>
+                      <summary>Observation details</summary>
+                      <p>{e.message}</p>
+                    </details>
+                  )}
+                </div>
+              </article>
+            ))
           : feed === 'memories'
             ? [...(memories ?? [])].reverse().map((m) => (
                 <article className="memory-row" key={m.id}>

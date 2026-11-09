@@ -99,6 +99,10 @@ export class BrokerModelClient {
   isAvailable() {
     return (this.options.now ?? Date.now)() >= this.pausedUntil;
   }
+  /** Explicit owner recovery may recheck a repaired service; it cannot reset server allowances. */
+  resetAvailability() {
+    this.pausedUntil = 0;
+  }
   private async readExpression(response: Response, onDelta?: (text: string) => void) {
     if (response.headers.get('content-type')?.split(';')[0] !== 'application/x-ndjson')
       throw new BrokerModelError('invalid_response');
@@ -257,6 +261,9 @@ export class BrokerDecisionProvider implements DecisionProvider<CharacterCommand
   isAvailable() {
     return this.client.isAvailable();
   }
+  resetAvailability() {
+    this.client.resetAvailability();
+  }
   async propose(context: DecisionContext) {
     const result = CharacterCommandSchema.safeParse(await this.client.decision(context));
     if (!result.success) throw new BrokerModelError('invalid_action');
@@ -268,6 +275,9 @@ export class BrokerReflectionProvider implements ReflectionProvider {
   constructor(readonly client: BrokerModelClient) {}
   isAvailable() {
     return this.client.isAvailable();
+  }
+  resetAvailability() {
+    this.client.resetAvailability();
   }
   async reflect(input: ReflectionInput) {
     const value = await this.client.reflection(input);
@@ -283,6 +293,9 @@ export class BrokerExpressionProvider implements ExpressionProvider {
   constructor(readonly client: BrokerModelClient) {}
   isAvailable() {
     return this.client.isAvailable();
+  }
+  resetAvailability() {
+    this.client.resetAvailability();
   }
   express(input: PublicExpressionInput, onDelta?: (text: string) => void) {
     return this.client.expression(input, onDelta);

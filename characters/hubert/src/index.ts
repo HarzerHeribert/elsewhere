@@ -1090,25 +1090,22 @@ export async function chooseActionWithProvider(
 ): Promise<HubertDecision> {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
-  if (needsRest(state) || needsLocalFollowThrough(state))
-    return chooseAction(input, observation, now, nowReal);
   const result = await provider.propose(
     workingContext(state, observation, nowReal, researchEnabled),
   );
   const action = CharacterCommandSchema.parse(result);
   const assessment = assessHubertSpatialAction(state, observation, action, now);
-  if (assessment.status === 'approach' || assessment.status === 'unavailable') {
-    const fallback =
-      assessment.status === 'approach'
-        ? recordIntent(state, assessment.command, assessment.reason, now, observation)
-        : chooseAction(state, observation, now, nowReal);
-    fallback.state.lastProposal = {
+  if (assessment.status === 'unavailable')
+    throw new Error(`Provider proposed an unavailable action: ${assessment.reason}`);
+  if (assessment.status === 'approach') {
+    const adjusted = recordIntent(state, assessment.command, assessment.reason, now, observation);
+    adjusted.state.lastProposal = {
       at: now,
       type: action.type,
       ...('targetId' in action && action.targetId ? { targetId: action.targetId } : {}),
       adjustment: assessment.reason,
     };
-    return fallback;
+    return adjusted;
   }
   delete state.lastProposal;
   const explanation = 'I have chosen a next step from what I can currently observe.';

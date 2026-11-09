@@ -14,7 +14,7 @@ export function NotebookPanel({
       <p className="eyebrow">{preview ? 'In his words' : 'Hubert’s notebook'}</p>
       {!preview && (
         <p className="panel-intro">
-          Observations and questions Hubert has written about his experiences.
+          Questions, ideas, and changing opinions in Hubert’s own words.
         </p>
       )}
       {notebook?.draft && (

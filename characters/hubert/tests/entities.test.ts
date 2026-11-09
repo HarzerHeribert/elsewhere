@@ -204,8 +204,9 @@ describe('living entities and developing interests', () => {
       posture: 'attentive',
       sourceEventId: encounter().id,
     });
-    const again = await chooseActionWithProvider(watched, observation(), 10_000, provider);
-    expect(again.action).not.toEqual({ type: 'inspect', targetId: bird.id });
+    await expect(
+      chooseActionWithProvider(watched, observation(), 10_000, provider),
+    ).rejects.toThrow('Provider proposed an unavailable action');
     expect(watched.entityObservations[bird.id].sessions).toBe(1);
   });
 
@@ -215,11 +216,12 @@ describe('living entities and developing interests', () => {
     const gone = { ...observation(), visibleEntities: [] };
     const fallback = chooseAction(state, gone, 200_000);
     expect('targetId' in fallback.action ? fallback.action.targetId : undefined).not.toBe(bird.id);
-    const proposed = await chooseActionWithProvider(state, gone, 200_000, {
-      id: 'stale-model',
-      propose: async () => ({ type: 'move', targetId: bird.id }),
-    });
-    expect('targetId' in proposed.action ? proposed.action.targetId : undefined).not.toBe(bird.id);
+    await expect(
+      chooseActionWithProvider(state, gone, 200_000, {
+        id: 'stale-model',
+        propose: async () => ({ type: 'move', targetId: bird.id }),
+      }),
+    ).rejects.toThrow('Provider proposed an unavailable action');
     const far = { ...bird, position: { x: 20, z: 20 } };
     const farDecision = chooseAction(createInitialHubert(0), observation(far), 0);
     expect('targetId' in farDecision.action ? farDecision.action.targetId : undefined).not.toBe(

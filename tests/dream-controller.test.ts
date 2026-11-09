@@ -54,6 +54,12 @@ async function fixture(options: ControllerOptions = {}, failure?: 'reservation' 
   const controller = await new ElsewhereController(store, {
     now: () => now,
     simulationStepMs: 300_000,
+    modelProvider: {
+      id: 'rest-fixture',
+      localOnly: true,
+      managesAllowance: true,
+      propose: async () => ({ type: 'rest' }),
+    },
     ...options,
   }).init();
   active.push(controller);
@@ -105,7 +111,7 @@ describe('dreaming in the authoritative life loop', () => {
   });
 
   it.each(['unavailable', 'exhausted'] as const)(
-    'continues energy recovery and bounded local consolidation when reflection is %s',
+    'continues rest without inventing a dream when reflection is %s',
     async (mode) => {
       const reflect = vi.fn(async () => {
         throw new Error('fixture unavailable');
@@ -118,7 +124,14 @@ describe('dreaming in the authoritative life loop', () => {
       h.setNow(epoch + 120_000);
       await h.controller.tick();
       const state = (await h.backing.load())!.value;
-      expect(state.hubert.dreams.receipts).toHaveLength(1);
+      expect(state.hubert.dreams.receipts).toHaveLength(0);
+      expect(state.hubert.dreams.dreams).toEqual([]);
+      expect(h.controller.getCharacterIssues()).toContainEqual(
+        expect.objectContaining({
+          workload: 'reflection',
+          kind: mode === 'exhausted' ? 'allowance' : 'failed',
+        }),
+      );
       expect(state.hubert.stats.energy).toBeGreaterThan(1);
       expect(reflect).toHaveBeenCalledTimes(mode === 'exhausted' ? 0 : 1);
       expect(state.modelAllowance.calls).toBe(mode === 'exhausted' ? 0 : 1);
@@ -138,7 +151,12 @@ describe('dreaming in the authoritative life loop', () => {
   });
 
   it('preserves the real cooldown and consumed evidence on reset while removing derived memories', async () => {
-    const h = await fixture();
+    const h = await fixture({
+      reflectionProvider: {
+        id: 'fixture',
+        reflect: async () => ({ vignette: 'A private fixture dream.', impulses: [] }),
+      },
+    });
     await h.controller.tick();
     h.setNow(epoch + 120_000);
     await h.controller.tick();
@@ -167,7 +185,15 @@ describe('dreaming in the authoritative life loop', () => {
         save: (value, version) => h.backing.save(value, version),
         close: async () => {},
       },
-      { now: () => epoch + 130_000, reflectionProvider: { id: 'fixture', reflect } },
+      {
+        now: () => epoch + 130_000,
+        reflectionProvider: { id: 'fixture', reflect },
+        modelProvider: {
+          id: 'rest-fixture',
+          managesAllowance: true,
+          propose: async () => ({ type: 'rest' }),
+        },
+      },
     ).init();
     active.push(restored);
     await restored.step();
@@ -178,7 +204,7 @@ describe('dreaming in the authoritative life loop', () => {
     expect(reflect).toHaveBeenCalledTimes(1);
   });
 
-  it('interrupts repeated model reflection with an actual local step without charging another call', async () => {
+  it('keeps repeated-reflection guidance advisory and lets the model choose each action', async () => {
     const store = new SqliteSnapshotStore<ControllerState>(':memory:');
     const propose = vi.fn(async () => ({ type: 'reflect' }));
     const controller = await new ElsewhereController(store, {
@@ -187,11 +213,11 @@ describe('dreaming in the authoritative life loop', () => {
     }).init();
     active.push(controller);
     for (let index = 0; index < 4; index++) await controller.step();
-    expect(propose).toHaveBeenCalledTimes(3);
+    expect(propose).toHaveBeenCalledTimes(4);
     const state = (await store.load())!.value;
-    expect(state.modelAllowance.calls).toBe(3);
-    expect(state.hubert.activity.kind).not.toBe('reflect');
-    expect(state.hubert.progress.outcomes.some((outcome) => outcome.evidence)).toBe(true);
-    expect(state.world.events.at(-1)?.type).not.toBe('reflect');
+    expect(state.modelAllowance.calls).toBe(4);
+    expect(state.hubert.activity.kind).toBe('reflect');
+    expect(state.hubert.progress.outcomes.some((outcome) => outcome.evidence)).toBe(false);
+    expect(state.world.events.at(-1)?.type).toBe('reflect');
   });
 });

@@ -5,10 +5,12 @@ export function ControlsPanel({
   fullscreen,
   onEnterWorld,
   onToggleFullscreen,
+  onResetCamera,
 }: {
   fullscreen: boolean;
   onEnterWorld?: () => Promise<void>;
   onToggleFullscreen: () => Promise<void>;
+  onResetCamera: () => void;
 }) {
   return (
     <>
@@ -39,6 +41,10 @@ export function ControlsPanel({
       <Button className="full-width" disabled={!onEnterWorld} onClick={() => void onEnterWorld?.()}>
         <Icon name="walk" />
         Enter world
+      </Button>
+      <Button variant="secondary" className="full-width" onClick={onResetCamera}>
+        <Icon name="compass" />
+        Reset view
       </Button>
       <Button variant="secondary" className="full-width" onClick={() => void onToggleFullscreen()}>
         <Icon name="expand" />
