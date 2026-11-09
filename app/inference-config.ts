@@ -8,7 +8,13 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4100),
   INFERENCE_DATA_ROOT: z.string().min(1),
   INFERENCE_BROKER_TOKEN: z.string().regex(/^[^\s\x00-\x1f\x7f]{32,512}$/),
-  HUBERT_OWNER_USER_ID: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),
+  HUBERT_OWNER_USER_ID: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{1,128}$/)
+      .optional(),
+  ),
   CHATGPT_PROFILE: z
     .string()
     .regex(/^(?!host$)[a-z][a-z0-9-]{0,47}$/)

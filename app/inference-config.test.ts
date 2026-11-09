@@ -26,6 +26,15 @@ it('supports the sole-Hubert private-service composition and default Luna withou
   expect(inferenceConfig(inference).MODEL_NAME).toBe('gpt-6-luna');
   expect(appConfig(world).INFERENCE_BROKER_URL).toBe('http://elsewhere-inference:4100/');
 });
+it('allows an ownerless installation that cannot instantiate a grant or spend quota', () => {
+  expect(
+    inferenceConfig({ ...inference, HUBERT_OWNER_USER_ID: undefined }).HUBERT_OWNER_USER_ID,
+  ).toBeUndefined();
+  expect(
+    inferenceConfig({ ...inference, HUBERT_OWNER_USER_ID: '' }).HUBERT_OWNER_USER_ID,
+  ).toBeUndefined();
+  expect(() => inferenceConfig({ ...inference, HUBERT_OWNER_USER_ID: 'local-owner' })).toThrow();
+});
 it.each([
   '/tmp',
   '/tmp/sessions',

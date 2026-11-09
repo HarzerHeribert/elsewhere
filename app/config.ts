@@ -22,6 +22,7 @@ const schema = z.object({
     .regex(/^[a-zA-Z0-9.-]+:[0-9]{1,5}$/)
     .optional(),
   INFERENCE_BROKER_TOKEN: z.string().min(32).max(512).optional(),
+  INFERENCE_BROKER_CA_PEM: z.string().min(100).max(20000).optional(),
   INFERENCE_BROKER_ALLOW_PRIVATE_HTTP: z.enum(['true', 'false']).default('false'),
   CHATGPT_PROFILE: z
     .string()

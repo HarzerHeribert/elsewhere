@@ -20,10 +20,11 @@ import {
 import type { DecisionContext } from '@elsewhere/character-runtime';
 import type { ModelUsage } from '../packages/models/src/contracts';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
+import { createUnconfiguredInferenceService } from '../packages/inference/src/unconfigured';
 
 // No dotenv discovery: this process receives only its own explicitly installed secrets.
 process.umask(0o077);
-let broker: Awaited<ReturnType<typeof createInferenceBroker>> | undefined;
+let broker: Pick<Awaited<ReturnType<typeof createInferenceBroker>>, 'server' | 'close'> | undefined;
 let stopping = false;
 try {
   const config = inferenceConfig(process.env);
@@ -63,27 +64,30 @@ try {
       throw new InferenceDispatchError(usage);
     }
   };
-  broker = await createInferenceBroker({
-    token: config.INFERENCE_BROKER_TOKEN,
-    binding: hubertInferenceBinding(config.HUBERT_OWNER_USER_ID),
-    registry: hubertResourceRegistry(config.HUBERT_OWNER_USER_ID),
-    identity: HUBERT_IDENTITY,
-    store: new SqliteSnapshotStore<InferenceBrokerState>(
-      resolve(credentials.directory, 'allowance.sqlite'),
-    ),
-    maxCallsPerDay: config.MODEL_MAX_CALLS_PER_DAY,
-    timeoutMs: Math.min(60000, config.MODEL_TIMEOUT_MS + 5000),
-    isAvailable: () => {
-      const account = credentials.load();
-      return (
-        session.isAvailable() &&
-        account?.transfer?.state === 'received' &&
-        account.transfer.ownerUserId === config.HUBERT_OWNER_USER_ID
-      );
-    },
-    decision: dispatch,
-    reflection: dispatch,
-  });
+  const ownerUserId = config.HUBERT_OWNER_USER_ID;
+  broker = ownerUserId
+    ? await createInferenceBroker({
+        token: config.INFERENCE_BROKER_TOKEN,
+        binding: hubertInferenceBinding(ownerUserId),
+        registry: hubertResourceRegistry(ownerUserId),
+        identity: HUBERT_IDENTITY,
+        store: new SqliteSnapshotStore<InferenceBrokerState>(
+          resolve(credentials.directory, 'allowance.sqlite'),
+        ),
+        maxCallsPerDay: config.MODEL_MAX_CALLS_PER_DAY,
+        timeoutMs: Math.min(60000, config.MODEL_TIMEOUT_MS + 5000),
+        isAvailable: () => {
+          const account = credentials.load();
+          return (
+            session.isAvailable() &&
+            account?.transfer?.state === 'received' &&
+            account.transfer.ownerUserId === config.HUBERT_OWNER_USER_ID
+          );
+        },
+        decision: dispatch,
+        reflection: dispatch,
+      })
+    : createUnconfiguredInferenceService(config.INFERENCE_BROKER_TOKEN);
   const close = async () => {
     if (stopping) return;
     stopping = true;

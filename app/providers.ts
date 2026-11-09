@@ -43,6 +43,7 @@ export function runtimeProviders(
       const client = new BrokerModelClient({
         baseUrl: config.INFERENCE_BROKER_URL!,
         token: config.INFERENCE_BROKER_TOKEN!,
+        caCertificate: config.INFERENCE_BROKER_CA_PEM?.replace(/\\n/g, '\n'),
         expectedBinding: hubertInferenceBinding(config.HUBERT_OWNER_USER_ID),
         timeoutMs: Math.max(35000, config.MODEL_TIMEOUT_MS),
         allowPrivateHttp: config.INFERENCE_BROKER_ALLOW_PRIVATE_HTTP === 'true',

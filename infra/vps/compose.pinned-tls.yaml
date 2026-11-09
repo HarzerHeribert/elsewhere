@@ -1,0 +1,20 @@
+# Linux VPS overlay: preserve existing proxy ports and let UFW filter the new host socket.
+services:
+  tls:
+    image: caddy@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9
+    container_name: hubert-inference-tls
+    network_mode: host
+    user: '${HUBERT_PROXY_UID:?set the dedicated config owner UID}:${HUBERT_PROXY_GID:?set the config owner GID}'
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
+    environment:
+      HUBERT_INFERENCE_HOST: '${HUBERT_INFERENCE_HOST:?set the VPS hostname}'
+    volumes:
+      - './Caddyfile.pinned:/etc/caddy/Caddyfile:ro'
+      - './tls:/etc/hubert-tls:ro'
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=16m']
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    mem_limit: 128m
+    cpus: 0.1

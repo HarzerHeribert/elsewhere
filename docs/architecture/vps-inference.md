@@ -17,6 +17,8 @@ The named project `elsewhere-hubert-inference` preserves its broker-only volume 
 
 The owner ID must match the private owner binding used by the deployed world. A platform administrator role does not establish that binding. Missing OAuth credentials keep the process alive but inference unavailable, allowing the initial import without consuming model quota.
 
+If no Elsewhere owner account exists yet, leave `HUBERT_OWNER_USER_ID` unset. The installed service reports healthy liveness but has no model grant, provider dispatch or allowance database. Its protected readiness stays false, and session import refuses to proceed. Bind the actual owner and restart only this project before handing off OAuth; do not invent a temporary owner or copy tokens early.
+
 Add a dedicated HTTPS site to the server's reverse proxy. `infra/vps/Caddyfile.example` is a host-Caddy example using `HUBERT_INFERENCE_HOST`; it forwards only decision, reflection and protected readiness routes to localhost. A reverse proxy running in Docker must instead reach the broker on an explicitly shared network; `127.0.0.1` inside another container is not the VPS host. Use a hostname you control that points to the VPS and validate TLS before installing the world service credential. Do not expose raw port 4100 or enable request-body/credential debug logging. A network allowlist or private VPN can further restrict which backend can reach the endpoint.
 
 On the world runtime, install only:
@@ -56,3 +58,13 @@ ssh your-vps-ssh-alias docker exec hubert-inference \
 ```
 
 Use the [ownership/hosting guide](ownership-and-hosting.md) for grant semantics, recovery and limits. Neither the VPS profile nor its setup provisions another resident: Hubert remains the only admitted character.
+
+## Shared game-server hosts and private TLS
+
+On a host with an existing game server or stopped proxy stack, preserve its configured ports as well as its files. The optional Linux overlay `compose.pinned-tls.yaml` listens on TCP 9443 instead of taking ports 80/443. Its immutable Caddy image, certificate directory and container are separate from existing proxies. It disables the admin API, HTTP redirects, ACME and HTTP/3, so it does not open extra listeners or renew another site's certificates.
+
+Generate a dedicated self-signed TLS certificate with the VPS DNS name in its subject alternative names; keep its private key in the protected `infra/vps/tls/key.pem` file and its public certificate in `cert.pem`. Those files must never enter Git. The world receives only the PUBLIC certificate in `INFERENCE_BROKER_CA_PEM`, with literal `\n` line breaks if supplied as one environment value. The broker client trusts that certificate only for its own HTTPS transport and still verifies the hostname and expiry. Do not use `NODE_TLS_REJECT_UNAUTHORIZED=0` or disable TLS checks. Renew and redistribute the public pin before this dedicated certificate expires.
+
+Set `HUBERT_INFERENCE_HOST`, `HUBERT_PROXY_UID` and `HUBERT_PROXY_GID` for Compose interpolation, using the owner of the protected certificate files. Start with the base and overlay files. The TLS proxy uses host networking so the new socket follows host UFW rules; it has no published-port DNAT bypass. The broker remains loopback-only on 4100. Docker documents the [UFW interaction](https://docs.docker.com/engine/network/packet-filtering-firewalls/).
+
+Check the existing firewall before adding a narrowly scoped TCP 9443 allow rule for the intended caller. Do not reset/enable/reload UFW, change defaults, remove game/SSH rules, restart Docker, or start another project's stopped proxy. If interactive sudo is required, the operator performs that one firewall step privately. Verify the HTTPS endpoint using the trusted public certificate, first through an SSH tunnel if external ingress is still blocked.
