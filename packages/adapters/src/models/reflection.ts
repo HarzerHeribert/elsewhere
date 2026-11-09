@@ -13,7 +13,7 @@ import type { OllamaOptions } from './ollama';
 import { readModelPayload, reportedUsage, usageCount } from './shared';
 
 const identifier = z.string().trim().min(1).max(100);
-const inputSchema = z
+export const ReflectionInputSchema = z
   .object({
     identity: z.string().trim().min(1).max(4000),
     episodes: z
@@ -41,9 +41,10 @@ const proposalSchema = z
   .strict();
 
 /** Private source data and host-selected feasible choices. No action or permission is model-owned. */
-export type ReflectionInput = z.infer<typeof inputSchema>;
+export type ReflectionInput = z.infer<typeof ReflectionInputSchema>;
 export type ReflectionProposal = z.infer<typeof proposalSchema>;
 export interface ReflectionProvider {
+  isAvailable?(): boolean;
   readonly id: string;
   readonly managesAllowance?: boolean;
   readonly localOnly?: boolean;
@@ -79,7 +80,7 @@ export const REFLECTION_FORMAT = {
 } as const;
 
 function reflectionInput(input: ReflectionInput): ReflectionInput {
-  const value = inputSchema.parse(input);
+  const value = ReflectionInputSchema.parse(input);
   for (const entries of [value.episodes, value.affordances])
     if (new Set(entries.map((entry) => entry.id)).size !== entries.length)
       throw new Error('Reflection source and affordance IDs must be unique.');

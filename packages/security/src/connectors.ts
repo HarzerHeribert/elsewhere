@@ -9,7 +9,8 @@ import {
 /** Constructed by authenticated host code, never from a model/HTTP payload. */
 export interface ConnectorActor {
   worldId: string;
-  operatorId: string;
+  /** Owning Elsewhere user, not the platform administrator or hosting operator. */
+  ownerUserId: string;
   characterId: string;
 }
 
@@ -78,7 +79,7 @@ export function preflightConnector(
     return { decision: 'denied', reason: 'unavailable' };
   if (
     binding.actor.worldId !== actor.worldId ||
-    binding.actor.operatorId !== actor.operatorId ||
+    binding.actor.ownerUserId !== actor.ownerUserId ||
     binding.actor.characterId !== actor.characterId
   )
     return { decision: 'denied', reason: 'wrong_actor' };

@@ -29,6 +29,9 @@ importers:
       dotenv:
         specifier: ^16.6.1
         version: 16.6.1
+      jose:
+        specifier: ^6.2.15
+        version: 6.2.15
       pg:
         specifier: ^8.16.3
         version: 8.23.1

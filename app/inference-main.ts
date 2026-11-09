@@ -1,0 +1,111 @@
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { inferenceConfig } from './inference-config';
+import { hubertInferenceBinding, hubertResourceRegistry } from './residency';
+import {
+  createInferenceBroker,
+  InferenceDispatchError,
+  type InferenceBrokerState,
+} from '../packages/inference/src/index';
+import { SqliteSnapshotStore } from '../packages/persistence/src/index';
+import { ChatGPTSession } from '../packages/security/src/chatgpt';
+import { ChatGPTStore } from '../packages/security/src/chatgpt-store';
+import { ChatGPTClient } from '../packages/adapters/src/models/chatgpt';
+import { decisionMessages, parseModelAction } from '../packages/adapters/src/models/shared';
+import {
+  reflectionMessages,
+  validateReflectionProposal,
+  type ReflectionInput,
+} from '../packages/adapters/src/models/reflection';
+import type { DecisionContext } from '@elsewhere/character-runtime';
+import type { ModelUsage } from '../packages/models/src/contracts';
+import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
+
+// No dotenv discovery: this process receives only its own explicitly installed secrets.
+process.umask(0o077);
+let broker: Awaited<ReturnType<typeof createInferenceBroker>> | undefined;
+let stopping = false;
+try {
+  const config = inferenceConfig(process.env);
+  mkdirSync(config.INFERENCE_DATA_ROOT, { recursive: true, mode: 0o700 });
+  const credentials = new ChatGPTStore(config.INFERENCE_DATA_ROOT, config.CHATGPT_PROFILE);
+  await credentials.hostId(); // Stable remote-host identity exists before importing a session.
+  const session = new ChatGPTSession(credentials);
+  let usage: ModelUsage | undefined;
+  const client = new ChatGPTClient(session, {
+    model: config.MODEL_NAME,
+    timeoutMs: config.MODEL_TIMEOUT_MS,
+    onUsageDetails: (value) => {
+      usage = value;
+    },
+  });
+  const dispatch = async (input: DecisionContext | ReflectionInput, signal: AbortSignal) => {
+    usage = undefined;
+    try {
+      const dream = 'episodes' in input;
+      const text = await client.text(
+        dream ? reflectionMessages(input) : decisionMessages(input),
+        signal,
+      );
+      const value = dream
+        ? validateReflectionProposal(
+            JSON.parse(
+              text
+                .trim()
+                .replace(/^```(?:json)?\s*/, '')
+                .replace(/\s*```$/, ''),
+            ),
+            input,
+          )
+        : parseModelAction(text);
+      return { value, usage };
+    } catch {
+      throw new InferenceDispatchError(usage);
+    }
+  };
+  broker = await createInferenceBroker({
+    token: config.INFERENCE_BROKER_TOKEN,
+    binding: hubertInferenceBinding(config.HUBERT_OWNER_USER_ID),
+    registry: hubertResourceRegistry(config.HUBERT_OWNER_USER_ID),
+    identity: HUBERT_IDENTITY,
+    store: new SqliteSnapshotStore<InferenceBrokerState>(
+      resolve(credentials.directory, 'allowance.sqlite'),
+    ),
+    maxCallsPerDay: config.MODEL_MAX_CALLS_PER_DAY,
+    timeoutMs: Math.min(60000, config.MODEL_TIMEOUT_MS + 5000),
+    isAvailable: () => {
+      const account = credentials.load();
+      return (
+        session.isAvailable() &&
+        account?.transfer?.state === 'received' &&
+        account.transfer.ownerUserId === config.HUBERT_OWNER_USER_ID
+      );
+    },
+    decision: dispatch,
+    reflection: dispatch,
+  });
+  const close = async () => {
+    if (stopping) return;
+    stopping = true;
+    await broker?.close();
+  };
+  process.once('SIGINT', () => {
+    void close();
+  });
+  process.once('SIGTERM', () => {
+    void close();
+  });
+  await new Promise<void>((resolve, reject) => {
+    broker!.server.once('error', reject);
+    broker!.server.listen(config.PORT, config.HOST, resolve);
+  });
+  console.log(
+    `Private Hubert inference service listening on port ${config.PORT}. Missing authorization keeps inference disabled.`,
+  );
+} catch {
+  console.error(
+    'Private inference startup failed. Check its dedicated configuration, storage and ownership binding.',
+  );
+  await broker?.close();
+  process.exitCode = 1;
+}

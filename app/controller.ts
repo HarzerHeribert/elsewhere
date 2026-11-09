@@ -345,7 +345,7 @@ export class ElsewhereController {
     const actions = hubertDreamActions(s.hubert, observation, nowReal, begin.request.sources);
     let proposal = hubertDreamFallback(actions);
     const provider = this.options.reflectionProvider;
-    if (provider) {
+    if (provider && provider.isAvailable?.() !== false) {
       const managed = provider.managesAllowance === true;
       const allowance = managed
         ? s.modelAllowance
@@ -410,6 +410,7 @@ export class ElsewhereController {
       let decision;
       if (
         this.options.modelProvider &&
+        this.options.modelProvider.isAvailable?.() !== false &&
         !needsRest(s.hubert) &&
         !needsLocalFollowThrough(s.hubert)
       ) {

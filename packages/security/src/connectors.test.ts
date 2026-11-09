@@ -10,7 +10,7 @@ import {
 
 const actor: ConnectorActor = {
   worldId: 'elsewhere',
-  operatorId: 'hubert-operator',
+  ownerUserId: 'hubert-owner',
   characterId: 'hubert',
 };
 const binding: ConnectorBinding = {
@@ -44,7 +44,7 @@ describe('character connector scope preflight (no external execution)', () => {
     expect(result).not.toHaveProperty('receiptId');
   });
 
-  it.each(['worldId', 'operatorId', 'characterId'] as const)(
+  it.each(['worldId', 'ownerUserId', 'characterId'] as const)(
     'rejects another %s even when the connection and offer IDs are known',
     (field) => {
       expect(

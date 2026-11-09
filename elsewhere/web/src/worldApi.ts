@@ -89,5 +89,12 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
     enabled: value.enabled,
     passwordAuthEnabled: value.passwordAuthEnabled === true,
     requiresEmailVerification: value.requiresEmailVerification === true,
+    managedCharacterIds:
+      value.user && Array.isArray(value.managedCharacterIds)
+        ? value.managedCharacterIds.filter(
+            (id): id is string =>
+              typeof id === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id),
+          )
+        : [],
   };
 }

@@ -11,10 +11,12 @@
     "dev:ollama": "node scripts/ollama-dev.mjs",
     "dev:configured": "tsx scripts/dev-configured.ts",
     "setup": "tsx scripts/setup.ts",
+    "chatgpt": "tsx scripts/chatgpt.ts",
+    "dev:chatgpt": "tsx scripts/dev-chatgpt.ts",
     "dev:server": "tsx watch app/main.ts",
     "dev:web": "pnpm --filter @elsewhere/web dev",
     "build": "pnpm --filter @elsewhere/web build",
-    "build:server": "esbuild app/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.mjs --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:dotenv/config --external:zod",
+    "build:server": "pnpm build:world && pnpm build:inference",
     "start:production": "node dist/server.mjs",
     "snapshot": "tsx scripts/snapshot.ts",
     "smoke:deployment": "node scripts/deployment-smoke.mjs",
@@ -29,7 +31,11 @@
     "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "build:world": "esbuild app/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.mjs --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:dotenv/config --external:zod",
+    "build:inference": "esbuild app/inference-main.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:dotenv/config --external:zod --outfile=dist/inference.mjs && esbuild scripts/inference-operator.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:dotenv/config --external:zod --outfile=dist/inference-operator.mjs",
+    "start:inference": "node dist/inference.mjs",
+    "dev:inference": "tsx app/inference-main.ts"
   },
   "dependencies": {
     "@elsewhere/character-interfaces": "workspace:*",
@@ -39,6 +45,7 @@
     "better-auth": "^1.7.18",
     "better-sqlite3": "^12.4.1",
     "dotenv": "^16.6.1",
+    "jose": "^6.2.15",
     "pg": "^8.16.3",
     "zod": "^4.6.6"
   },

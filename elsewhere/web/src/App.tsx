@@ -58,6 +58,9 @@ export function App() {
     account = accountSession.account;
   const admin = useOwnerActions(refresh, accountSession.refresh);
   const { owner, busy, status: controlStatus, setStatus: setControlStatus, decideWish } = admin;
+  const canManageCharacter =
+    !!account &&
+    !!accountSession.capabilities?.managedCharacterIds.includes(snapshot?.character.id ?? 'hubert');
   const [cameraMode, setMode] = useState<CameraMode>('overview'),
     [panel, setPanel] = useState<Panel | null>(null);
   const [selected, setSelected] = useState<string | null>(null),
@@ -491,7 +494,7 @@ export function App() {
             {panel === 'wishes' && (
               <WishesPanel
                 wishes={snapshot?.wishes ?? []}
-                canDecide={Boolean(owner || account?.isWorldAdmin)}
+                canDecide={Boolean(owner || canManageCharacter)}
                 busy={busy}
                 status={controlStatus}
                 onDecide={decideWish}
@@ -627,6 +630,7 @@ export function App() {
           snapshot={snapshot}
           admin={admin}
           isWorldAdmin={account?.isWorldAdmin ?? false}
+          canManageCharacter={canManageCharacter}
           onClose={() => {
             setSettings(false);
             setAbout(false);

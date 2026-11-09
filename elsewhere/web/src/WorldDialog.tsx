@@ -8,12 +8,14 @@ export function WorldDialog({
   snapshot,
   admin,
   isWorldAdmin,
+  canManageCharacter,
   onClose,
 }: {
   kind: 'owner' | 'about';
   snapshot: PublicSnapshot | null;
   admin: ReturnType<typeof useOwnerActions>;
   isWorldAdmin: boolean;
+  canManageCharacter: boolean;
   onClose: () => void;
 }) {
   const [credential, setCredential] = useState(admin.owner);
@@ -41,7 +43,7 @@ export function WorldDialog({
             />
             <button className="primary-button">Save for this tab</button>
           </form>
-          {(admin.owner || isWorldAdmin) && (
+          {(admin.owner || isWorldAdmin || canManageCharacter) && (
             <div className="owner-actions">
               <button
                 className="secondary-button"
@@ -52,13 +54,15 @@ export function WorldDialog({
               >
                 {snapshot?.runtime.paused ? 'Resume life' : 'Pause life'}
               </button>
-              <button
-                className="secondary-button"
-                disabled={admin.busy}
-                onClick={() => void admin.ownerAction('tick')}
-              >
-                Advance one decision
-              </button>
+              {(admin.owner || canManageCharacter) && (
+                <button
+                  className="secondary-button"
+                  disabled={admin.busy}
+                  onClick={() => void admin.ownerAction('tick')}
+                >
+                  Advance one decision
+                </button>
+              )}
               {admin.owner && (
                 <button
                   className="text-button"
@@ -76,7 +80,9 @@ export function WorldDialog({
             {admin.status}
           </p>
           <p className="privacy-note">
-            Your credential stays in this tab. Visitor access never grants these permissions.
+            Character owners manage their resident. World administrators can pause or resume the
+            world, without gaining ownership or access to a resident's connected accounts. Your
+            credential stays in this tab.
           </p>
         </>
       ) : (
