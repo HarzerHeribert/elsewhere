@@ -52,9 +52,11 @@ export function CharacterProviderNotices({
   issues,
   pending,
   onRetry,
+  canRetry = true,
 }: {
   issues: readonly ProviderIssue[];
   pending: boolean;
+  canRetry?: boolean;
   onRetry: (characterId: string) => Promise<boolean>;
 }) {
   const [requested, setRequested] = useState<Record<string, string>>({});
@@ -105,22 +107,26 @@ export function CharacterProviderNotices({
           </small>
         </article>
       ))}
-      {retryCharacters.map((characterId) => (
-        <div className="character-provider-notices__retry" key={characterId}>
-          {retryScheduled(characterId) ? (
-            <p role="status">
-              Retry requested for {characterName(characterId)}. Waiting for the next turn.
-            </p>
-          ) : (
-            <>
-              <Button variant="secondary" busy={pending} onClick={() => void retry(characterId)}>
-                Retry {characterName(characterId)}
-              </Button>
-              <small>Retrying uses your connected model allowance.</small>
-            </>
-          )}
-        </div>
-      ))}
+      {!canRetry && retryCharacters.length > 0 && (
+        <p>Verify a passkey to retry your character’s waiting work.</p>
+      )}
+      {canRetry &&
+        retryCharacters.map((characterId) => (
+          <div className="character-provider-notices__retry" key={characterId}>
+            {retryScheduled(characterId) ? (
+              <p role="status">
+                Retry requested for {characterName(characterId)}. Waiting for the next turn.
+              </p>
+            ) : (
+              <>
+                <Button variant="secondary" busy={pending} onClick={() => void retry(characterId)}>
+                  Retry {characterName(characterId)}
+                </Button>
+                <small>Retrying uses your connected model allowance.</small>
+              </>
+            )}
+          </div>
+        ))}
       {recovered.length > 0 && (
         <details className="character-provider-notices__history">
           <summary>Recovered issues · {recovered.length}</summary>

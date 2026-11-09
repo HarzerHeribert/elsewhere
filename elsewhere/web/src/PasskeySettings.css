@@ -1,0 +1,19 @@
+.passkey-signin {
+  margin-bottom: var(--ew-space-5);
+}
+.passkey-settings__key {
+  display: grid;
+  gap: var(--ew-space-2);
+}
+.passkey-settings__key > small,
+.passkey-settings__owner > small {
+  color: var(--ew-text-muted);
+}
+.passkey-settings__owner {
+  margin-top: var(--ew-space-5);
+  border-top: 1px solid var(--ew-line);
+  padding-top: var(--ew-space-4);
+}
+.passkey-settings__owner h4 {
+  margin: 0;
+}

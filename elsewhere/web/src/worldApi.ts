@@ -119,6 +119,16 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
     enabled: value.enabled,
     passwordAuthEnabled: value.passwordAuthEnabled === true,
     ...(value.emailLinkAuthEnabled === true ? { emailLinkAuthEnabled: true } : {}),
+    ...(value.passkeyAuthEnabled === true ? { passkeyAuthEnabled: true } : {}),
+    ...(value.user && typeof value.ownerControlsRequirePasskey === 'boolean'
+      ? { ownerControlsRequirePasskey: value.ownerControlsRequirePasskey }
+      : {}),
+    ...(value.user && typeof value.ownerControlsUnlocked === 'boolean'
+      ? { ownerControlsUnlocked: value.ownerControlsUnlocked }
+      : {}),
+    ...(value.user && typeof value.passkeyVerifiedRecently === 'boolean'
+      ? { passkeyVerifiedRecently: value.passkeyVerifiedRecently }
+      : {}),
     requiresEmailVerification: value.requiresEmailVerification === true,
     managedCharacterIds,
     characterIssues,
