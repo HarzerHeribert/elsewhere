@@ -72,10 +72,18 @@ export class PostgresSnapshotStore<T> implements SnapshotStore<T> {
   private owner?: pg.PoolClient;
   private ownershipLost = false;
   private closing = false;
+  private heartbeat?: ReturnType<typeof setInterval>;
   constructor(
     url: string,
-    private readonly options: { exclusive?: boolean; onOwnershipLost?: () => void } = {},
+    private readonly options: {
+      exclusive?: boolean;
+      onOwnershipLost?: () => void;
+      ownershipIdleTimeoutMs?: number;
+    } = {},
   ) {
+    const idle = options.ownershipIdleTimeoutMs ?? 60_000;
+    if (!Number.isInteger(idle) || idle < 500 || idle > 120_000)
+      throw new Error('Ownership idle timeout must be between 500 and 120000 ms.');
     this.pool = new pg.Pool({
       connectionString: url,
       max: 3,
@@ -96,16 +104,39 @@ export class PostgresSnapshotStore<T> implements SnapshotStore<T> {
     const lost = () => {
       if (this.owner !== client || this.closing || this.ownershipLost) return;
       this.ownershipLost = true;
+      clearInterval(this.heartbeat);
       this.options.onOwnershipLost?.();
     };
     client.on('error', lost);
     client.on('end', lost);
     try {
+      // Bound orphaned locks even when a terminated container's TCP close never arrives.
+      // Only this dedicated owner session is affected; ordinary pooled/auth sessions are not.
+      const idle = this.options.ownershipIdleTimeoutMs ?? 60_000;
+      await client.query(
+        "SELECT set_config('idle_session_timeout',$1,false), set_config('idle_in_transaction_session_timeout',$1,false), set_config('statement_timeout','15000ms',false)",
+        [`${idle}ms`],
+      );
       const result = await client.query(
         'SELECT pg_try_advisory_lock(20261109, hashtext(current_schema())) AS acquired',
       );
       if (result.rows[0]?.acquired === true) {
         this.owner = client;
+        let pending = false;
+        this.heartbeat = setInterval(
+          () => {
+            if (pending || this.closing || this.ownershipLost) return;
+            pending = true;
+            void client
+              .query('SELECT 1')
+              .catch(lost)
+              .finally(() => {
+                pending = false;
+              });
+          },
+          Math.min(15_000, Math.floor(idle / 4)),
+        );
+        this.heartbeat.unref();
         return true;
       }
     } catch (error) {
@@ -166,6 +197,7 @@ export class PostgresSnapshotStore<T> implements SnapshotStore<T> {
   }
   async close() {
     this.closing = true;
+    clearInterval(this.heartbeat);
     // Destroy the held session: PostgreSQL releases its lock even after a failed query.
     this.owner?.release(true);
     this.owner = undefined;
