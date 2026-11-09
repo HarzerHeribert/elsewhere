@@ -7,6 +7,7 @@ export interface HubertResearchState {
   topics: Record<string, number>;
   search?: { targetId: string; label: string; placeId: string; result: ResearchSearchResult };
   readIds: string[];
+  deferredSources?: Record<string, number>;
   pending?: { id: string; kind: 'search' | 'read' };
 }
 export function researchTargets(state: HubertState, observation: Observation, nowReal: number) {
@@ -45,6 +46,18 @@ export function researchTargets(state: HubertState, observation: Observation, no
       ).slice(0, 240),
     }));
 }
+/** Offers expire with the gateway allowlist; failed pages get a real-time retry fence. */
+export function readableSources(state: HubertState, nowReal: number) {
+  const research = state.research;
+  if (!research?.search || nowReal - research.search.result.fetchedAt >= 86_400_000) return [];
+  return research.search.result.sources.filter((source) => {
+    const deferredAt = research.deferredSources?.[source.id];
+    return (
+      !research.readIds.includes(source.id) &&
+      (deferredAt === undefined || nowReal - deferredAt >= 6 * 3_600_000)
+    );
+  });
+}
 export function researchContext(
   state: HubertState,
   observation: Observation,
@@ -59,9 +72,7 @@ export function researchContext(
       ? researchTargets(state, observation, nowReal).map(({ id, label }) => ({ id, label }))
       : [],
     sources: ready
-      ? (state.research?.search?.result.sources ?? [])
-          .filter((s) => !state.research?.readIds.includes(s.id))
-          .map(({ id, title, snippet }) => ({ id, title, snippet }))
+      ? readableSources(state, nowReal).map(({ id, title, snippet }) => ({ id, title, snippet }))
       : [],
     notes: state.memories
       .filter((m) => m.source === 'web-reading' && m.reference)

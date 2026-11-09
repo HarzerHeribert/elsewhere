@@ -44,7 +44,11 @@ import {
 } from '../characters/hubert/src/dreams';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
 import { hubertActivityDurationMs } from '../characters/hubert/src/pacing';
-import { researchTargets, rememberResearch } from '../characters/hubert/src/research';
+import {
+  researchTargets,
+  readableSources,
+  rememberResearch,
+} from '../characters/hubert/src/research';
 import { settleHubertAttention } from '../characters/hubert/src/attention';
 import type { CharacterResearchPort } from '../characters/interfaces/src/research';
 import type { ReflectionProvider } from '../packages/adapters/src/models/reflection';
@@ -532,9 +536,7 @@ export class ElsewhereController {
         : undefined;
     const source =
       command.type === 'read'
-        ? existing?.search?.result.sources.find(
-            (x) => x.id === command.sourceId && !existing.readIds.includes(x.id),
-          )
+        ? readableSources(s.hubert, at).find((x) => x.id === command.sourceId)
         : undefined;
     if (command.type === 'research' ? !target : !source) {
       s.hubert.intent = 'That research offer is no longer available.';
@@ -603,6 +605,16 @@ export class ElsewhereController {
       );
     } catch {
       if (this.halted) throw Error('Research stopped after persistence failure.');
+      if (command.type === 'read') {
+        research.deferredSources = Object.fromEntries(
+          [
+            ...Object.entries(research.deferredSources ?? {}).filter(
+              ([id]) => id !== command.sourceId,
+            ),
+            [command.sourceId, at],
+          ].slice(-32),
+        );
+      }
       s.hubert.activity = { kind: 'research', label: 'Leaving research for later', startedAt: now };
       s.hubert.intent = 'That web source is unavailable. I can leave it for later.';
       s.world.events.push({
