@@ -7,7 +7,7 @@ import {
   observeWorld,
   upgradeWorldLayout,
 } from '../src/world.js';
-import { VisitorRegistry } from '../src/visitors.js';
+import { VisitorError, VisitorRegistry } from '../src/visitors.js';
 
 describe('expanded explorable world', () => {
   it('preserves custom saved places, colliders, bounds and metadata during prototype expansion', () => {
@@ -144,12 +144,127 @@ describe('expanded explorable world', () => {
 });
 
 describe('visitor sessions have exploration authority only', () => {
+  it('prevents eight sources from occupying all 64 slots and preserves existing visits on rejection', () => {
+    const world = createInitialWorld(1000),
+      registry = new VisitorRegistry(() => 1000);
+    const visits = [];
+    for (let source = 0; source < 8; source++) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        if (attempt < 2) visits.push(registry.create(world, `source-${source}`));
+        else {
+          try {
+            registry.create(world, `source-${source}`);
+            throw new Error('Expected source admission rejection');
+          } catch (error) {
+            expect(error).toBeInstanceOf(VisitorError);
+            expect((error as VisitorError).status).toBe(429);
+          }
+        }
+      }
+    }
+    expect(visits).toHaveLength(16);
+    for (const visit of visits) registry.get(visit.visitorId, visit.token, world);
+    expect(registry.publicVisitors(world)).toHaveLength(16);
+    const genuine = registry.create(world, 'unrelated-source');
+    expect(() => registry.get(genuine.visitorId, genuine.token, world)).not.toThrow();
+    expect(() => registry.create(world, 'source-0')).toThrow('two active visits');
+    for (const existing of visits.slice(0, 2))
+      expect(() => registry.authenticate(existing.visitorId, existing.token)).not.toThrow();
+  });
+
+  it('reclaims unused allocations after 30 seconds despite public reads and authentication checks', () => {
+    let now = 1000;
+    const world = createInitialWorld(now),
+      registry = new VisitorRegistry(() => now);
+    const pending = registry.create(world, 'same-source');
+    registry.create(world, 'same-source');
+    expect(registry.publicVisitors(world)).toEqual([]);
+    now += 29_999;
+    expect(() => registry.authenticate(pending.visitorId, pending.token)).not.toThrow();
+    expect(() => registry.create(world, 'same-source')).toThrow('two active visits');
+    now += 1;
+    expect(registry.publicVisitors(world)).toEqual([]);
+    expect(() => registry.get(pending.visitorId, pending.token, world)).toThrow('unavailable');
+    expect(() => registry.create(world, 'same-source')).not.toThrow();
+  });
+
+  it('does not let rejected actions claim or renew visitor leases', () => {
+    let now = 1000;
+    const world = createInitialWorld(now),
+      registry = new VisitorRegistry(() => now);
+    const pending = registry.create(world, 'same-source');
+    now += 29_000;
+    expect(() =>
+      registry.act(
+        pending.visitorId,
+        pending.token,
+        { type: 'move', position: { x: 1000, z: 0 } },
+        world,
+      ),
+    ).toThrow('safely');
+    now += 1000;
+    expect(() => registry.get(pending.visitorId, pending.token, world)).toThrow('unavailable');
+    const active = registry.create(world, 'same-source');
+    registry.get(active.visitorId, active.token, world);
+    now += 5 * 60_000 - 1;
+    expect(() =>
+      registry.act(active.visitorId, active.token, { type: 'work', targetId: 'workbench' }, world),
+    ).toThrow('only moving');
+    now += 1;
+    expect(() => registry.get(active.visitorId, active.token, world)).toThrow('unavailable');
+  });
+
+  it('keeps source caps during heartbeat renewals, retains the absolute expiry and clears explicitly', () => {
+    let now = 1000;
+    const world = createInitialWorld(now),
+      registry = new VisitorRegistry(() => now);
+    const first = registry.create(world, 'shared-nat'),
+      second = registry.create(world, 'shared-nat');
+    for (let minute = 0; minute < 30; minute++) {
+      registry.get(first.visitorId, first.token, world);
+      registry.get(second.visitorId, second.token, world);
+      expect(() => registry.create(world, 'shared-nat')).toThrow('two active visits');
+      now += 60_000;
+    }
+    expect(() => registry.get(first.visitorId, first.token, world)).toThrow('unavailable');
+    const next = registry.create(world, 'shared-nat');
+    registry.get(next.visitorId, next.token, world);
+    expect(registry.publicVisitors(world)).toHaveLength(1);
+    registry.clear();
+    expect(registry.publicVisitors(world)).toEqual([]);
+    expect(() => registry.get(next.visitorId, next.token, world)).toThrow('unavailable');
+  });
+
+  it('bounds global capacity without evicting active walkers and releases unclaimed global slots', () => {
+    let now = 1000;
+    const world = createInitialWorld(now),
+      registry = new VisitorRegistry(() => now);
+    const active = registry.create(world, 'active-source');
+    registry.act(active.visitorId, active.token, { type: 'move', position: { x: 8, z: 7 } }, world);
+    for (let index = 1; index < 64; index++) registry.create(world, `source-${index}`);
+    expect(() => registry.create(world, 'unrelated-source')).toThrow('visitor limit');
+    expect(() => registry.authenticate(active.visitorId, active.token)).not.toThrow();
+    now += 30_000;
+    expect(registry.publicVisitors(world)).toHaveLength(1);
+    expect(() => registry.create(world, 'unrelated-source')).not.toThrow();
+  });
+
+  it('rejects unbounded or malformed admission keys without creating sessions', () => {
+    const world = createInitialWorld(1000),
+      registry = new VisitorRegistry(() => 1000);
+    for (const key of ['', 'x'.repeat(129), 'source\nother', 'with space'])
+      expect(() => registry.create(world, key)).toThrow('source is invalid');
+    expect(registry.publicVisitors(world)).toEqual([]);
+  });
+
   it('expires abandoned sessions even while public world polls advance their motion', () => {
     let now = 1000;
     const world = createInitialWorld(now),
       registry = new VisitorRegistry(() => now);
     const abandoned = registry.create(world),
       active = registry.create(world);
+    registry.get(abandoned.visitorId, abandoned.token, world);
+    registry.get(active.visitorId, active.token, world);
     now += 4 * 60_000;
     registry.get(active.visitorId, active.token, world);
     expect(registry.publicVisitors(world)).toHaveLength(2);
@@ -212,16 +327,21 @@ describe('visitor sessions have exploration authority only', () => {
   it('keeps credentials out of public visitors and isolates each session', () => {
     const world = createInitialWorld(1000);
     const registry = new VisitorRegistry(() => 1000);
-    const first = registry.create(world);
-    const second = registry.create(world);
+    const first = registry.create(world, 'PRIVATE-TRANSPORT-SOURCE');
+    const second = registry.create(world, 'PRIVATE-TRANSPORT-SOURCE');
+    registry.get(first.visitorId, first.token, world);
+    registry.get(second.visitorId, second.token, world);
     expect(first.visitorId).not.toBe(second.visitorId);
     expect(first.token).not.toBe(second.token);
     expect(() => registry.get(second.visitorId, first.token, world)).toThrow('unauthorized');
     expect(() => registry.get('hubert', first.token, world)).toThrow('unauthorized');
     const publicText = JSON.stringify(registry.publicVisitors(world));
+    expect(registry.publicVisitors(world)).toHaveLength(2);
     expect(publicText).not.toContain(first.token);
     expect(publicText).not.toContain(second.token);
     expect(publicText).not.toContain('"token"');
+    expect(publicText).not.toContain('PRIVATE-TRANSPORT-SOURCE');
+    expect(JSON.stringify(first)).not.toContain('PRIVATE-TRANSPORT-SOURCE');
   });
 
   it('advances at a bounded speed and stops on request without changing Hubert', () => {

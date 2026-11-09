@@ -1,20 +1,39 @@
 {
-    admin off
-    persist_config off
-    auto_https off
-    servers {
-        protocols h1 h2
-        strict_sni_host on
-    }
+	admin off
+	persist_config off
+	auto_https off
+	servers {
+		protocols h1 h2
+		strict_sni_host on
+		max_header_size 16KB
+		timeouts {
+			read_header 5s
+			read_body 10s
+			write 70s
+			idle 15s
+		}
+	}
 }
 
 https://{$HUBERT_INFERENCE_HOST}:9443 {
-    tls /etc/hubert-tls/cert.pem /etc/hubert-tls/key.pem
-    @hubert_routes path /v1/decision /v1/reflection /readyz
-    handle @hubert_routes {
-        reverse_proxy 127.0.0.1:4100
-    }
-    handle {
-        respond "Not found" 404
-    }
+	tls /etc/hubert-tls/cert.pem /etc/hubert-tls/key.pem
+	@hubert_routes path /v1/decision /v1/reflection /readyz
+	handle @hubert_routes {
+		request_body {
+			max_size 96KB
+		}
+		@unauthorized not header Authorization "Bearer {$INFERENCE_BROKER_TOKEN}"
+		handle @unauthorized {
+			header Content-Type application/json
+			respond `{"error":"unauthorized"}` 401 {
+				close
+			}
+		}
+		handle {
+			reverse_proxy 127.0.0.1:4100
+		}
+	}
+	handle {
+		respond "Not found" 404
+	}
 }

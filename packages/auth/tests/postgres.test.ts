@@ -81,6 +81,33 @@ describe.runIf(Boolean(connectionString))('Better Auth PostgreSQL portability', 
       await reopened.setWorldAdmin(signupData.user.id, false);
       expect(await reopened.isWorldAdmin(asNodeRequest(cookie))).toBe(false);
       expect((await reopened.getAccount(asNodeRequest(cookie)))?.role).toBe('user');
+      const blocker = await admin.connect();
+      try {
+        await blocker.query('BEGIN');
+        await blocker.query(
+          `LOCK TABLE "${schema}"."elsewhere_auth_session" IN ACCESS EXCLUSIVE MODE`,
+        );
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const result = await Promise.race([
+            reopened.getAccount(asNodeRequest(cookie)).then(
+              (user) => ({ kind: 'result', user }),
+              () => ({ kind: 'error' }),
+            ),
+            new Promise<{ kind: string }>((resolve) => {
+              timer = setTimeout(() => resolve({ kind: 'unbounded' }), 6500);
+            }),
+          ]);
+          expect(result.kind).not.toBe('unbounded');
+          if ('user' in result) expect(result.user).toBeNull();
+        } finally {
+          clearTimeout(timer);
+        }
+      } finally {
+        await blocker.query('ROLLBACK');
+        blocker.release();
+      }
+      expect((await reopened.getAccount(asNodeRequest(cookie)))?.id).toBe(signupData.user.id);
       const operatorId = await reopened.createOperatorAccount({
         name: 'Operator fixture',
         email: 'operator-fixture@example.invalid',

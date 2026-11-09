@@ -8,10 +8,12 @@ export function createUnconfiguredInferenceService(token: string) {
   const server = createServer((request, response) => {
     response.setHeader('content-type', 'application/json');
     response.setHeader('cache-control', 'no-store');
+    response.setHeader('x-content-type-options', 'nosniff');
     if (request.method === 'GET' && request.url === '/healthz') {
       response.end(JSON.stringify({ status: 'alive' }));
       return;
     }
+    response.setHeader('connection', 'close');
     const authorization = request.headers.authorization;
     if (
       !authorization ||
@@ -25,16 +27,21 @@ export function createUnconfiguredInferenceService(token: string) {
       return;
     }
     if (request.method === 'GET' && request.url === '/readyz') {
+      response.setHeader('retry-after', '60');
       response.writeHead(503);
       response.end(JSON.stringify({ ready: false }));
       return;
     }
+    response.setHeader('retry-after', '60');
     response.writeHead(503);
     response.end(JSON.stringify({ error: 'unavailable', retryAfterMs: 60000 }));
   });
   server.maxConnections = 16;
   server.requestTimeout = 10000;
   server.headersTimeout = 5000;
+  server.keepAliveTimeout = 5000;
+  server.maxHeadersCount = 32;
+  server.setTimeout(10000, (socket) => socket.destroy());
   return {
     server,
     close: () =>

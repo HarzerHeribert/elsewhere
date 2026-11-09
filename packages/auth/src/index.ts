@@ -20,6 +20,7 @@ export interface LocalAuthOptions {
   databaseUrl?: string;
   adminUserIds?: string[];
   production?: boolean;
+  bodyTimeoutMs?: number;
   sendVerificationEmail?: (message: { email: string; name: string; url: string }) => Promise<void>;
 }
 
@@ -52,6 +53,9 @@ function authSecret(directory: string, supplied?: string): string {
 
 /** Real Better Auth with its own database and signed HTTP-only session cookies. */
 export async function createLocalAuth(options: LocalAuthOptions) {
+  const bodyTimeoutMs = options.bodyTimeoutMs ?? 5000;
+  if (!Number.isInteger(bodyTimeoutMs) || bodyTimeoutMs < 10 || bodyTimeoutMs > 15000)
+    throw new Error('Authentication body timeout must be between 10 and 15000 ms.');
   const base = new URL(options.baseURL);
   if (
     !['http:', 'https:'].includes(base.protocol) ||
@@ -75,8 +79,19 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   sqlite?.pragma('foreign_keys = ON');
   if (sqlite) chmodSync(join(options.dataDirectory, 'auth.sqlite'), 0o600);
   const pool = options.databaseUrl
-    ? new pg.Pool({ connectionString: options.databaseUrl, max: 3 })
+    ? new pg.Pool({
+        connectionString: options.databaseUrl,
+        max: 3,
+        connectionTimeoutMillis: 5000,
+        query_timeout: 6000,
+        statement_timeout: 5000,
+        lock_timeout: 2000,
+        idle_in_transaction_session_timeout: 5000,
+      })
     : undefined;
+  pool?.on('error', () => {
+    // pg discards failed idle clients; individual active operations still reject normally.
+  });
   const explicitAdmins = new Set(options.adminUserIds ?? []);
   // Local development has no email sender. Public password auth remains off until delivery exists.
   const passwordAuthEnabled = !production || Boolean(options.sendVerificationEmail);
@@ -179,20 +194,42 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       const reader = request.body?.getReader();
       const chunks: Uint8Array[] = [];
       let length = 0;
+      let expired = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        if (reader)
+        const deadline = new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            expired = true;
+            reject(new Error('Authentication request body timed out.'));
+            void reader?.cancel().catch(() => undefined);
+          }, bodyTimeoutMs);
+          timer.unref();
+        });
+        const read = async () => {
+          if (!reader) return;
           while (true) {
             const item = await reader.read();
             if (item.done) break;
             length += item.value.byteLength;
             if (length > 65_536) {
-              await reader.cancel();
-              return failure(413, 'Authentication request exceeds 64 KB.');
+              void reader.cancel().catch(() => undefined);
+              return false;
             }
             chunks.push(item.value);
           }
+          return true;
+        };
+        if ((await Promise.race([read(), deadline])) === false)
+          return failure(413, 'Authentication request exceeds 64 KB.');
       } catch {
+        if (expired)
+          return Response.json(
+            { message: 'Authentication request body timed out.' },
+            { status: 408, headers: { 'Retry-After': '1', Connection: 'close' } },
+          );
         return failure(400, 'Authentication request was interrupted.');
+      } finally {
+        clearTimeout(timer);
       }
       const response = await auth.handler(
         new Request(request.url, {
