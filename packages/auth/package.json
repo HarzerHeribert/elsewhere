@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@better-auth/passkey": "1.7.18",
     "@elsewhere/character-interfaces": "workspace:*",
     "better-auth": "^1.7.18",
     "better-sqlite3": "^12.4.1",
