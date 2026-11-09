@@ -2,7 +2,8 @@ import type { CharacterCommand } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import { ChatGPTError } from '../../../security/src/chatgpt-store';
 import { boundedChatGPTJson, chatGPTFailure, ChatGPTSession } from '../../../security/src/chatgpt';
-import { decisionMessages, parseModelAction, reportedUsage } from './shared';
+import { decisionMessages, reportedUsage } from './shared';
+import { parseResponsesAction, RESPONSES_ACTION_FORMAT } from './responses-action';
 import {
   reflectionMessages,
   validateReflectionProposal,
@@ -175,6 +176,15 @@ export class ChatGPTClient {
   isAvailable() {
     return this.session.isAvailable();
   }
+  /** Constrain syntax at generation time; execution still checks real world affordances. */
+  async decisionText(context: DecisionContext, signal?: AbortSignal): Promise<string> {
+    return this.text(
+      decisionMessages(context, 'envelope'),
+      signal,
+      undefined,
+      RESPONSES_ACTION_FORMAT,
+    );
+  }
   async models(): Promise<Array<{ slug: string; displayName: string }>> {
     const token = await this.session.accessToken();
     const response = await this.session.fetcher('https://api.openai.com/v1/models', {
@@ -206,6 +216,7 @@ export class ChatGPTClient {
     messages: ReturnType<typeof decisionMessages>,
     signal?: AbortSignal,
     onDelta?: (text: string) => void,
+    format?: typeof RESPONSES_ACTION_FORMAT,
   ): Promise<string> {
     try {
       if (!this.catalog) await this.models();
@@ -230,6 +241,7 @@ export class ChatGPTClient {
           input: [{ role: 'user', content: messages[1].content }],
           store: false,
           stream: true,
+          ...(format ? { text: { format } } : {}),
           ...(this.model === 'gpt-6-luna' ? { reasoning: { effort: 'none' } } : {}),
         }),
       });
@@ -259,7 +271,7 @@ export class ChatGPTDecisionProvider implements DecisionProvider<CharacterComman
     return this.client.isAvailable();
   }
   async propose(context: DecisionContext) {
-    return parseModelAction(await this.client.text(decisionMessages(context)));
+    return parseResponsesAction(await this.client.decisionText(context));
   }
 }
 export class ChatGPTReflectionProvider implements ReflectionProvider {
