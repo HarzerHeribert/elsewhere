@@ -1,5 +1,6 @@
 import type { CharacterCommand } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
+import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
 import { CharacterCommandSchema } from '@elsewhere/character-interfaces';
 import {
   BrokerDecisionRequestSchema,
@@ -12,6 +13,7 @@ import {
   encodeInferenceBinding,
   type InferenceBinding,
   type InferenceWorkload,
+  type InferenceDiagnostic,
 } from '../../../inference/src/contracts';
 import type { ModelUsage } from '../../../models/src/contracts';
 import { pinnedHttpsFetch } from '../../../inference/src/pinned-https';
@@ -43,6 +45,7 @@ export class BrokerModelError extends Error {
   constructor(
     readonly code: string,
     readonly status?: number,
+    readonly diagnostic?: InferenceDiagnostic,
   ) {
     super(`Private inference service: ${code}${status ? ` (HTTP ${status})` : ''}.`);
   }
@@ -214,7 +217,11 @@ export class BrokerModelClient {
         this.options.onUsageDetails?.(reported);
         const now = (this.options.now ?? Date.now)();
         if (
-          !(workload === 'expression' && error.success && error.data.error === 'invalid_expression')
+          !(
+            error.success &&
+            ((workload === 'expression' && error.data.error === 'invalid_expression') ||
+              (workload === 'decision' && error.data.error === 'invalid_action'))
+          )
         )
           this.pausedUntil = [401, 403].includes(response.status)
             ? Number.POSITIVE_INFINITY
@@ -222,6 +229,7 @@ export class BrokerModelClient {
         throw new BrokerModelError(
           error.success ? error.data.error : 'request_failed',
           response.status,
+          error.success ? error.data.diagnostic : undefined,
         );
       }
       const result = BrokerResponseSchema.safeParse(payload);
@@ -265,8 +273,20 @@ export class BrokerDecisionProvider implements DecisionProvider<CharacterCommand
     this.client.resetAvailability();
   }
   async propose(context: DecisionContext) {
-    const result = CharacterCommandSchema.safeParse(await this.client.decision(context));
-    if (!result.success) throw new BrokerModelError('invalid_action');
+    let value;
+    try {
+      value = await this.client.decision(context);
+    } catch (error) {
+      if (error instanceof BrokerModelError && error.code === 'invalid_action')
+        throw new InvalidDecisionError(
+          error.diagnostic?.code === 'invalid_json' ? 'invalid_json' : 'invalid_action',
+          error.diagnostic?.fields ?? [],
+        );
+      throw error;
+    }
+    const result = CharacterCommandSchema.safeParse(value);
+    if (!result.success)
+      throw new InvalidDecisionError('invalid_action', invalidDecisionFields(result.error));
     return result.data;
   }
 }

@@ -153,3 +153,131 @@ it('owner retry rechecks broker authorization after repair while retaining charg
     await controller.close();
   }
 });
+
+it('waits for a normal turn after an unusable reply and lets the model correct it without a substitute', async () => {
+  const store = new MemoryStore();
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json(
+        {
+          error: 'invalid_action',
+          diagnostic: { code: 'invalid_action', fields: ['durationMs'] },
+          usage: { inputTokens: 10, outputTokens: 4, cachedInputTokens: 0 },
+        },
+        { status: 400 },
+      ),
+    )
+    .mockResolvedValue(Response.json({ value: { type: 'reflect' } }));
+  const provider = new BrokerDecisionProvider(
+    new BrokerModelClient({
+      baseUrl: 'https://inference.example',
+      token: 'fixture-credential-'.repeat(3),
+      expectedBinding: {
+        worldId: 'elsewhere',
+        ownerUserId: 'fixture-owner',
+        characterId: 'hubert',
+        connectionId: 'fixture-plan',
+      },
+      fetcher,
+    }),
+  );
+  const controller = await new ElsewhereController(store, {
+    now: () => epoch,
+    simulationStepMs: 30_000,
+    decisionIntervalMs: 90_000,
+    modelProvider: provider,
+  }).init();
+  try {
+    const before = controller.getSnapshot();
+    await controller.step();
+    expect(provider.isAvailable()).toBe(true);
+    expect(controller.getCharacterIssues()).toMatchObject([
+      { kind: 'invalid', code: 'invalid_action', fields: ['durationMs'], retrying: true },
+    ]);
+    expect(controller.getSnapshot().world.events).toEqual(before.world.events);
+    expect(controller.getSnapshot().memories).toEqual(before.memories);
+    expect(store.saved!.value.hubert.turn).toBe(0);
+    await controller.tick();
+    await controller.tick();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await controller.tick();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const body = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+    expect(body.context.state.lastDecisionProblem).toMatchObject({
+      code: 'invalid_action',
+      fields: ['durationMs'],
+    });
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(epoch);
+    expect(controller.getSnapshot().character.activity).toBe('Putting things together');
+    expect(store.saved!.value.hubert.lastDecisionProblem).toBeUndefined();
+    expect(controller.getSnapshot().runtime.modelCalls).toBe(2);
+  } finally {
+    await controller.close();
+  }
+});
+
+it('bounds rejected world proposals across restart, records rejection feedback, and never executes them', async () => {
+  const store = new MemoryStore();
+  const propose = vi.fn(async () => ({ type: 'inspect', targetId: 'unknown-fixture-target' }));
+  const options = { now: () => epoch, modelProvider: { id: 'fixture', propose } };
+  const first = await new ElsewhereController(store, options).init();
+  const before = first.getSnapshot();
+  await first.step();
+  await first.step();
+  await first.step();
+  expect(propose).toHaveBeenCalledTimes(3);
+  expect(first.getSnapshot().memories).toEqual(before.memories);
+  expect(first.getSnapshot().world.events).toEqual(before.world.events);
+  expect(store.saved!.value.hubert.lastOutcome).toMatchObject({
+    action: 'inspect',
+    status: 'rejected',
+    targetId: 'unknown-fixture-target',
+  });
+  expect(first.getCharacterIssues()).toMatchObject([
+    { kind: 'invalid', code: 'unavailable_action', retrying: false },
+  ]);
+  await first.close();
+  const next = await new ElsewhereController(store, options).init();
+  try {
+    for (let i = 0; i < 10; i++) await next.step();
+    expect(propose).toHaveBeenCalledTimes(3);
+    await next.reset();
+    await next.step();
+    expect(propose).toHaveBeenCalledTimes(3);
+    expect(store.saved!.value.runtime.invalidDecisionCount).toBe(3);
+    await next.retryCharacterProvider();
+    await next.step();
+    expect(propose).toHaveBeenCalledTimes(4);
+    expect(next.getSnapshot().runtime.modelCalls).toBe(4);
+  } finally {
+    await next.close();
+  }
+});
+
+it('a real request failure interrupts automatic action correction immediately and keeps errors private', async () => {
+  const { InvalidDecisionError } = await import('../characters/runtime/src/index');
+  const store = new MemoryStore();
+  const propose = vi
+    .fn()
+    .mockRejectedValueOnce(new InvalidDecisionError('invalid_json'))
+    .mockRejectedValue(new Error('PRIVATE-PROVIDER-CANARY'));
+  const controller = await new ElsewhereController(store, {
+    now: () => epoch,
+    modelProvider: { id: 'fixture', propose },
+  }).init();
+  try {
+    await controller.step();
+    await controller.step();
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(2);
+    const issue = controller.getCharacterIssues()[0];
+    expect(issue.kind).toBe('failed');
+    expect(issue.retrying).toBeUndefined();
+    expect(issue.code).toBe('decision_error');
+    expect(JSON.stringify(controller.getSnapshot())).not.toContain('PRIVATE-');
+    expect(JSON.stringify(controller.getCharacterIssues())).not.toContain('PRIVATE-');
+  } finally {
+    await controller.close();
+  }
+});

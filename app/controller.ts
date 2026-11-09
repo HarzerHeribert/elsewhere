@@ -1,4 +1,6 @@
 import { applyInterestChoice } from '../characters/hubert/src/interestChoices';
+import { InvalidDecisionError } from '@elsewhere/character-runtime';
+import { BrokerModelError } from '../packages/adapters/src/models/broker';
 import { displayMemorySummary } from '../characters/hubert/src/memoryQuality';
 import { notebookInput } from '../characters/hubert/src/notebook';
 import {
@@ -98,6 +100,7 @@ export interface ControllerState {
     modelStatus: string;
     providerIssues?: ProviderIssue[];
     providerRetryRequested?: boolean;
+    invalidDecisionCount?: number;
     providerWorkloadRetries?: Array<'notebook' | 'reflection'>;
     /** Continuous observed rest only; a restart or pause begins a new session. */
     dreamRest?: { id: string; startedAt: number; startedAtReal: number };
@@ -373,6 +376,7 @@ export class ElsewhereController {
       this.options.reflectionProvider?.resetAvailability?.();
       const active = (this.state.runtime.providerIssues ?? []).filter((issue) => !issue.resolvedAt);
       if (active.some((issue) => issue.workload === 'decision')) {
+        this.state.runtime.invalidDecisionCount = 0;
         this.state.runtime.providerRetryRequested = true;
         this.state.runtime.lastDecisionAt = -1;
         delete this.state.runtime.activityUntil;
@@ -397,6 +401,7 @@ export class ElsewhereController {
   private reportProviderIssue(
     kind: ProviderIssue['kind'],
     workload: NonNullable<ProviderIssue['workload']> = 'decision',
+    detail?: Pick<ProviderIssue, 'code' | 'fields' | 'retrying'>,
   ) {
     const issues = (this.state.runtime.providerIssues ??= []);
     const now = this.wallNow();
@@ -407,6 +412,9 @@ export class ElsewhereController {
       failed:
         'The provider request failed or returned an invalid response. Check the provider, then retry.',
       allowance: 'The daily model allowance has been reached. Retry after the allowance resets.',
+      invalid: detail?.retrying
+        ? 'The model replied, but its proposed action could not be used. Hubert will reconsider on his next normal turn.'
+        : 'Three consecutive model replies could not be used. No replacement actions were chosen. Review the action feedback, then retry.',
     };
     const existing = issues.find((issue) => issue.workload === workload && !issue.resolvedAt);
     if (existing) Object.assign(existing, { kind, lastAt: now, message: messages[kind] });
@@ -421,7 +429,25 @@ export class ElsewhereController {
         message: messages[kind],
       });
     this.state.runtime.providerIssues = issues.slice(-12);
+    const current = this.state.runtime.providerIssues.find(
+      (issue) => issue.workload === workload && !issue.resolvedAt,
+    );
+    if (current) {
+      delete current.code;
+      delete current.fields;
+      delete current.retrying;
+      if (detail) Object.assign(current, detail);
+    }
     if (workload === 'decision') {
+      if (detail?.retrying) {
+        this.state.runtime.modelStatus = 'Model replied; reconsidering an unusable action';
+        this.state.hubert.activity = {
+          kind: 'reconsidering',
+          label: 'Considering another approach',
+          startedAt: this.state.runtime.simulatedAt,
+        };
+        return;
+      }
       this.state.runtime.modelStatus = 'Hubert is currently unavailable';
       this.state.hubert.activity = {
         kind: 'unavailable',
@@ -542,7 +568,7 @@ export class ElsewhereController {
     if (ready) {
       const observation = observeWorld(s.world, 'hubert', now);
       const blocked = s.runtime.providerIssues?.some(
-        (issue) => issue.workload === 'decision' && !issue.resolvedAt,
+        (issue) => issue.workload === 'decision' && !issue.resolvedAt && !issue.retrying,
       );
       if (blocked && !s.runtime.providerRetryRequested) {
         await this.commit();
@@ -573,10 +599,48 @@ export class ElsewhereController {
               Boolean(this.options.research),
             );
             this.resolveProviderIssue('decision');
+            s.runtime.invalidDecisionCount = 0;
+            delete decision.state.lastDecisionProblem;
             s.runtime.modelStatus = 'Model connected';
-          } catch {
+          } catch (error) {
             if (this.halted) throw new Error('Model dispatch stopped after a persistence failure.');
-            this.reportProviderIssue('failed');
+            if (error instanceof InvalidDecisionError) {
+              const count = (s.runtime.invalidDecisionCount ?? 0) + 1;
+              s.runtime.invalidDecisionCount = count;
+              s.hubert.lastDecisionProblem = {
+                at: now,
+                code: error.code,
+                message: error.message,
+                fields: [...error.fields],
+              };
+              if (error.command) {
+                s.hubert.lastOutcome = {
+                  id: randomUUID(),
+                  at: now,
+                  action: error.command.type,
+                  status: 'rejected',
+                  ...('targetId' in error.command ? { targetId: error.command.targetId } : {}),
+                  summary: error.message,
+                };
+                s.hubert.lastProposal = {
+                  at: now,
+                  type: error.command.type,
+                  ...('targetId' in error.command ? { targetId: error.command.targetId } : {}),
+                  adjustment: error.message,
+                };
+              }
+              s.runtime.lastDecisionAt = now;
+              s.runtime.activityUntil = now + (this.options.decisionIntervalMs ?? 90_000);
+              this.reportProviderIssue('invalid', 'decision', {
+                code: error.code,
+                fields: [...error.fields],
+                retrying: count < 3,
+              });
+            } else if (error instanceof BrokerModelError) {
+              this.reportProviderIssue('failed', 'decision', {
+                code: error.diagnostic?.providerCode ?? error.code,
+              });
+            } else this.reportProviderIssue('failed', 'decision', { code: 'decision_error' });
           } finally {
             this.modelDispatchActive = false;
           }
@@ -944,12 +1008,14 @@ export class ElsewhereController {
       const allowance = structuredClone(this.state.modelAllowance);
       const routing = structuredClone(this.state.modelRouting);
       const issues = structuredClone(this.state.runtime.providerIssues);
+      const invalidDecisionCount = this.state.runtime.invalidDecisionCount;
       const previous = this.state.hubert;
       const worldVersion = this.state.world.version;
       this.state = initialState(this.wallNow());
       // Resetting a fictional life never replenishes real paid-call allowance.
       this.state.modelAllowance = allowance;
       this.state.runtime.providerIssues = issues;
+      this.state.runtime.invalidDecisionCount = invalidDecisionCount;
       if (routing) this.state.modelRouting = routing;
       this.state.hubert = preserveWishLedger(this.state.hubert, previous);
       this.state.hubert.dreams = pruneDreamState(previous.dreams, []);

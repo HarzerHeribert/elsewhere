@@ -7,6 +7,7 @@ export function useAccountSession() {
   const [pending, setPending] = useState(false),
     [error, setError] = useState('');
   const [verificationEmail, setVerificationEmail] = useState('');
+  const [signInLinkEmail, setSignInLinkEmail] = useState('');
   const [operatorSignInToken, setOperatorSignInToken] = useState('');
   const active = useRef(false),
     generation = useRef(0),
@@ -162,6 +163,7 @@ export function useAccountSession() {
         value ? { ...value, user: null, managedCharacterIds: [], characterIssues: [] } : value,
       );
       setVerificationEmail('');
+      setSignInLinkEmail('');
       return true;
     } catch (reason) {
       if (current(version))
@@ -172,6 +174,34 @@ export function useAccountSession() {
       if (current(version)) setPending(false);
     }
   }, [begin, current]);
+  const sendSignInLink = useCallback(
+    async (email: string) => {
+      if (mutating.current) return false;
+      mutating.current = true;
+      const { version, controller } = begin();
+      setPending(true);
+      setError('');
+      try {
+        await requestJson('/api/auth/sign-in/magic-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, callbackURL: location.origin }),
+          signal: controller.signal,
+        });
+        if (!current(version)) return false;
+        setSignInLinkEmail(email);
+        return true;
+      } catch (reason) {
+        if (current(version))
+          setError(reason instanceof Error ? reason.message : 'Could not request a sign-in link.');
+        return false;
+      } finally {
+        mutating.current = false;
+        if (current(version)) setPending(false);
+      }
+    },
+    [begin, current],
+  );
   const retryCharacterProvider = useCallback(
     async (characterId: string) => {
       if (mutating.current) return false;
@@ -206,11 +236,19 @@ export function useAccountSession() {
     account: session?.user ?? null,
     capabilities: session,
     characterIssues,
-    hasCharacterIssue: characterIssues.some((issue) => issue.resolvedAt === undefined),
+    hasCharacterIssue: characterIssues.some(
+      (issue) => issue.resolvedAt === undefined && !issue.retrying,
+    ),
     retryCharacterProvider,
     pending,
     error,
     verificationEmail,
+    signInLinkEmail,
+    sendSignInLink,
+    dismissSignInLink: () => {
+      setSignInLinkEmail('');
+      setError('');
+    },
     refresh,
     authenticate,
     signOut,

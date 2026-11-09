@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DECISION_DIAGNOSTIC_FIELDS } from '@elsewhere/character-runtime';
 import { PublicExpressionInputSchema } from '../../adapters/src/models/expression';
 import type { JsonObject, DecisionContext } from '@elsewhere/character-runtime';
 import { ReflectionInputSchema } from '../../adapters/src/models/reflection';
@@ -26,6 +27,27 @@ export function encodeInferenceBinding(binding: InferenceBinding): string {
   return Buffer.from(JSON.stringify(parsed.data)).toString('base64url');
 }
 export type InferenceWorkload = 'decision' | 'reflection' | 'expression';
+
+export const InferenceDiagnosticSchema = z
+  .object({
+    code: z.enum(['invalid_json', 'invalid_action', 'invalid_reflection', 'provider_response']),
+    fields: z.array(z.enum(DECISION_DIAGNOSTIC_FIELDS)).max(8),
+    providerCode: z
+      .enum([
+        'request_failed',
+        'response_incomplete',
+        'invalid_completed_response',
+        'invalid_completed_output',
+        'unexpected_output_capability',
+        'stream_interrupted',
+        'invalid_stream_event',
+        'selected_model_unavailable',
+        'network_or_stream_unavailable',
+      ])
+      .optional(),
+  })
+  .strict();
+export type InferenceDiagnostic = z.infer<typeof InferenceDiagnosticSchema>;
 
 /** Iterative bounds avoid handing deeply nested JSON to recursive validation/formatting. */
 function boundedJsonObject(value: Record<string, unknown>): boolean {
@@ -131,6 +153,7 @@ export const BrokerErrorSchema = z
       'not_authorized',
       'invalid_request',
       'invalid_expression',
+      'invalid_action',
       'request_too_large',
       'busy',
       'unavailable',
@@ -144,6 +167,7 @@ export const BrokerErrorSchema = z
     ]),
     retryAfterMs: z.number().int().min(1000).max(86_400_000).optional(),
     usage: BrokerUsageSchema.optional(),
+    diagnostic: InferenceDiagnosticSchema.optional(),
   })
   .strict();
 

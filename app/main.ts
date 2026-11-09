@@ -13,7 +13,10 @@ import { ownerToken } from '../packages/security/src/index';
 import { runtimeProviders } from './providers';
 import { hubertResourceRegistry } from './residency';
 import { authOptionsFromEnvironment, createLocalAuth } from '../packages/auth/src/index';
-import { verificationSenderFromEnvironment } from '../packages/auth/src/verification-mail';
+import {
+  verificationSenderFromEnvironment,
+  signInSenderFromEnvironment,
+} from '../packages/auth/src/verification-mail';
 import { ResearchClient } from '../packages/research/src/client';
 
 const config = appConfig(process.env);
@@ -48,6 +51,9 @@ const server = createApiServer({
     isWorldAdmin: (req) => auth!.isWorldAdmin(req),
     get passwordAuthEnabled() {
       return auth?.passwordAuthEnabled ?? false;
+    },
+    get emailLinkAuthEnabled() {
+      return auth?.emailLinkAuthEnabled ?? false;
     },
     get requiresEmailVerification() {
       return auth?.requiresEmailVerification ?? false;
@@ -90,6 +96,7 @@ async function initialize() {
     authOptionsFromEnvironment(process.env, {
       dataDirectory: directory,
       sendVerificationEmail: verificationSenderFromEnvironment(process.env),
+      sendSignInEmail: signInSenderFromEnvironment(process.env),
     }),
   );
   if (lifetime.signal.aborted) return;

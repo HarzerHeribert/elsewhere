@@ -103,7 +103,9 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
             managedCharacterIds.includes(issue.characterId) &&
             typeof issue.id === 'string' &&
             typeof issue.message === 'string' &&
-            ['unconfigured', 'unavailable', 'failed', 'allowance'].includes(issue.kind) &&
+            ['unconfigured', 'unavailable', 'failed', 'allowance', 'invalid'].includes(
+              issue.kind,
+            ) &&
             Number.isFinite(issue.since) &&
             Number.isFinite(issue.lastAt) &&
             (issue.resolvedAt === undefined || Number.isFinite(issue.resolvedAt)) &&
@@ -116,6 +118,7 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
     user: value.user ?? null,
     enabled: value.enabled,
     passwordAuthEnabled: value.passwordAuthEnabled === true,
+    ...(value.emailLinkAuthEnabled === true ? { emailLinkAuthEnabled: true } : {}),
     requiresEmailVerification: value.requiresEmailVerification === true,
     managedCharacterIds,
     characterIssues,

@@ -26,6 +26,10 @@ export function WorldDialog({
         <>
           <p className="eyebrow">Behind the scenes</p>
           <h2 id="modal-title">World settings</h2>
+          <p>
+            These controls pause, resume, or advance the simulation. Hubert’s connection notices and
+            Retry action are in Your account → Your characters.
+          </p>
           {(admin.owner || isWorldAdmin || canManageCharacter) && (
             <div className="owner-actions">
               {(admin.owner || isWorldAdmin) && (

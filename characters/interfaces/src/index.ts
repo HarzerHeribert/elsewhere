@@ -149,6 +149,7 @@ export interface AccountSummary {
   isWorldAdmin: boolean;
 }
 export interface AccountCapabilities {
+  emailLinkAuthEnabled?: boolean;
   enabled: boolean;
   passwordAuthEnabled: boolean;
   requiresEmailVerification: boolean;
@@ -157,7 +158,10 @@ export interface AccountCapabilities {
 export interface ProviderIssue {
   id: string;
   characterId: string;
-  kind: 'unconfigured' | 'unavailable' | 'failed' | 'allowance';
+  kind: 'unconfigured' | 'unavailable' | 'failed' | 'allowance' | 'invalid';
+  code?: string;
+  fields?: string[];
+  retrying?: boolean;
   workload?: 'decision' | 'notebook' | 'reflection';
   since: number;
   lastAt: number;
