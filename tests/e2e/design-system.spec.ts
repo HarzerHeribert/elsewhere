@@ -5,9 +5,9 @@ test('brand gallery video controls work under the production content security po
   page,
 }) => {
   const vercel = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'));
-  const policy = vercel.headers[0].headers.find(
-    (header: { key: string; value: string }) => header.key === 'Content-Security-Policy',
-  ).value;
+  const policy = vercel.routes.find(
+    (route: { headers?: Record<string, string> }) => route.headers?.['Content-Security-Policy'],
+  ).headers['Content-Security-Policy'];
   await page.route('**/brand/index.html', async (route) => {
     const response = await route.fetch();
     await route.fulfill({
