@@ -35,7 +35,7 @@ export const PURSUIT_LIMITS = {
   items: 12,
   entries: 40,
   entrySlack: 8,
-  questions: 8,
+  questions: 4,
   reading: 2,
   readingText: 12000,
   question: 240,

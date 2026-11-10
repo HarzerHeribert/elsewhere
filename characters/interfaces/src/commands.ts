@@ -34,7 +34,7 @@ const definitions = [
       })
       .strict(),
     instruction:
-      'rest: optional integer durationMs between 1000 and 3600000 (one minute when omitted). Energy returns with the time rested, so choose one duration that fits how tired you are rather than resting again and again.',
+      'rest: optional integer durationMs between 1000 and 3600000 (one minute when omitted). Without a duration the rest lasts until energy is comfortably back; give one only to rest shorter or longer than that.',
   },
   {
     schema: z.object({ type: z.literal('interact'), targetId }).strict(),
@@ -105,7 +105,7 @@ const definitions = [
       })
       .strict(),
     instruction:
-      'set_aside: pursuitId from state.pursuits and a public reason (1-240 characters) for leaving it for now.',
+      'set_aside: pursuitId from state.pursuits and a public reason (1-240 characters): what you found if it is answered, or why you are leaving it.',
   },
   {
     schema: z

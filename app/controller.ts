@@ -946,7 +946,7 @@ export class ElsewhereController {
         } else {
           const result = executeWorldCommand(s.world, 'hubert', policy.command, now);
           s.world = result.world;
-          const duration = hubertActivityDurationMs(policy.command);
+          const duration = hubertActivityDurationMs(policy.command, s.hubert.stats.energy);
           if (result.outcome.status !== 'rejected' && duration > 0)
             s.runtime.activityUntil = now + duration;
           if (policy.command.type === 'use')

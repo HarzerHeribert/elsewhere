@@ -273,7 +273,8 @@ export function operate(
         problem: `${control} needs a ${whole ? 'whole ' : ''}number from ${range.min} to ${range.max} (${range.meaning}).`,
       };
     }
-    used = value;
+    // A control cannot be set finer than its step: the nearest setting is what takes effect.
+    used = range.step ? Math.round(value / range.step) * range.step : value;
   }
   const current = state ?? {};
   const uses = current.uses ?? 0;
