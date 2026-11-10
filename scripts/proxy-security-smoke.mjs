@@ -21,7 +21,7 @@ function run(args, allow = false) {
         ' failed: ' +
         String(r.stderr ?? r.error?.message).slice(0, 2000),
     );
-  return r.stdout?.trim() ?? '';
+  return ((r.stdout ?? '') + (args[0] === 'logs' ? (r.stderr ?? '') : '')).trim();
 }
 let result;
 try {
@@ -38,6 +38,8 @@ try {
       'ec',
       '-pkeyopt',
       'ec_paramgen_curve:P-256',
+      '-pkeyopt',
+      'ec_param_enc:named_curve',
       '-nodes',
       '-days',
       '1',
@@ -146,14 +148,18 @@ try {
       req.on('timeout', () => req.destroy(Error('Fixture request timeout')));
       req.end(body);
     });
-  for (let i = 0; i < 30; i++) {
+  let proxyReady = false;
+  for (let i = 0; i < 150; i++) {
     try {
-      await request('/readyz');
+      const ready = await request('/readyz');
+      if (ready.status !== 401) throw Error('Unexpected fixture readiness response');
+      proxyReady = true;
       break;
     } catch {
       await new Promise((r) => setTimeout(r, 100));
     }
   }
+  assert(proxyReady, 'Isolated TLS proxy did not become ready within its startup window.');
   const unauth = await request('/readyz');
   assert.equal(unauth.status, 401);
   assert.equal(
@@ -232,6 +238,8 @@ try {
     proxyFixturePassed: false,
     details: String(error.message).slice(0, 2000),
     fixtureLogs: run(['logs', '--tail', '8', proxy], true).slice(0, 2000),
+    proxyState: run(['inspect', '--format', '{{json .State}}', proxy], true).slice(0, 1000),
+    upstreamState: run(['inspect', '--format', '{{json .State}}', name], true).slice(0, 1000),
   };
   process.exitCode = 1;
 } finally {

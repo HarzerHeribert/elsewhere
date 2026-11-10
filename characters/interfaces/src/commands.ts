@@ -150,3 +150,107 @@ export const MODEL_ACTION_FORMAT = {
     }),
 };
 export const MODEL_ACTION_INSTRUCTIONS = definitions.map((item) => item.instruction).join(' ');
+
+export type CommandType = CharacterCommand['type'];
+const commandTypes = definitions.map((item) => item.schema.shape.type.value) as [
+  CommandType,
+  ...CommandType[],
+];
+
+/**
+ * A host-authored action that is admissible this turn, in a character-agnostic shape.
+ * Each field named in `where` is required and limited to the listed values; 'any' requires
+ * the field with any schema-valid value. Unnamed fields keep their canonical constraints.
+ * Choices only ever narrow the canonical vocabulary: they cannot add an action or a field.
+ */
+export const ActionChoiceSchema = z
+  .object({
+    type: z.enum(commandTypes),
+    where: z
+      .record(
+        z.string().min(1).max(40),
+        z.union([z.literal('any'), z.array(targetId).min(1).max(64)]),
+      )
+      .refine((value) => Object.keys(value).length <= 6)
+      .optional(),
+  })
+  .strict();
+export const ActionChoicesSchema = z.array(ActionChoiceSchema).min(1).max(48);
+export type ActionChoice = z.infer<typeof ActionChoiceSchema>;
+
+type ActionAlternative = JsonSchema & {
+  properties: Record<string, JsonSchema>;
+  required: string[];
+};
+
+/** Enumerate an identifier field without ever admitting a value the canonical parser rejects. */
+function narrowProperty(
+  property: JsonSchema | undefined,
+  values: readonly string[],
+): JsonSchema | null {
+  if (!property) return null;
+  if (property.type === 'array') {
+    const items = narrowProperty(property.items as JsonSchema | undefined, values);
+    if (!items) return null;
+    const offered = (items.enum as string[]).length;
+    return {
+      ...property,
+      items,
+      maxItems:
+        typeof property.maxItems === 'number' ? Math.min(property.maxItems, offered) : offered,
+    };
+  }
+  if (property.type !== 'string') return null;
+  const canonical =
+    'const' in property ? [property.const] : Array.isArray(property.enum) ? property.enum : null;
+  const pattern = typeof property.pattern === 'string' ? new RegExp(property.pattern) : null;
+  const allowed = [...new Set(values)].filter(
+    (value) => (!canonical || canonical.includes(value)) && (!pattern || pattern.test(value)),
+  );
+  return allowed.length ? { type: 'string', enum: allowed } : null;
+}
+
+/**
+ * The canonical action format limited to this turn's choices, so a provider that enforces
+ * structured output cannot select an action or target the host would then reject.
+ * Without usable choices the full canonical format is returned; the host still validates.
+ */
+export function narrowActionFormat(choices?: readonly ActionChoice[]): typeof MODEL_ACTION_FORMAT {
+  // This helper is also a public provider boundary: callers need not have passed through
+  // buildWorkingContext or the broker. Never let an unchecked enum weaken the parser.
+  const parsed = ActionChoicesSchema.safeParse(choices);
+  if (!parsed.success) return MODEL_ACTION_FORMAT;
+  const alternatives = new Map<string, JsonSchema>();
+  for (const choice of parsed.data) {
+    const where = Object.entries(choice.where ?? {});
+    for (const canonical of MODEL_ACTION_FORMAT.anyOf as ActionAlternative[]) {
+      if (canonical.properties.type?.const !== choice.type) continue;
+      if (!where.every(([key]) => key !== 'type' && Object.hasOwn(canonical.properties, key)))
+        continue;
+      const properties = { ...canonical.properties };
+      let admissible = true;
+      for (const [key, values] of where) {
+        if (values === 'any') continue;
+        const narrowed = narrowProperty(properties[key], values);
+        if (!narrowed) {
+          admissible = false;
+          break;
+        }
+        properties[key] = narrowed;
+      }
+      if (!admissible) continue;
+      const named = new Set(where.map(([key]) => key));
+      const format = {
+        ...canonical,
+        properties,
+        required: Object.keys(properties).filter(
+          (key) => canonical.required.includes(key) || named.has(key),
+        ),
+      };
+      alternatives.set(JSON.stringify(format), format);
+    }
+  }
+  return alternatives.size
+    ? { type: 'object', anyOf: [...alternatives.values()] }
+    : MODEL_ACTION_FORMAT;
+}

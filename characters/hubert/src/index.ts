@@ -1,4 +1,4 @@
-import type { PublicCreation } from '@elsewhere/character-interfaces';
+import type { ActionChoice, PublicCreation } from '@elsewhere/character-interfaces';
 import { availableInterestChoices, type HubertInterestChoiceState } from './interestChoices';
 import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
 import type { HubertNotebookState } from './notebook';
@@ -28,6 +28,7 @@ import {
   assessHubertSpatialAction,
   canInspectObservedEntity,
   hubertActionOffers,
+  hubertSpatialChoices,
   type ActionOutcomeFeedback,
 } from './actionOffers';
 import { researchContext, type HubertResearchState } from './research';
@@ -1017,6 +1018,73 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
 }
 export type HubertPlanningSummary = ReturnType<typeof planningSummary>;
 
+/**
+ * Every action a proposal may name this turn, built from the same offers the model reads.
+ * Providers that constrain output cannot then choose a cooling-down, out-of-sight or
+ * otherwise unoffered action; execution still belongs to the host and the world.
+ */
+function actionChoices(
+  state: HubertState,
+  observation: Observation,
+  research: ReturnType<typeof researchContext>,
+  interestChoices: ReturnType<typeof availableInterestChoices>,
+  creationIds: readonly string[],
+  mail: JsonObject,
+): ActionChoice[] {
+  const ids = (value: JsonObject[string]) =>
+    Array.isArray(value)
+      ? value.flatMap((item) =>
+          item && typeof item === 'object' && !Array.isArray(item) && typeof item.id === 'string'
+            ? [item.id]
+            : [],
+        )
+      : [];
+  const listed = (
+    type: ActionChoice['type'],
+    field: string,
+    values: readonly string[],
+    also: NonNullable<ActionChoice['where']> = {},
+  ): ActionChoice[] =>
+    values.length ? [{ type, where: { ...also, [field]: values.slice(0, 64) } }] : [];
+  const entryIds = mail.available === true ? ids(mail.publicEntries) : [];
+  const contacts = ids(mail.contacts).slice(0, 64);
+  return [
+    ...hubertSpatialChoices(hubertActionOffers(state, observation, observation.observedAt)),
+    { type: 'rest' },
+    { type: 'reflect' },
+    ...listed(
+      'research',
+      'targetId',
+      ('targets' in research ? (research.targets ?? []) : []).map((target) => target.id),
+    ),
+    ...listed(
+      'read',
+      'sourceId',
+      ('sources' in research ? (research.sources ?? []) : []).map((source) => source.id),
+    ),
+    ...(['set-aside', 'pursue'] as const).flatMap((disposition) =>
+      listed(
+        'reconsider',
+        'interestId',
+        interestChoices
+          .filter((choice) => choice.disposition === disposition)
+          .map((choice) => choice.interestId),
+        { disposition: [disposition] },
+      ),
+    ),
+    ...listed('pin_creation', 'creationId', creationIds),
+    ...listed('draft_mail', 'entryIds', entryIds, {
+      kind: [...(mail.makerAvailable === false ? [] : ['maker']), 'newsletter'],
+    }),
+    ...(contacts.length
+      ? listed('draft_mail', 'entryIds', entryIds, {
+          kind: ['correspondence'],
+          recipientUserId: contacts,
+        })
+      : []),
+  ];
+}
+
 export function workingContext(
   state: HubertState,
   observation: Observation,
@@ -1025,15 +1093,24 @@ export function workingContext(
   creations: readonly PublicCreation[] = [],
   mail: JsonObject = { available: false },
 ): DecisionContext {
+  const research = researchContext(state, observation, nowReal, researchEnabled);
+  const interestChoices = availableInterestChoices(state, nowReal);
+  const ownCreations = creations.filter((creation) => creation.characterId === state.id).slice(-32);
   return buildWorkingContext({
     identity: HUBERT_IDENTITY,
+    choices: actionChoices(
+      state,
+      observation,
+      research,
+      interestChoices,
+      ownCreations.map((creation) => creation.id),
+      mail,
+    ),
     state: {
       ...planningSummary(state, observation, nowReal),
       mail,
-      creations: creations
-        .filter((creation) => creation.characterId === state.id)
-        .slice(-32)
-        .map(({ id, title, description, url, kind, pinnedAt, provenance }) => ({
+      creations: ownCreations.map(
+        ({ id, title, description, url, kind, pinnedAt, provenance }) => ({
           id,
           title,
           description,
@@ -1041,9 +1118,10 @@ export function workingContext(
           kind,
           pinned: pinnedAt !== undefined,
           provenance,
-        })),
-      research: researchContext(state, observation, nowReal, researchEnabled),
-      interestChoices: availableInterestChoices(state, nowReal).map((choice) => ({ ...choice })),
+        }),
+      ),
+      research,
+      interestChoices: interestChoices.map((choice) => ({ ...choice })),
     },
     intentions: [
       state.intent,

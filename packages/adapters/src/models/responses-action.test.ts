@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { MODEL_ACTION_FORMAT } from '@elsewhere/character-interfaces';
 import { InvalidDecisionError } from '@elsewhere/character-runtime';
-import { parseResponsesAction, RESPONSES_ACTION_FORMAT } from './responses-action';
+import {
+  parseResponsesAction,
+  responsesActionFormat,
+  RESPONSES_ACTION_FORMAT,
+} from './responses-action';
 
 describe('Responses decision generation boundary', () => {
   it('uses an OpenAI-compatible root object while keeping all canonical action alternatives', () => {
@@ -107,4 +111,31 @@ describe('Responses decision generation boundary', () => {
       expect(JSON.stringify(error)).not.toContain('private-provider-canary');
     }
   });
+});
+
+it('limits strict generation to the choices offered for the turn', () => {
+  const format = responsesActionFormat([
+    { type: 'inspect', where: { targetId: ['bench'] } },
+    { type: 'move', where: { position: 'any' } },
+    { type: 'rest' },
+  ]);
+  const offered = format.schema.properties.action.anyOf;
+  expect(offered.map((item) => [item.properties.type.const, item.required])).toEqual([
+    ['inspect', ['type', 'targetId']],
+    ['move', ['type', 'position']],
+    ['rest', ['type']],
+    ['rest', ['type', 'durationMs']],
+  ]);
+  expect(offered[0].properties.targetId).toEqual({ type: 'string', enum: ['bench'] });
+  // Strict Responses schemas still require every listed property and no others.
+  for (const item of offered) {
+    expect(item.additionalProperties).toBe(false);
+    expect(item.required).toEqual(Object.keys(item.properties));
+  }
+  expect({ ...format, schema: undefined }).toEqual({
+    ...RESPONSES_ACTION_FORMAT,
+    schema: undefined,
+  });
+  expect(responsesActionFormat()).toEqual(RESPONSES_ACTION_FORMAT);
+  expect(responsesActionFormat([{ type: 'say' }])).toEqual(RESPONSES_ACTION_FORMAT);
 });

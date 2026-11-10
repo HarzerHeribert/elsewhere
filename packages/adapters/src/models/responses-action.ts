@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { CharacterCommandSchema, MODEL_ACTION_FORMAT } from '@elsewhere/character-interfaces';
+import {
+  CharacterCommandSchema,
+  narrowActionFormat,
+  type ActionChoice,
+} from '@elsewhere/character-interfaces';
 import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
 
 type ObjectFormat = {
@@ -28,24 +32,28 @@ function completeAlternatives(format: ObjectFormat): ObjectFormat[] {
 }
 
 /** OpenAI disallows root anyOf. Only this transport uses a one-property envelope;
- * the command inside remains the shared, provider-agnostic action vocabulary. */
-export const RESPONSES_ACTION_FORMAT = {
-  type: 'json_schema',
-  name: 'character_action_v1',
-  strict: true,
-  schema: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['action'],
-    properties: {
-      action: {
-        anyOf: MODEL_ACTION_FORMAT.anyOf.flatMap((format) =>
-          completeAlternatives(format as ObjectFormat),
-        ),
+ * the command inside remains the shared, provider-agnostic action vocabulary.
+ * With this turn's choices, generation itself is limited to admissible actions and targets. */
+export function responsesActionFormat(choices?: readonly ActionChoice[]) {
+  return {
+    type: 'json_schema',
+    name: 'character_action_v1',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['action'],
+      properties: {
+        action: {
+          anyOf: narrowActionFormat(choices).anyOf.flatMap((format) =>
+            completeAlternatives(format as ObjectFormat),
+          ),
+        },
       },
     },
-  },
-} as const;
+  } as const;
+}
+export const RESPONSES_ACTION_FORMAT = responsesActionFormat();
 
 const responseSchema = z.object({ action: CharacterCommandSchema }).strict();
 

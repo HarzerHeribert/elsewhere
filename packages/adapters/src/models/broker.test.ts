@@ -39,6 +39,25 @@ it('preserves the shared context contract when optional object values are undefi
   ).resolves.toEqual({ type: 'reflect' });
 });
 
+it('carries turn choices inside state so a service released before them still accepts the request', async () => {
+  const choices = [{ type: 'look' as const, where: { targetId: ['bench'] } }];
+  const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(init!.body as string);
+    expect(Object.keys(body.context).sort()).toEqual([
+      'intentions',
+      'memories',
+      'observations',
+      'outsideMessages',
+      'state',
+    ]);
+    expect(body.context.state).toEqual({ energy: 60, actionChoices: choices });
+    return Response.json({ value: { type: 'look', targetId: 'bench' } });
+  });
+  await expect(
+    new BrokerDecisionProvider(client(fetcher as typeof fetch)).propose({ ...context, choices }),
+  ).resolves.toEqual({ type: 'look', targetId: 'bench' });
+});
+
 it('sends typed context to a fixed private service without persona, actor selectors or provider credentials', async () => {
   const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
     const body = JSON.parse(init!.body as string);

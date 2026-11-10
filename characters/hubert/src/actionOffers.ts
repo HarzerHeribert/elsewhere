@@ -1,5 +1,6 @@
 import { CharacterCommandSchema } from '@elsewhere/character-interfaces';
 import type {
+  ActionChoice,
   CharacterCommand,
   Observation,
   WorldEntity,
@@ -194,6 +195,40 @@ export function hubertActionOffers(
   return [...objectOffers, ...entityOffers, ...places];
 }
 
+const SPATIAL_ACTIONS = ['move', 'look', 'inspect', 'interact', 'work'] as const;
+type SpatialAction = (typeof SPATIAL_ACTIONS)[number];
+
+/** The single admission rule behind prompts, output constraints and proposal validation. */
+function offerAdmits(
+  offer: HubertTargetOffer,
+  type: SpatialAction,
+): 'ready' | 'approach' | 'unavailable' {
+  if (type === 'move') return offer.kind === 'entity' && !offer.visible ? 'unavailable' : 'ready';
+  if (offer.kind === 'place') return 'unavailable';
+  if (offer.ready.includes(type)) return 'ready';
+  return offer.nextAction && offer.approachFor?.includes(type as ObjectAction)
+    ? 'approach'
+    : 'unavailable';
+}
+
+/**
+ * The spatial actions a proposal may name right now, per target. An activity that first
+ * needs an approach stays offered: the host turns it into the explicit move. A target on
+ * cooldown or outside watch eligibility is absent, so it cannot be selected at all.
+ */
+export function hubertSpatialChoices(offers: readonly HubertTargetOffer[]): ActionChoice[] {
+  return [
+    ...SPATIAL_ACTIONS.flatMap((type) => {
+      const targetId = offers
+        .filter((offer) => offerAdmits(offer, type) !== 'unavailable')
+        .map((offer) => offer.id);
+      return targetId.length ? [{ type, where: { targetId } }] : [];
+    }),
+    // Free movement stays a proposal; geometry and path admission belong to the world.
+    { type: 'move', where: { position: 'any' } },
+  ];
+}
+
 export type SpatialActionAssessment =
   | { status: 'ready'; command: CharacterCommand }
   | { status: 'approach'; command: { type: 'move'; targetId: string }; reason: string }
@@ -209,7 +244,7 @@ export function assessHubertSpatialAction(
 ): SpatialActionAssessment {
   if (!CharacterCommandSchema.safeParse(command).success)
     return { status: 'unavailable', reason: 'That action does not match the command contract.' };
-  if (!['move', 'look', 'inspect', 'interact', 'work'].includes(command.type))
+  if (!(SPATIAL_ACTIONS as readonly string[]).includes(command.type))
     return { status: 'not-spatial' };
   if (command.type === 'move' && command.position) return { status: 'ready', command }; // Geometry/path admission belongs to the world.
   const targetId = 'targetId' in command ? command.targetId : undefined;
@@ -217,23 +252,21 @@ export function assessHubertSpatialAction(
     (target) => target.id === targetId,
   );
   if (!offer) return { status: 'unavailable', reason: 'That target is not currently offered.' };
-  if (command.type === 'move') {
-    if (offer.kind === 'entity' && !offer.visible)
-      return { status: 'unavailable', reason: 'That creature is not currently visible.' };
-    return { status: 'ready', command };
-  }
+  const type = command.type as SpatialAction;
+  const admission = offerAdmits(offer, type);
+  if (admission === 'ready') return { status: 'ready', command };
+  if (admission === 'approach')
+    return {
+      status: 'approach',
+      command: offer.nextAction!,
+      reason: `Move closer to ${offer.name.toLowerCase()} before ${type === 'inspect' ? 'inspecting it' : 'trying that activity'}.`,
+    };
+  if (type === 'move')
+    return { status: 'unavailable', reason: 'That creature is not currently visible.' };
   if (offer.kind === 'place')
     return {
       status: 'unavailable',
       reason: 'A place is a destination, not an interactable object.',
-    };
-  const type = command.type as 'look' | ObjectAction;
-  if (offer.ready.includes(type)) return { status: 'ready', command };
-  if (offer.nextAction && offer.approachFor?.includes(type as ObjectAction))
-    return {
-      status: 'approach',
-      command: offer.nextAction,
-      reason: `Move closer to ${offer.name.toLowerCase()} before ${type === 'inspect' ? 'inspecting it' : 'trying that activity'}.`,
     };
   return {
     status: 'unavailable',

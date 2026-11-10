@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
-import { createFixtureAccount } from './auth-fixture';
+import { createFixtureAccount, waitForFixtureAuthWindow } from './auth-fixture';
 
 test('real signed assertions reject another account, missing verification, a foreign origin and a foreign RP before granting a session', async ({
   page,
   context,
-}) => {
+}, info) => {
   test.setTimeout(120000);
+  await waitForFixtureAuthWindow(info);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
+import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { WORLD_LIGHT } from './worldStyle';
 
 const VERTEX = /* glsl */ `
@@ -58,10 +58,66 @@ const OCCLUSION = /* glsl */ `
   }
 `;
 
-/** Tinted occlusion, filmic tone mapping and the world's grade, in one pass to the screen. */
+/** Keeps what outshines sunlit paper, at half size, as the seed of the glow. */
+const GLOW_BRIGHT = /* glsl */ `
+  uniform sampler2D tColor;
+  uniform vec2 uTexel;
+  uniform float uThreshold;
+  varying vec2 vUv;
+
+  vec3 bright(vec2 uv) {
+    vec3 c = min(texture2D(tColor, uv).rgb, vec3(32.0));
+    return c * smoothstep(uThreshold, uThreshold + 0.01, dot(c, vec3(0.2126, 0.7152, 0.0722)));
+  }
+  void main() {
+    // Every glint on a leaf or a ripple keeps its full energy: together they are the haze.
+    vec3 sum = bright(vUv + uTexel * vec2(-0.5, -0.5)) + bright(vUv + uTexel * vec2(0.5, -0.5))
+      + bright(vUv + uTexel * vec2(-0.5, 0.5)) + bright(vUv + uTexel * vec2(0.5, 0.5));
+    gl_FragColor = vec4(sum / 4.0, 1.0);
+  }
+`;
+
+/** Halves a glow level; every level down is a wider, cheaper blur. */
+const GLOW_DOWN = /* glsl */ `
+  uniform sampler2D tColor;
+  uniform vec2 uTexel;
+  varying vec2 vUv;
+  void main() {
+    vec3 sum = texture2D(tColor, vUv).rgb * 4.0;
+    sum += texture2D(tColor, vUv + uTexel * vec2(-1.0, -1.0)).rgb;
+    sum += texture2D(tColor, vUv + uTexel * vec2(1.0, -1.0)).rgb;
+    sum += texture2D(tColor, vUv + uTexel * vec2(-1.0, 1.0)).rgb;
+    sum += texture2D(tColor, vUv + uTexel * vec2(1.0, 1.0)).rgb;
+    gl_FragColor = vec4(sum / 8.0, 1.0);
+  }
+`;
+
+/** Spreads the wider level below back up and adds this level's own share. */
+const GLOW_UP = /* glsl */ `
+  uniform sampler2D tColor;
+  uniform sampler2D tBase;
+  uniform vec2 uTexel;
+  uniform vec2 uWeight;
+  varying vec2 vUv;
+  void main() {
+    vec2 h = uTexel * 0.5;
+    vec3 sum = texture2D(tColor, vUv + vec2(-h.x * 2.0, 0.0)).rgb;
+    sum += texture2D(tColor, vUv + vec2(-h.x, h.y)).rgb * 2.0;
+    sum += texture2D(tColor, vUv + vec2(0.0, h.y * 2.0)).rgb;
+    sum += texture2D(tColor, vUv + vec2(h.x, h.y)).rgb * 2.0;
+    sum += texture2D(tColor, vUv + vec2(h.x * 2.0, 0.0)).rgb;
+    sum += texture2D(tColor, vUv + vec2(h.x, -h.y)).rgb * 2.0;
+    sum += texture2D(tColor, vUv + vec2(0.0, -h.y * 2.0)).rgb;
+    sum += texture2D(tColor, vUv + vec2(-h.x, -h.y)).rgb * 2.0;
+    gl_FragColor = vec4(texture2D(tBase, vUv).rgb * uWeight.x + sum / 12.0 * uWeight.y, 1.0);
+  }
+`;
+
+/** Tinted occlusion, the glow, filmic tone mapping and the world's grade, in one pass. */
 const GRADE = /* glsl */ `
   uniform sampler2D tColor;
   uniform sampler2D tOcclusion;
+  uniform sampler2D tGlow;
   uniform vec2 uOcclusionTexel;
   uniform float uExposure;
   uniform float uOcclusion;
@@ -91,6 +147,7 @@ const GRADE = /* glsl */ `
     ao = mix(1.0, ao / 16.0, uOcclusion);
     // Creases fall towards a cool sky-shadow, never to flat black.
     color *= mix(vec3(0.16, 0.2, 0.3), vec3(1.0), ao);
+    color += texture2D(tGlow, vUv).rgb;
     color = filmic(color);
     float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
     color = mix(vec3(luma), color, 1.14);
@@ -102,6 +159,10 @@ const GRADE = /* glsl */ `
     gl_FragColor = vec4(encode(color) + (grain - 0.5) / 255.0, 1.0);
   }
 `;
+
+/** How strongly each glow level, from tight to wide, joins the picture. */
+const GLOW_LEVELS = [0.36, 0.42, 0.48, 0.54, 0.6, 0.6].map((share) => share * 0.32);
+const GLOW_THRESHOLD = 1.1;
 
 function softwareRenderer(renderer: THREE.WebGLRenderer) {
   const gl = renderer.getContext();
@@ -118,12 +179,31 @@ export interface WorldLook {
   dispose(): void;
 }
 
+function pass(fragmentShader: string, uniforms: Record<string, THREE.IUniform>) {
+  return new THREE.ShaderMaterial({
+    vertexShader: VERTEX,
+    fragmentShader,
+    uniforms,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+}
+
 /**
- * The world's light pipeline: HDR scene, depth-only contact shading, a soft bloom on
- * sunlit and lamplit surfaces, then one filmic grade. Software and WebGL1 renderers
- * draw directly with the same exposure, so the world stays usable everywhere.
+ * The world's light pipeline: HDR scene, depth-only contact shading, a soft glow on
+ * sunlit and lamplit surfaces, one filmic grade, then edge smoothing. Every pass after
+ * the scene is a single full-screen draw, and the glow works at half size and below, so
+ * the whole pipeline costs a fraction of drawing the world itself. Software and WebGL1
+ * renderers draw directly with the same exposure, so the world stays usable everywhere.
  */
 export function createWorldLook(renderer: THREE.WebGLRenderer): WorldLook {
+  // Nothing is multisampled any more, so leaf cards that ask for alpha-to-coverage are cut
+  // where they would have been half covered: the same average cover, decided per pixel.
+  THREE.ShaderChunk.alphatest_fragment = THREE.ShaderChunk.alphatest_fragment.replace(
+    'if ( diffuseColor.a == 0.0 ) discard;',
+    'if ( diffuseColor.a < 0.5 ) discard;',
+  );
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = WORLD_LIGHT.exposure;
   const direct: WorldLook = {
@@ -137,52 +217,85 @@ export function createWorldLook(renderer: THREE.WebGLRenderer): WorldLook {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2()).max(new THREE.Vector2(2, 2));
   const depth = new THREE.DepthTexture(size.x, size.y);
   depth.type = THREE.UnsignedIntType;
+  // Edges are smoothed after grading, so the scene itself is drawn without multisampling.
   const sceneTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
     type: THREE.HalfFloatType,
-    samples: 4,
     depthTexture: depth,
   });
-  const occlusionTarget = new THREE.WebGLRenderTarget(size.x >> 1, size.y >> 1, {
-    depthBuffer: false,
+  const occlusionTarget = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
+  const gradedTarget = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
+  const glowTarget = () =>
+    new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, depthBuffer: false });
+  const glowDown = GLOW_LEVELS.map(glowTarget),
+    glowUp = GLOW_LEVELS.slice(1).map(glowTarget);
+  const occlusion = pass(OCCLUSION, {
+    tDepth: { value: depth },
+    uProjection: { value: new THREE.Matrix4() },
+    uProjectionInverse: { value: new THREE.Matrix4() },
+    uTexel: { value: new THREE.Vector2() },
+    uRadius: { value: 0.75 },
   });
-  const occlusion = new THREE.ShaderMaterial({
-    vertexShader: VERTEX,
-    fragmentShader: OCCLUSION,
+  const bright = pass(GLOW_BRIGHT, {
+    tColor: { value: sceneTarget.texture },
+    uTexel: { value: new THREE.Vector2() },
+    uThreshold: { value: GLOW_THRESHOLD },
+  });
+  const down = pass(GLOW_DOWN, {
+    tColor: { value: null },
+    uTexel: { value: new THREE.Vector2() },
+  });
+  const up = pass(GLOW_UP, {
+    tColor: { value: null },
+    tBase: { value: null },
+    uTexel: { value: new THREE.Vector2() },
+    uWeight: { value: new THREE.Vector2() },
+  });
+  const grade = pass(GRADE, {
+    tColor: { value: sceneTarget.texture },
+    tOcclusion: { value: occlusionTarget.texture },
+    tGlow: { value: glowUp[0]!.texture },
+    uOcclusionTexel: { value: new THREE.Vector2() },
+    uExposure: { value: WORLD_LIGHT.exposure },
+    uOcclusion: { value: 0.85 },
+  });
+  const smooth = new THREE.ShaderMaterial({
+    vertexShader: FXAAShader.vertexShader,
+    // Edges are smoothed at full strength; lone bright pixels are mostly left alone, so
+    // sunlit leaves and grass keep their sparkle instead of blurring to a flat green.
+    fragmentShader: FXAAShader.fragmentShader
+      .replace('_SubpixelBlending = 1.0', '_SubpixelBlending = 0.35')
+      .replace('_RelativeThreshold = 0.063', '_RelativeThreshold = 0.125')
+      .replace('_ContrastThreshold = 0.0312', '_ContrastThreshold = 0.05'),
     uniforms: {
-      tDepth: { value: depth },
-      uProjection: { value: new THREE.Matrix4() },
-      uProjectionInverse: { value: new THREE.Matrix4() },
-      uTexel: { value: new THREE.Vector2() },
-      uRadius: { value: 0.75 },
+      tDiffuse: { value: gradedTarget.texture },
+      resolution: { value: new THREE.Vector2() },
     },
     depthTest: false,
     depthWrite: false,
     toneMapped: false,
   });
-  const grade = new THREE.ShaderMaterial({
-    vertexShader: VERTEX,
-    fragmentShader: GRADE,
-    uniforms: {
-      tColor: { value: sceneTarget.texture },
-      tOcclusion: { value: occlusionTarget.texture },
-      uOcclusionTexel: { value: new THREE.Vector2() },
-      uExposure: { value: WORLD_LIGHT.exposure },
-      uOcclusion: { value: 0.85 },
-    },
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.32, 0.7, 1.1);
   const quad = new FullScreenQuad(occlusion);
+  function draw(material: THREE.ShaderMaterial, target: THREE.WebGLRenderTarget | null) {
+    quad.material = material;
+    renderer.setRenderTarget(target);
+    quad.render(renderer);
+  }
   function setSize(width: number, height: number) {
     const w = Math.max(2, Math.floor(width)),
       h = Math.max(2, Math.floor(height));
     sceneTarget.setSize(w, h);
+    gradedTarget.setSize(w, h);
     occlusionTarget.setSize(w >> 1, h >> 1);
-    bloom.setSize(w, h);
+    glowDown.forEach((target, level) =>
+      target.setSize(Math.max(2, w >> (level + 1)), Math.max(2, h >> (level + 1))),
+    );
+    glowUp.forEach((target, level) =>
+      target.setSize(glowDown[level]!.width, glowDown[level]!.height),
+    );
     occlusion.uniforms.uTexel!.value.set(1 / w, 1 / h);
+    bright.uniforms.uTexel!.value.set(1 / w, 1 / h);
     grade.uniforms.uOcclusionTexel!.value.set(1 / (w >> 1), 1 / (h >> 1));
+    smooth.uniforms.resolution!.value.set(1 / w, 1 / h);
   }
   setSize(size.x, size.y);
 
@@ -193,23 +306,32 @@ export function createWorldLook(renderer: THREE.WebGLRenderer): WorldLook {
       renderer.render(scene, camera);
       occlusion.uniforms.uProjection!.value.copy(camera.projectionMatrix);
       occlusion.uniforms.uProjectionInverse!.value.copy(camera.projectionMatrixInverse);
-      quad.material = occlusion;
-      renderer.setRenderTarget(occlusionTarget);
-      quad.render(renderer);
-      // Adds the glow onto the resolved scene colour.
-      bloom.render(renderer, sceneTarget, sceneTarget, 0, false);
-      quad.material = grade;
-      renderer.setRenderTarget(null);
-      quad.render(renderer);
+      draw(occlusion, occlusionTarget);
+      draw(bright, glowDown[0]!);
+      for (let level = 1; level < glowDown.length; level++) {
+        const source = glowDown[level - 1]!;
+        down.uniforms.tColor!.value = source.texture;
+        down.uniforms.uTexel!.value.set(1 / source.width, 1 / source.height);
+        draw(down, glowDown[level]!);
+      }
+      for (let level = glowUp.length - 1; level >= 0; level--) {
+        const widest = level === glowUp.length - 1,
+          source = widest ? glowDown[level + 1]! : glowUp[level + 1]!;
+        up.uniforms.tColor!.value = source.texture;
+        up.uniforms.tBase!.value = glowDown[level]!.texture;
+        up.uniforms.uTexel!.value.set(1 / source.width, 1 / source.height);
+        up.uniforms.uWeight!.value.set(GLOW_LEVELS[level]!, widest ? GLOW_LEVELS[level + 1]! : 1);
+        draw(up, glowUp[level]!);
+      }
+      draw(grade, gradedTarget);
+      draw(smooth, null);
     },
     setSize,
     dispose() {
-      sceneTarget.dispose();
+      for (const target of [sceneTarget, occlusionTarget, gradedTarget, ...glowDown, ...glowUp])
+        target.dispose();
       depth.dispose();
-      occlusionTarget.dispose();
-      occlusion.dispose();
-      grade.dispose();
-      bloom.dispose();
+      for (const material of [occlusion, bright, down, up, grade, smooth]) material.dispose();
       quad.dispose();
     },
   };

@@ -1,6 +1,6 @@
 import {
   CharacterCommandSchema,
-  MODEL_ACTION_FORMAT,
+  narrowActionFormat,
   type CharacterCommand,
 } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
@@ -53,7 +53,7 @@ export class RoutedDecisionProvider implements DecisionProvider<CharacterCommand
     const result = await this.router.run(
       {
         workload: 'decision',
-        input: { messages, format: MODEL_ACTION_FORMAT },
+        input: { messages, format: narrowActionFormat(context.choices) },
         prefix: messages[0].content,
         promptVersion: DECISION_PROMPT_VERSION,
         validationVersion: 'character-command-v1',

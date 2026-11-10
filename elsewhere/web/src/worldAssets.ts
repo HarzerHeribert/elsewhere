@@ -10,8 +10,11 @@ export const WORLD_ASSETS = {
   treeAlternative: '/assets/polyhaven/models/fir_sapling/model-high.glb',
   treeAlternativeLow: '/assets/polyhaven/models/fir_sapling/model-low.glb',
   fern: '/assets/polyhaven/models/fern_02/model-high.glb',
+  fernLow: '/assets/polyhaven/models/fern_02/model-low.glb',
   shrub: '/assets/polyhaven/models/shrub_02/model-high.glb',
+  shrubLow: '/assets/polyhaven/models/shrub_02/model-low.glb',
   rock: '/assets/polyhaven/models/rock_07/model-high.glb',
+  rockLow: '/assets/polyhaven/models/rock_07/model-low.glb',
   smallRock: '/assets/polyhaven/models/rock_07/model-high.glb',
 } as const;
 export interface AssetPlacement {

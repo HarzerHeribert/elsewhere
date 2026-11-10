@@ -3,7 +3,7 @@ import type { DecisionContext, DecisionProvider } from '@elsewhere/character-run
 import { ChatGPTError } from '../../../security/src/chatgpt-store';
 import { boundedChatGPTJson, chatGPTFailure, ChatGPTSession } from '../../../security/src/chatgpt';
 import { decisionMessages, reportedUsage } from './shared';
-import { parseResponsesAction, RESPONSES_ACTION_FORMAT } from './responses-action';
+import { parseResponsesAction, responsesActionFormat } from './responses-action';
 import { ResponseTextChannels } from './response-text-channels';
 import {
   reflectionMessages,
@@ -149,7 +149,7 @@ export class ChatGPTClient {
       decisionMessages(context, 'envelope'),
       signal,
       undefined,
-      RESPONSES_ACTION_FORMAT,
+      responsesActionFormat(context.choices),
     );
   }
   async models(): Promise<Array<{ slug: string; displayName: string }>> {
@@ -183,7 +183,7 @@ export class ChatGPTClient {
     messages: ReturnType<typeof decisionMessages>,
     signal?: AbortSignal,
     onDelta?: (text: string) => void,
-    format?: typeof RESPONSES_ACTION_FORMAT,
+    format?: ReturnType<typeof responsesActionFormat>,
   ): Promise<string> {
     try {
       if (!this.catalog) await this.models();

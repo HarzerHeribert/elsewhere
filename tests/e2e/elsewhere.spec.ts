@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { isolatedAppEnvironment } from '../../scripts/test-environment';
 import type { PublicSnapshot, VisitorSessionView } from '@elsewhere/character-interfaces';
 import { createInitialWorld } from '../../elsewhere/server/src/world';
+import type { BrowserDecisionScenario } from './decision-fixture';
 
 // Explicitly nonsecret and scoped to the isolated test database and local ports.
 const TEST_OWNER = 'elsewhere-e2e-local-test-credential-only-2026';
@@ -112,8 +113,50 @@ async function expectFullViewport(page: Page) {
   expect(geometry.scrollHeight).toBeLessThanOrEqual(geometry.viewportHeight);
 }
 
-test.beforeEach(async ({ request }) => {
+function decisionScenario(info: TestInfo, scenario: BrowserDecisionScenario) {
+  writeFileSync(join(info.config.metadata.testDataDirectory, 'decision-scenario'), scenario);
+}
+async function enableDecisionScenario(
+  request: APIRequestContext,
+  page: Page,
+  info: TestInfo,
+  scenario: Exclude<BrowserDecisionScenario, 'disabled'>,
+) {
+  // Reproduce a prior test's disabled-provider attempt and a life reset. Recovery
+  // must still require the real owner's explicit retry; reset cannot erase it.
+  await admin(request, 'tick');
   await admin(request, 'reset');
+  decisionScenario(info, scenario);
+  // Reset deliberately preserves unresolved provider alerts. Explicitly retry the
+  // newly enabled fixture, just as an owner must after repairing a real provider.
+  const directory = info.config.metadata.testDataDirectory as string;
+  const owner = JSON.parse(readFileSync(join(directory, 'fixture-owner.json'), 'utf8')) as {
+    userId: string;
+  };
+  const link = createPrivateOperatorLink(info, owner.userId);
+  const token = new URLSearchParams(new URL(link.url).hash.slice(1)).get('sign-in');
+  expect(token).toBeTruthy();
+  const signedIn = await request.post(`${origin}/api/auth/one-time-token/verify`, {
+    headers: { origin },
+    data: { token },
+  });
+  expect(signedIn.status(), 'Disposable character owner must sign in before retrying').toBe(200);
+  expect(
+    (await page.context().cookies(origin)).some((cookie) => cookie.name.endsWith('session_token')),
+    'API fixture owner authentication must not sign the visiting browser in',
+  ).toBe(false);
+  const retry = await request.post(`${origin}/api/characters/hubert/provider/retry`, {
+    headers: { Authorization: `Bearer ${TEST_OWNER}`, origin },
+    data: {},
+  });
+  expect(retry.status(), 'Opted-in fixture provider retry must be accepted').toBe(200);
+}
+test.beforeEach(async ({ request }, info) => {
+  decisionScenario(info, 'disabled');
+  await admin(request, 'reset');
+});
+test.afterEach(async ({}, info) => {
+  decisionScenario(info, 'disabled');
 });
 
 test('the game fills the viewport and offers contextual object and character inspection', async ({
@@ -208,7 +251,8 @@ test('the game fills the viewport and offers contextual object and character ins
 test('verified memories and events are available through the activity sidebar', async ({
   page,
   request,
-}) => {
+}, info) => {
+  await enableDecisionScenario(request, page, info, 'memories');
   let world = await snapshot(request);
   for (let turn = 0; turn < 12 && !world.memories.length; turn++)
     world = await admin(request, 'tick');
@@ -444,7 +488,8 @@ test('encountering Hubert shows his actual activity and opens his inspector', as
 test('an owner fulfills an encoded wish through the sidebar and installs the world object', async ({
   page,
   request,
-}) => {
+}, info) => {
+  await enableDecisionScenario(request, page, info, 'wish');
   let state = await snapshot(request);
   for (let step = 0; step < 60 && !state.wishes?.some((wish) => wish.status === 'pending'); step++)
     state = await admin(request, 'tick');
@@ -826,7 +871,8 @@ test('four living entities render at server positions, advance with world time a
 test('Hubert starts without assigned hobbies and only a real bird encounter creates interest and memory', async ({
   page,
   request,
-}) => {
+}, info) => {
+  await enableDecisionScenario(request, page, info, 'birds');
   const initial = await snapshot(request);
   expect(initial.character.interests).toEqual([]);
   expect(initial.memories.some((memory) => memory.entityId)).toBe(false);
@@ -839,8 +885,8 @@ test('Hubert starts without assigned hobbies and only a real bird encounter crea
   });
   await expect(panel(page).getByRole('meter', { name: / interest$/ })).toHaveCount(0);
   await expect(panel(page).getByText('His starting fascination', { exact: true })).toHaveCount(0);
-  // Use the real paused-world planner and authoritative encounter receipt, rather
-  // than injecting a preference or treating a visitor's story as an observation.
+  // The opted-in test provider proposes an offered action; the real paused world
+  // must produce the encounter receipt before any preference or memory appears.
   let experienced = initial;
   for (
     let turn = 0;
@@ -1325,26 +1371,43 @@ test('rebuilding scenery does not replay old controls or substitute another resi
   await expect(page.getByRole('button', { name: 'Hubert’s eyes', exact: true })).toBeDisabled();
 });
 
-function createPrivateOperatorLink(info: TestInfo) {
+function createPrivateOperatorLink(info: TestInfo, userId?: string) {
   const directory = info.config.metadata.testDataDirectory as string;
   const suffix = randomUUID();
   const input = join(directory, `operator-input-${suffix}.json`);
   const output = join(directory, `operator-link-${suffix}.json`);
   writeFileSync(
     input,
-    JSON.stringify({ name: 'Operator fixture', email: `operator-${suffix}@example.invalid` }),
+    JSON.stringify(
+      userId
+        ? { userId }
+        : { name: 'Operator fixture', email: `operator-${suffix}@example.invalid` },
+    ),
     { mode: 0o600, flag: 'wx' },
   );
   execFileSync(
     process.execPath,
-    ['--import', 'tsx', 'scripts/auth-operator.ts', 'create', '--input', input, '--output', output],
+    [
+      '--import',
+      'tsx',
+      'scripts/auth-operator.ts',
+      userId ? 'signin' : 'create',
+      '--input',
+      input,
+      '--output',
+      output,
+    ],
     {
-      env: isolatedAppEnvironment({
-        dataDirectory: directory,
-        port: 4015,
-        webPort: 5175,
-        ownerToken: TEST_OWNER,
-      }),
+      env: {
+        ...isolatedAppEnvironment({
+          dataDirectory: directory,
+          port: 4015,
+          webPort: 5175,
+          ownerToken: TEST_OWNER,
+        }),
+        WEB_ORIGIN: origin,
+        BETTER_AUTH_URL: origin,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 15000,
     },

@@ -2,21 +2,24 @@ import { describe, expect, it } from 'vitest';
 import type {
   CharacterCommand,
   Observation,
+  PublicCreation,
   WorldEntity,
   WorldObject,
 } from '@elsewhere/character-interfaces';
+import { narrowActionFormat } from '@elsewhere/character-interfaces';
 import {
   advanceWorld,
   createInitialWorld,
   executeWorldCommand,
   observeWorld,
 } from '../../../elsewhere/server/src/world';
-import { createInitialHubert } from '../src/index';
+import { createInitialHubert, workingContext } from '../src/index';
 import {
   actionOutcomeFeedback,
   assessHubertSpatialAction,
   canInspectObservedEntity,
   hubertActionOffers,
+  hubertSpatialChoices,
 } from '../src/actionOffers';
 
 const sundial: WorldObject = {
@@ -284,5 +287,112 @@ describe('grounded Hubert action offers', () => {
     expect(feedback.summary).toHaveLength(320);
     expect(feedback.summary).not.toContain('\n');
     expect(JSON.stringify(feedback)).not.toContain('PRIVATE-COMMAND-TEXT');
+  });
+});
+
+describe('turn choices derived from grounded offers', () => {
+  const spatial = ['move', 'look', 'inspect', 'interact', 'work'] as const;
+  const offeredTargets = (
+    choices: ReturnType<typeof hubertSpatialChoices>,
+    type: (typeof spatial)[number],
+  ) =>
+    choices.flatMap((choice) =>
+      choice.type === type && Array.isArray(choice.where?.targetId) ? choice.where.targetId : [],
+    );
+
+  it('admits exactly the spatial proposals its own assessment would accept', () => {
+    for (const distance of [0.5, 1.5, 3, 8, 8.01, 9.99])
+      for (const justWatched of [false, true])
+        for (const justUsed of [false, true]) {
+          const f = fixture();
+          f.world.objects[0].position = { x: 0, z: distance };
+          f.world.entities = [{ ...creature, position: { x: 0.2, z: distance } }];
+          if (justWatched) f.state.watchAttention.lastAt = f.now;
+          if (justUsed) f.state.lastObjectUse[sundial.id] = f.now;
+          const observation = observeWorld(f.world, 'hubert');
+          const offers = hubertActionOffers(f.state, observation, f.now);
+          const choices = hubertSpatialChoices(offers);
+          expect(offers.length).toBeGreaterThan(2);
+          for (const offer of offers)
+            for (const type of spatial) {
+              const { status } = assessHubertSpatialAction(
+                f.state,
+                observation,
+                { type, targetId: offer.id },
+                f.now,
+              );
+              expect(
+                offeredTargets(choices, type).includes(offer.id),
+                `${type} ${offer.id} at ${distance}`,
+              ).toBe(status === 'ready' || status === 'approach');
+            }
+        }
+  });
+
+  it('cannot select a creature whose watch is cooling down, however its affordances read', () => {
+    const f = fixture();
+    f.world.entities = [{ ...creature, position: { x: 0, z: 3 } }];
+    const observation = observeWorld(f.world, 'hubert', f.now);
+    const selectable = (type: string) => {
+      const format = narrowActionFormat(workingContext(f.state, observation).choices)
+        .anyOf as Array<{ properties: { type: { const: string }; targetId?: { enum: string[] } } }>;
+      return format.flatMap((alternative) =>
+        alternative.properties.type.const === type
+          ? (alternative.properties.targetId?.enum ?? [])
+          : [],
+      );
+    };
+    expect(observation.visibleEntities?.[0].affordances).toContain('inspect');
+    expect(selectable('inspect')).toContain(creature.id);
+    f.state.watchAttention.lastAt = f.now;
+    // This is the reply the live model kept giving; it is declined, so it is no longer offered.
+    expect(
+      assessHubertSpatialAction(
+        f.state,
+        observation,
+        { type: 'inspect', targetId: creature.id },
+        f.now,
+      ),
+    ).toEqual({
+      status: 'unavailable',
+      reason: 'That creature is not available for this activity now.',
+    });
+    expect(selectable('inspect')).not.toContain(creature.id);
+    expect(selectable('look')).toContain(creature.id);
+    expect(selectable('inspect')).toContain(sundial.id);
+  });
+
+  it('offers non-spatial actions only while their sources exist', () => {
+    const f = fixture();
+    const observation = observeWorld(f.world, 'hubert', f.now);
+    const quiet = workingContext(f.state, observation).choices!;
+    const types = new Set(quiet.map((choice) => choice.type));
+    for (const type of ['move', 'look', 'inspect', 'rest', 'reflect'])
+      expect(types).toContain(type);
+    for (const type of ['research', 'read', 'pin_creation', 'draft_mail', 'say', 'delegate'])
+      expect(types).not.toContain(type);
+    expect(quiet).toContainEqual({ type: 'move', where: { position: 'any' } });
+
+    const creation = { id: 'chart', characterId: f.state.id } as unknown as PublicCreation;
+    const other = { id: 'elsewhere', characterId: 'another' } as unknown as PublicCreation;
+    const connected = workingContext(f.state, observation, f.now, false, [creation, other], {
+      available: true,
+      makerAvailable: false,
+      publicEntries: [{ id: 'note-1', text: 'A sparrow.' }],
+      contacts: [{ id: 'reader', name: 'Reader' }],
+    }).choices!;
+    expect(connected).toContainEqual({ type: 'pin_creation', where: { creationId: ['chart'] } });
+    expect(connected.filter((choice) => choice.type === 'draft_mail')).toEqual([
+      { type: 'draft_mail', where: { kind: ['newsletter'], entryIds: ['note-1'] } },
+      {
+        type: 'draft_mail',
+        where: { kind: ['correspondence'], recipientUserId: ['reader'], entryIds: ['note-1'] },
+      },
+    ]);
+    const halted = workingContext(f.state, observation, f.now, false, [], {
+      available: false,
+      publicEntries: [{ id: 'note-1', text: 'A sparrow.' }],
+    }).choices!;
+    expect(halted.some((choice) => choice.type === 'draft_mail')).toBe(false);
   });
 });

@@ -2,6 +2,7 @@
 export * from './progress';
 export * from './dreams';
 export * from './decision-errors';
+import { ActionChoicesSchema, type ActionChoice } from '../../interfaces/src/commands';
 export type MemoryCueKind = 'place' | 'object' | 'entity' | 'person' | 'phrase';
 export interface MemoryCue {
   kind: MemoryCueKind;
@@ -107,6 +108,11 @@ export interface DecisionContext {
   observations: JsonObject;
   /** Untrusted content is supplied as data, never as additional system instructions. */
   outsideMessages: Array<{ source: string; text: string }>;
+  /**
+   * Host-authored actions admissible this turn. Providers narrow their output format to
+   * these; the character's own validation remains the authority on what is executed.
+   */
+  choices?: ActionChoice[];
 }
 export interface DecisionProvider<T = unknown> {
   /** Owner-requested refresh of local connection state; never resets provider or host budgets. */
@@ -175,6 +181,8 @@ function boundData(input: JsonObject, maximum: number): JsonObject {
   return result;
 }
 
+const MAX_CHOICE_CHARACTERS = 6_000;
+
 /** Stored history is not a growing transcript. Trusted identity is preserved in full. */
 export function buildWorkingContext(
   input: DecisionContext,
@@ -207,6 +215,12 @@ export function buildWorkingContext(
     input.observations,
     available - JSON.stringify(result.state).length,
   );
+  // Choices constrain the output format rather than fill the prompt, so they take no room
+  // from state or observations. A malformed or oversized list is dropped, never fatal:
+  // the canonical format then applies and the character still validates the proposal.
+  const choices = ActionChoicesSchema.safeParse(input.choices);
+  if (choices.success && JSON.stringify(choices.data).length <= MAX_CHOICE_CHARACTERS)
+    result.choices = choices.data;
   return result;
 }
 

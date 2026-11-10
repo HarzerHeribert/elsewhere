@@ -1,11 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { createFixtureAccount } from './auth-fixture';
+import { createFixtureAccount, waitForFixtureAuthWindow } from './auth-fixture';
 
 test('enrollment defaults to this device, offers an explicit security key, and sign-in still accepts that key', async ({
   page,
   context,
-}) => {
+}, info) => {
+  test.setTimeout(120000);
+  await waitForFixtureAuthWindow(info);
   const cdp = await context.newCDPSession(page),
     authenticators = new Set<string>();
   await cdp.send('WebAuthn.enable');
