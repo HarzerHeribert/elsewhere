@@ -217,41 +217,114 @@ it('waits for a normal turn after an unusable reply and lets the model correct i
   }
 });
 
-it('bounds rejected world proposals across restart, records rejection feedback, and never executes them', async () => {
+it('paces declined world proposals across restart instead of stopping the character, and never executes them', async () => {
   const store = new MemoryStore();
-  const propose = vi.fn(async () => ({ type: 'inspect', targetId: 'unknown-fixture-target' }));
-  const options = { now: () => epoch, modelProvider: { id: 'fixture', propose } };
+  const propose = vi.fn(
+    async (): Promise<unknown> => ({
+      type: 'inspect',
+      targetId: 'unknown-fixture-target',
+    }),
+  );
+  const options = {
+    now: () => epoch,
+    simulationStepMs: 30_000,
+    decisionIntervalMs: 90_000,
+    modelProvider: { id: 'fixture', propose },
+  };
+  const ticksUntilNextCall = async (controller: ElsewhereController) => {
+    const calls = propose.mock.calls.length;
+    for (let ticks = 1; ticks <= 40; ticks++) {
+      await controller.tick();
+      if (propose.mock.calls.length > calls) return ticks;
+    }
+    return Infinity;
+  };
   const first = await new ElsewhereController(store, options).init();
   const before = first.getSnapshot();
   await first.step();
-  await first.step();
-  await first.step();
+  // Each further decline doubles the wait: one interval, then two, then four.
+  expect(await ticksUntilNextCall(first)).toBe(3);
+  expect(await ticksUntilNextCall(first)).toBe(6);
   expect(propose).toHaveBeenCalledTimes(3);
   expect(first.getSnapshot().memories).toEqual(before.memories);
   expect(first.getSnapshot().world.events).toEqual(before.world.events);
+  expect(store.saved!.value.hubert.turn).toBe(0);
   expect(store.saved!.value.hubert.lastOutcome).toMatchObject({
     action: 'inspect',
     status: 'rejected',
     targetId: 'unknown-fixture-target',
   });
+  // A working model choosing poorly is feedback for its next turn, never an outage.
   expect(first.getCharacterIssues()).toMatchObject([
-    { kind: 'invalid', code: 'unavailable_action', retrying: false },
+    { kind: 'invalid', code: 'unavailable_action', retrying: true },
   ]);
+  expect(first.getCharacterIssues()[0].message).toContain('Hubert will reconsider');
+  expect(first.getSnapshot().character.activity).toBe('Considering another approach');
+  expect(store.saved!.value.runtime).toMatchObject({
+    declinedDecisionCount: 3,
+    invalidDecisionCount: 0,
+  });
   await first.close();
   const next = await new ElsewhereController(store, options).init();
   try {
-    for (let i = 0; i < 10; i++) await next.step();
-    expect(propose).toHaveBeenCalledTimes(3);
-    await next.reset();
-    await next.step();
-    expect(propose).toHaveBeenCalledTimes(3);
-    expect(store.saved!.value.runtime.invalidDecisionCount).toBe(3);
-    await next.retryCharacterProvider();
-    await next.step();
-    expect(propose).toHaveBeenCalledTimes(4);
-    expect(next.getSnapshot().runtime.modelCalls).toBe(4);
+    expect(await ticksUntilNextCall(next)).toBe(12);
+    // The wait is capped at eight intervals, so the character keeps trying unattended.
+    expect(await ticksUntilNextCall(next)).toBe(24);
+    expect(await ticksUntilNextCall(next)).toBe(24);
+    expect(propose).toHaveBeenCalledTimes(6);
+    expect(next.getCharacterIssues()).toMatchObject([{ retrying: true }]);
+    propose.mockResolvedValue({ type: 'reflect' });
+    expect(await ticksUntilNextCall(next)).toBe(24);
+    expect(next.getCharacterIssues()[0].resolvedAt).toBe(epoch);
+    expect(store.saved!.value.runtime.declinedDecisionCount).toBe(0);
+    expect(store.saved!.value.hubert.lastDecisionProblem).toBeUndefined();
+    expect(next.getSnapshot().runtime.modelCalls).toBe(7);
   } finally {
     await next.close();
+  }
+});
+
+it('still stops after three unreadable replies, and a declined proposal does not count towards that', async () => {
+  const store = new MemoryStore();
+  const propose = vi
+    .fn(async (): Promise<unknown> => ({ type: 'teleport' }))
+    .mockResolvedValueOnce({ type: 'teleport' })
+    .mockResolvedValueOnce({ type: 'teleport' })
+    .mockResolvedValueOnce({ type: 'inspect', targetId: 'unknown-fixture-target' });
+  const options = { now: () => epoch, modelProvider: { id: 'fixture', propose } };
+  const controller = await new ElsewhereController(store, options).init();
+  try {
+    await controller.step();
+    await controller.step();
+    expect(store.saved!.value.runtime.invalidDecisionCount).toBe(2);
+    await controller.step();
+    // The readable but declined reply restarts the count of unreadable ones.
+    expect(store.saved!.value.runtime).toMatchObject({
+      invalidDecisionCount: 0,
+      declinedDecisionCount: 1,
+    });
+    await controller.step();
+    await controller.step();
+    expect(controller.getCharacterIssues()).toMatchObject([
+      { kind: 'invalid', code: 'invalid_action', retrying: true },
+    ]);
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(6);
+    expect(controller.getCharacterIssues()).toMatchObject([
+      { kind: 'invalid', code: 'invalid_action', retrying: false },
+    ]);
+    expect(controller.getSnapshot().runtime.modelStatus).toBe('Hubert is currently unavailable');
+    for (let i = 0; i < 10; i++) await controller.step();
+    await controller.reset();
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(6);
+    expect(store.saved!.value.runtime.invalidDecisionCount).toBe(3);
+    await controller.retryCharacterProvider();
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(7);
+    expect(controller.getSnapshot().runtime.modelCalls).toBe(7);
+  } finally {
+    await controller.close();
   }
 });
 

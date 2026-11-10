@@ -20,8 +20,11 @@ export {
   CharacterCommandSchema,
   MODEL_ACTION_FORMAT,
   MODEL_ACTION_INSTRUCTIONS,
+  ActionChoiceSchema,
+  ActionChoicesSchema,
+  narrowActionFormat,
 } from './commands';
-export type { Position, CharacterCommand } from './commands';
+export type { Position, CharacterCommand, CommandType, ActionChoice } from './commands';
 
 export interface Place {
   id: string;

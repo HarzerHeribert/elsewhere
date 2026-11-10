@@ -72,6 +72,36 @@ describe('associative memory', () => {
     expect(result.memories[0]).toMatchObject({ memoryId: '1', sourceEventId: 'e' });
   });
 
+  it('carries well-formed turn choices whole and never lets them fail a turn', () => {
+    const base = {
+      identity: 'A complete identity.',
+      state: { note: 'x'.repeat(3000) },
+      observations: {},
+      intentions: ['Look around'],
+      memories: [],
+      outsideMessages: [],
+    };
+    const choices = [
+      { type: 'look' as const, where: { targetId: ['bench'.padEnd(100, 'x')] } },
+      { type: 'rest' as const },
+    ];
+    const { choices: carried, ...prompt } = buildWorkingContext({ ...base, choices }, 2000);
+    expect(carried).toEqual(choices);
+    // They constrain the output format, so they take no room from state or observations.
+    expect(prompt).toEqual(buildWorkingContext(base, 2000));
+    expect(JSON.stringify(prompt).length).toBeLessThanOrEqual(2000);
+    expect(buildWorkingContext(base)).not.toHaveProperty('choices');
+    expect(
+      buildWorkingContext({ ...base, choices: [{ type: 'fly' }] as never }),
+    ).not.toHaveProperty('choices');
+    // An implausibly large list falls back to the canonical format instead of failing.
+    const many = Array.from({ length: 48 }, (_, index) => ({
+      type: 'look' as const,
+      where: { targetId: [`target-${index}`.padEnd(100, 'x'), `other-${index}`.padEnd(100, 'x')] },
+    }));
+    expect(buildWorkingContext({ ...base, choices: many })).not.toHaveProperty('choices');
+  });
+
   it('refuses to silently shorten trusted identity or accept an invalid allowance', () => {
     const input = {
       identity: 'x'.repeat(10_000),

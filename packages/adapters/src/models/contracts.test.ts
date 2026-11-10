@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CharacterCommandSchema, MODEL_ACTION_FORMAT } from '@elsewhere/character-interfaces';
+import {
+  CharacterCommandSchema,
+  MODEL_ACTION_FORMAT,
+  narrowActionFormat,
+} from '@elsewhere/character-interfaces';
 import type { DecisionContext } from '@elsewhere/character-runtime';
 import { CompatibleDecisionProvider } from './compatible';
 import { OllamaDecisionProvider } from './ollama';
@@ -72,6 +76,26 @@ describe.each(transports)('$name canonical model boundary', (transport) => {
     await expect(transport.create(fetcher, usage).propose(context)).rejects.toThrow();
     // Received usage remains chargeable even if the action is invalid.
     expect(usage).toHaveBeenCalledWith(32, 8);
+  });
+
+  it('shows turn choices as data and narrows a constrained transport to them', async () => {
+    const fetcher = vi.fn(
+      async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
+        new Response(JSON.stringify(transport.payload('{"type":"reflect"}'))),
+    );
+    const choices = [
+      { type: 'look' as const, where: { targetId: ['courtyard-bench'] } },
+      { type: 'reflect' as const },
+    ];
+    await transport.create(fetcher as typeof fetch).propose({ ...context, choices });
+    const sent = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
+    expect(JSON.parse(sent.messages[1].content).choices).toEqual(choices);
+    expect(sent.messages[0].content).toContain('complete list of actions admissible this turn');
+    expect(sent.messages[0].content).not.toContain('courtyard-bench');
+    if (transport.name === 'ollama') {
+      expect(sent.format).toEqual(narrowActionFormat(choices));
+      expect(sent.format.anyOf).toHaveLength(2);
+    }
   });
 
   it('accepts a valid fenced action consistently', async () => {

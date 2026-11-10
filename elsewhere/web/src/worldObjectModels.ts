@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { WorldObject } from '@elsewhere/character-interfaces';
-import { WORLD_ASSETS, type AttachWorldAsset } from './worldAssets';
+import { WORLD_ASSETS, type AssetPlacement, type AttachWorldAsset } from './worldAssets';
 import { addTreeCrowns } from './treeCrowns';
 import type { createEnvironmentMaterials } from './materials';
 import { ResourceScope, releaseObjectResources } from './sceneResources';
@@ -260,7 +260,7 @@ function buildPond(context: WorldObjectBuildContext) {
     stone.position.set(Math.cos(a) * r, 0.02, Math.sin(a) * r);
     stone.rotation.y = a;
     group.add(stone);
-    attachAsset(stone, i % 2 ? WORLD_ASSETS.rock : WORLD_ASSETS.smallRock, 0.34 + (i % 3) * 0.09);
+    scannedStone(attachAsset, stone, { height: 0.34 + (i % 3) * 0.09 }, 12);
   }
   for (let r = 0; r < 3; r++) {
     const ripple = new THREE.Mesh(
@@ -471,7 +471,7 @@ function buildStones({ root: g, assets: attachAsset }: WorldObjectBuildContext) 
     stone.position.set(x, -0.06, z);
     stone.rotation.y = turn;
     g.add(stone);
-    attachAsset(stone, WORLD_ASSETS.rock, { height, width, depth: width * 0.7 });
+    scannedStone(attachAsset, stone, { height, width, depth: width * 0.7 }, 26);
   }
 }
 
@@ -598,6 +598,17 @@ function buildFallback({ root: g, craft: k }: WorldObjectBuildContext) {
   k.box(g, k.stone(), 0.56, 0.07, 0.56, 0, 0.5, 0, { radius: 0.025, tile: 2 });
   k.box(g, k.metal(), 0.3, 0.008, 0.2, 0, 0.57, 0, { radius: 0 });
 }
+/** A scanned stone: the full scan close by, the lighter model from further off. */
+function scannedStone(
+  attachAsset: AttachWorldAsset,
+  parent: THREE.Object3D,
+  placement: AssetPlacement,
+  near: number,
+) {
+  attachAsset(parent, WORLD_ASSETS.rock, { ...placement, maxDistance: near });
+  attachAsset(parent, WORLD_ASSETS.rockLow, { ...placement, minDistance: near });
+}
+
 /** Order preserves the established id/kind precedence, including custom object fallbacks. */
 export const WORLD_OBJECT_MODEL_DEFINITIONS: readonly WorldObjectModelDefinition[] = [
   { id: 'bench', matches: ({ id, kind }) => kind === 'bench' || id === 'bench', build: buildBench },

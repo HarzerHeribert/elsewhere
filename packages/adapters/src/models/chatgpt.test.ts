@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatGPTStore } from '../../../security/src/chatgpt-store';
 import { ChatGPTSession } from '../../../security/src/chatgpt';
-import { RESPONSES_ACTION_FORMAT } from './responses-action';
+import { RESPONSES_ACTION_FORMAT, responsesActionFormat } from './responses-action';
 import {
   ChatGPTClient,
   ChatGPTDecisionProvider,
@@ -97,6 +97,27 @@ function client(response: () => Response) {
     api: new ChatGPTClient(session, { onUsageDetails: usage }),
   };
 }
+it('constrains generation to the choices offered for the turn without spending prompt room on them', async () => {
+  const fixture = client(() => stream(frame(completed('{"action":{"type":"reflect"}}'))));
+  const choices = [
+    { type: 'look' as const, where: { targetId: ['courtyard-sparrow', 'courtyard-bench'] } },
+    { type: 'inspect' as const, where: { targetId: ['courtyard-bench'] } },
+    { type: 'reflect' as const },
+  ];
+  await new ChatGPTDecisionProvider(fixture.api).propose({ ...context, choices });
+  const body = JSON.parse(fixture.fetcher.mock.calls[1][1]!.body as string);
+  expect(body.text.format).toEqual(responsesActionFormat(choices));
+  expect(body.text.format).not.toEqual(RESPONSES_ACTION_FORMAT);
+  const inspect = body.text.format.schema.properties.action.anyOf.find(
+    (item: { properties: { type: { const: string } } }) => item.properties.type.const === 'inspect',
+  );
+  expect(inspect.properties.targetId.enum).toEqual(['courtyard-bench']);
+  const plain = client(() => stream(frame(completed('{"action":{"type":"reflect"}}'))));
+  await new ChatGPTDecisionProvider(plain.api).propose(context);
+  const unconstrained = JSON.parse(plain.fetcher.mock.calls[1][1]!.body as string);
+  expect(body.input).toEqual(unconstrained.input);
+  expect(body.instructions).toEqual(unconstrained.instructions);
+});
 it('uses only the subscription Responses contract, keeping visitor data out of instructions', async () => {
   const fixture = client(() => stream(frame(completed('{"action":{"type":"reflect"}}'))));
   expect(await new ChatGPTDecisionProvider(fixture.api).propose(context)).toEqual({

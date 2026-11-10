@@ -1,4 +1,4 @@
-import { MODEL_ACTION_FORMAT, type CharacterCommand } from '@elsewhere/character-interfaces';
+import { narrowActionFormat, type CharacterCommand } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import {
   decisionMessages,
@@ -71,7 +71,7 @@ export class OllamaDecisionProvider implements DecisionProvider<CharacterCommand
         stream: false,
         think: false,
         keep_alive: '5m',
-        format: MODEL_ACTION_FORMAT,
+        format: narrowActionFormat(context.choices),
         options: {
           temperature: 0.4,
           num_ctx: this.options.contextTokens ?? 8192,

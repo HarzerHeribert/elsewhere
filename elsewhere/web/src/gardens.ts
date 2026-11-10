@@ -179,8 +179,21 @@ export function buildGardens(world: VillageScenery, scene: THREE.Scene, attach: 
     [29, -23, 0.7],
   ] as const)
     if (clear(x, z)) shrubs.push({ x, y: 0.035, z, height, rotationY: random() * Math.PI * 2 });
-  attach.instances(root, WORLD_ASSETS.fern, ferns, { maxDistance: 88, shadow: false });
-  attach.instances(root, WORLD_ASSETS.shrub, shrubs, { maxDistance: 100, shadow: true });
+  // The full scans are only drawn close by; further off the lighter models stand in.
+  const fernNear = 16,
+    shrubNear = 24;
+  attach.instances(root, WORLD_ASSETS.fern, ferns, { maxDistance: fernNear, shadow: false });
+  attach.instances(root, WORLD_ASSETS.fernLow, ferns, {
+    minDistance: fernNear,
+    maxDistance: 88,
+    shadow: false,
+  });
+  attach.instances(root, WORLD_ASSETS.shrub, shrubs, { maxDistance: shrubNear, shadow: true });
+  attach.instances(root, WORLD_ASSETS.shrubLow, shrubs, {
+    minDistance: shrubNear,
+    maxDistance: 100,
+    shadow: true,
+  });
   // A real fern fills the existing solid raised bed; its collision footprint does not change.
   const bed = world.objects.find((object) => object.id === 'garden');
   if (bed) {

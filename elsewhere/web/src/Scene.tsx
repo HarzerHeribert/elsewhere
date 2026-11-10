@@ -72,7 +72,8 @@ export function Scene(props: Props) {
     if (!host) return;
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      // The light pipeline smooths edges itself, so the canvas needs no multisampling.
+      renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     } catch {
       setFailed(true);
       return;
@@ -81,6 +82,8 @@ export function Scene(props: Props) {
     renderer.setClearColor(0xaacac4);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Shadows are redrawn on their own, slower beat (see the frame loop).
+    renderer.shadowMap.autoUpdate = false;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     // Several passes draw each frame; statistics are reset once per frame instead.
     renderer.info.autoReset = false;
@@ -292,6 +295,24 @@ export function Scene(props: Props) {
       lastLook = 0,
       lastDiagnostics = 0,
       frame = 0;
+    // An ambient world does not need every display refresh: 60 frames a second while
+    // someone steers it or the camera travels, 30 once it has settled. Shadows move
+    // slowly enough to be redrawn 30 times a second throughout.
+    const ACTIVE_FRAME = 1000 / 60,
+      SETTLED_FRAME = 1000 / 30,
+      SHADOW_FRAME = 1000 / 30,
+      SETTLE_AFTER = 2500;
+    let lastFrameAt = -Infinity,
+      lastShadowAt = -Infinity,
+      lastActive = performance.now();
+    const seenCameraPosition = new THREE.Vector3(),
+      seenCameraTurn = new THREE.Quaternion();
+    const wake = () => {
+      lastActive = performance.now();
+    };
+    const wakeEvents = ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
+    for (const type of wakeEvents)
+      window.addEventListener(type, wake, { capture: true, passive: true });
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     let gaitPhase = 0,
       gaitWeight = 0;
@@ -555,6 +576,13 @@ export function Scene(props: Props) {
     let initialized = false;
     function animate(now: number) {
       if (disposed) return;
+      const frameInterval = now - lastActive < SETTLE_AFTER ? ACTIVE_FRAME : SETTLED_FRAME,
+        sinceFrame = now - lastFrameAt;
+      if (sinceFrame < frameInterval - 1.5) {
+        frame = requestAnimationFrame(animate);
+        return;
+      }
+      lastFrameAt = sinceFrame > frameInterval * 1.5 ? now : lastFrameAt + frameInterval;
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       const data = live.current;
@@ -862,6 +890,18 @@ export function Scene(props: Props) {
       viewFrustum.setFromProjectionMatrix(viewProjection);
       attachAsset.updateVisibility(camera.position, viewFrustum);
       if (!reducedMotion.matches) windUniforms.uWindTime.value = now / 1000;
+      if (
+        camera.position.distanceToSquared(seenCameraPosition) > 1e-7 ||
+        1 - Math.abs(camera.quaternion.dot(seenCameraTurn)) > 1e-9
+      ) {
+        seenCameraPosition.copy(camera.position);
+        seenCameraTurn.copy(camera.quaternion);
+        lastActive = now;
+      }
+      if (now - lastShadowAt >= SHADOW_FRAME - 1.5) {
+        renderer.shadowMap.needsUpdate = true;
+        lastShadowAt = now;
+      }
       renderer.info.reset();
       look.render(scene, camera);
       if (now - lastDiagnostics > 750) {
@@ -887,6 +927,7 @@ export function Scene(props: Props) {
       cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       orbit.dispose();
+      for (const type of wakeEvents) window.removeEventListener(type, wake, { capture: true });
       window.removeEventListener('keydown', keydown);
       window.removeEventListener('keyup', keyup);
       window.removeEventListener('blur', blur);

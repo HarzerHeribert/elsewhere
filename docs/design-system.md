@@ -102,6 +102,8 @@ Do not import a model that brings its own palette or shading style. Scanned tree
 
 **Light.** One stable afternoon (`WORLD_LIGHT`): a warm sun, a cool sky fill and matching haze. `worldLook.ts` renders the scene in HDR, adds contact shadow from depth, a soft glow on lamplit and sunlit highlights, and one filmic grade with cool shadows and warm highlights. Software and WebGL1 renderers draw directly with the same exposure; the canvas reports `data-look="graded"` or `"direct"`. Do not add per-object lights or post effects; change the tokens.
 
+**Cost.** The world is ambient and must not hold a laptop's GPU at full load. Nothing is multisampled: edges are smoothed once after grading, and leaf cards are cut where they would have been half covered. The glow is built at half size and below and added in the grade, never drawn back over the scene. `Scene.tsx` draws 60 frames a second while someone steers or the camera travels and 30 once it has settled, whatever the display's refresh rate, and redraws shadows 30 times a second. Scanned plants and stones use their full model only close by (`model-high` within 12–26 m, `model-low` beyond). Keep new work inside those rules: no full-screen pass that reads the scene more than once, no always-on high-detail scan.
+
 **Movement.** Grass, flowers and tree leaves share one breeze (`wind.ts`); the pond drifts with it. Reduced motion stills it.
 
 To add an object: add a builder to `WORLD_OBJECT_MODEL_DEFINITIONS` that takes the kit from its context, uses `WORLD_SCALE`, and starts at y = 0. Built-in models are merged to one mesh per material; mark animated parts with `separate`.

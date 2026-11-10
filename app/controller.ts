@@ -110,6 +110,8 @@ export interface ControllerState {
     providerIssues?: ProviderIssue[];
     providerRetryRequested?: boolean;
     invalidDecisionCount?: number;
+    /** Consecutive well-formed proposals the world declined; these pace retries, never halt. */
+    declinedDecisionCount?: number;
     providerWorkloadRetries?: Array<'notebook' | 'reflection'>;
     /** Continuous observed rest only; a restart or pause begins a new session. */
     dreamRest?: { id: string; startedAt: number; startedAtReal: number };
@@ -382,6 +384,7 @@ export class ElsewhereController {
       const active = (this.state.runtime.providerIssues ?? []).filter((issue) => !issue.resolvedAt);
       if (active.some((issue) => issue.workload === 'decision')) {
         this.state.runtime.invalidDecisionCount = 0;
+        this.state.runtime.declinedDecisionCount = 0;
         this.state.runtime.providerRetryRequested = true;
         this.state.runtime.lastDecisionAt = -1;
         delete this.state.runtime.activityUntil;
@@ -424,6 +427,7 @@ export class ElsewhereController {
   ) {
     const issues = (this.state.runtime.providerIssues ??= []);
     const now = this.wallNow();
+    const name = publicCharacter(this.state.hubert).name;
     const messages = {
       unconfigured: 'No model provider is connected. Connect a provider before retrying.',
       unavailable:
@@ -432,7 +436,7 @@ export class ElsewhereController {
         'The provider request failed or returned an invalid response. Check the provider, then retry.',
       allowance: 'The daily model allowance has been reached. Retry after the allowance resets.',
       invalid: detail?.retrying
-        ? 'The model replied, but its proposed action could not be used. Hubert will reconsider on his next normal turn.'
+        ? `The model replied, but its proposed action could not be used. ${name} will reconsider on a following turn.`
         : 'Three consecutive model replies could not be used. No replacement actions were chosen. Review the action feedback, then retry.',
     };
     const existing = issues.find((issue) => issue.workload === workload && !issue.resolvedAt);
@@ -440,7 +444,7 @@ export class ElsewhereController {
     else
       issues.push({
         id: randomUUID(),
-        characterId: 'hubert',
+        characterId: this.state.hubert.id,
         workload,
         kind,
         since: now,
@@ -467,7 +471,7 @@ export class ElsewhereController {
         };
         return;
       }
-      this.state.runtime.modelStatus = 'Hubert is currently unavailable';
+      this.state.runtime.modelStatus = `${name} is currently unavailable`;
       this.state.hubert.activity = {
         kind: 'unavailable',
         label: 'Currently unavailable',
@@ -614,13 +618,21 @@ export class ElsewhereController {
             );
             this.resolveProviderIssue('decision');
             s.runtime.invalidDecisionCount = 0;
+            s.runtime.declinedDecisionCount = 0;
             delete decision.state.lastDecisionProblem;
             s.runtime.modelStatus = 'Model connected';
           } catch (error) {
             if (this.halted) throw new Error('Model dispatch stopped after a persistence failure.');
             if (error instanceof InvalidDecisionError) {
-              const count = (s.runtime.invalidDecisionCount ?? 0) + 1;
+              // A well-formed proposal the world declines is ordinary feedback from a working
+              // model. Only replies that cannot be read at all count towards stopping.
+              const declined =
+                error.code === 'unavailable_action'
+                  ? (s.runtime.declinedDecisionCount ?? 0) + 1
+                  : 0;
+              const count = declined ? 0 : (s.runtime.invalidDecisionCount ?? 0) + 1;
               s.runtime.invalidDecisionCount = count;
+              s.runtime.declinedDecisionCount = declined;
               s.hubert.lastDecisionProblem = {
                 at: now,
                 code: error.code,
@@ -644,7 +656,12 @@ export class ElsewhereController {
                 };
               }
               s.runtime.lastDecisionAt = now;
-              s.runtime.activityUntil = now + (this.options.decisionIntervalMs ?? 90_000);
+              // Repeated declines wait progressively longer (at most eight intervals) rather
+              // than spending a call every turn or leaving the character stopped for its owner.
+              s.runtime.activityUntil =
+                now +
+                (this.options.decisionIntervalMs ?? 90_000) *
+                  Math.min(2 ** Math.max(0, declined - 1), 8);
               this.reportProviderIssue('invalid', 'decision', {
                 code: error.code,
                 fields: [...error.fields],
@@ -1097,6 +1114,7 @@ export class ElsewhereController {
       const routing = structuredClone(this.state.modelRouting);
       const issues = structuredClone(this.state.runtime.providerIssues);
       const invalidDecisionCount = this.state.runtime.invalidDecisionCount;
+      const declinedDecisionCount = this.state.runtime.declinedDecisionCount;
       const creations = structuredClone(this.state.creations);
       const previous = this.state.hubert;
       const worldVersion = this.state.world.version;
@@ -1106,6 +1124,7 @@ export class ElsewhereController {
       this.state.creations = creations;
       this.state.runtime.providerIssues = issues;
       this.state.runtime.invalidDecisionCount = invalidDecisionCount;
+      this.state.runtime.declinedDecisionCount = declinedDecisionCount;
       if (routing) this.state.modelRouting = routing;
       this.state.hubert = preserveWishLedger(this.state.hubert, previous);
       this.state.hubert.dreams = pruneDreamState(previous.dreams, []);

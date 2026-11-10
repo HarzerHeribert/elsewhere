@@ -29,6 +29,7 @@ import {
 } from './usage-budget';
 import {
   BrokerDecisionRequestSchema,
+  decisionContextFromWire,
   BrokerErrorSchema,
   BrokerExpressionFrameSchema,
   BrokerExpressionRequestSchema,
@@ -401,7 +402,10 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         if (!parsed.success) throw new RequestFailure(400, 'invalid_request');
         const decision =
           workload === 'decision'
-            ? { identity: options.identity, ...BrokerDecisionRequestSchema.parse(body).context }
+            ? decisionContextFromWire(
+                options.identity,
+                BrokerDecisionRequestSchema.parse(body).context,
+              )
             : undefined;
         const reflection =
           workload === 'reflection'

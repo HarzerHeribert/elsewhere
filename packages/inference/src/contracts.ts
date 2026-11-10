@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ActionChoicesSchema } from '@elsewhere/character-interfaces';
 import { DECISION_DIAGNOSTIC_FIELDS } from '@elsewhere/character-runtime';
 import { PublicExpressionInputSchema } from '../../adapters/src/models/expression';
 import type { JsonObject, DecisionContext } from '@elsewhere/character-runtime';
@@ -122,12 +123,33 @@ export const BrokerExpressionRequestSchema = z
   .object({ input: PublicExpressionInputSchema })
   .strict();
 
+/**
+ * Choices travel inside `state` because the context contract is strict: a broker released
+ * before choices existed still accepts the request and simply shows the model the list.
+ */
+const WIRE_CHOICES_KEY = 'actionChoices';
+
 export function decisionWireContext(context: DecisionContext) {
-  const { identity: _identity, ...data } = context;
+  const { identity: _identity, choices, ...data } = context;
+  const wire = choices?.length
+    ? { ...data, state: { ...data.state, [WIRE_CHOICES_KEY]: choices } }
+    : data;
   // Match direct providers when JsonObject contains optional undefined object fields.
-  const parsed = BrokerDecisionContextSchema.safeParse(JSON.parse(canonicalJson(data)));
+  const parsed = BrokerDecisionContextSchema.safeParse(JSON.parse(canonicalJson(wire)));
   if (!parsed.success) throw new Error('Inference context is invalid or exceeds its bounds.');
   return parsed.data;
+}
+
+/** Restore the direct-provider context. Only a well-formed list may narrow the output format. */
+export function decisionContextFromWire(
+  identity: string,
+  wire: z.infer<typeof BrokerDecisionContextSchema>,
+): DecisionContext {
+  const { [WIRE_CHOICES_KEY]: carried, ...state } = wire.state;
+  const choices = ActionChoicesSchema.safeParse(carried);
+  return choices.success
+    ? { identity, ...wire, state, choices: choices.data }
+    : { identity, ...wire };
 }
 
 export const BrokerUsageSchema = z
