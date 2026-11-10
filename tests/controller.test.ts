@@ -577,6 +577,16 @@ describe('authoritative controller lifecycle', () => {
   });
 });
 
+const bench = 'I would like a bench by the pond, so I can watch the mallard sitting down.';
+/** An expression provider that answers only the chance to wish; notes and thoughts stay empty. */
+const wishing = (answer: () => string = () => bench) => ({
+  id: 'wish-fixture',
+  express: vi.fn(async (input: { form?: string; recentNotes?: string[] }) =>
+    input.form === 'wish' ? answer() : '',
+  ),
+});
+const wishAsks = (provider: ReturnType<typeof wishing>) =>
+  provider.express.mock.calls.map(([input]) => input).filter((input) => input.form === 'wish');
 async function reachWish(controller: ElsewhereController) {
   for (let i = 0; i < 100 && !controller.getSnapshot().wishes?.length; i++) await controller.step();
   const wish = controller.getSnapshot().wishes?.[0];
@@ -584,59 +594,93 @@ async function reachWish(controller: ElsewhereController) {
   return wish!;
 }
 
-describe('owner wishes and world upgrades', () => {
-  it('keeps the request allowance tied to real wall time rather than accelerated simulated steps', async () => {
+describe('wishes in the resident’s own words and world upgrades', () => {
+  it('never makes up a wish: without an authoring model there are none', async () => {
+    const { controller } = await create();
+    for (let i = 0; i < 40; i++) await controller.step();
+    expect(controller.getSnapshot().memories.length).toBeGreaterThanOrEqual(3);
+    expect(controller.getSnapshot().wishes).toEqual([]);
+  });
+
+  it('publishes what the resident wrote, asked from public fields on real wall time', async () => {
     let wall = epoch;
-    const { controller } = await create({ now: () => wall, simulationStepMs: 10 * 86_400_000 });
+    const expressionProvider = wishing();
+    const { controller } = await create({
+      now: () => wall,
+      simulationStepMs: 10 * 86_400_000,
+      expressionProvider,
+    });
     const first = await reachWish(controller);
-    expect(first.createdAt).toBe(epoch);
-    expect(first.status).toBe('pending');
+    expect(first).toEqual({ id: first.id, text: bench, createdAt: epoch, status: 'pending' });
+    const [asked] = wishAsks(expressionProvider);
+    expect(Object.keys(asked).sort()).toEqual(['facts', 'form', 'interests', 'recentNotes']);
+    expect(JSON.stringify(asked)).not.toMatch(/intent|outsideMessages|dreams|knownObjects/);
+    // Accelerated world time buys no further chances: only real time does.
     for (let i = 0; i < 3; i++) await controller.tick();
     expect(controller.getSnapshot().runtime.simulatedAt).toBeGreaterThan(epoch + 20 * 86_400_000);
-    expect(controller.getSnapshot().wishes).toHaveLength(1);
+    expect(wishAsks(expressionProvider)).toHaveLength(1);
     wall += 48 * 3_600_000;
     await controller.step();
+    expect(wishAsks(expressionProvider)).toHaveLength(2);
+    expect(wishAsks(expressionProvider)[1].recentNotes).toEqual([bench]);
     expect(controller.getSnapshot().wishes).toHaveLength(2);
   });
 
-  it('fulfills a request by installing the exact feature, stores an owner receipt and survives restart', async () => {
+  it('takes silence, or an answer that is not one short wish, as no wish and waits a day', async () => {
+    let wall = epoch;
+    let answer = '';
+    const expressionProvider = wishing(() => answer);
+    const { controller, store } = await create({ now: () => wall, expressionProvider });
+    for (let i = 0; i < 40 && !wishAsks(expressionProvider).length; i++) await controller.step();
+    expect(wishAsks(expressionProvider)).toHaveLength(1);
+    expect(controller.getSnapshot().wishes).toEqual([]);
+    expect((await store.load())!.value.hubert.wishesAskedAtReal).toBe(epoch);
+    await controller.step();
+    expect(wishAsks(expressionProvider)).toHaveLength(1);
+    wall += 24 * 3_600_000;
+    answer = 'Two lines\nare not a wish.';
+    await controller.step();
+    expect(wishAsks(expressionProvider)).toHaveLength(2);
+    expect(controller.getSnapshot().wishes).toEqual([]);
+    wall += 24 * 3_600_000;
+    answer = '“' + bench + '”';
+    await controller.step();
+    expect(controller.getSnapshot().wishes?.map((wish) => wish.text)).toEqual([bench]);
+  });
+
+  it('marks a wish as built on the owner’s word, installs nothing and survives restart', async () => {
     const file = databaseFile();
-    const { controller, store } = await create({}, file);
+    const expressionProvider = wishing();
+    const { controller, store } = await create({ expressionProvider }, file);
     const wish = await reachWish(controller);
     const before = controller.getSnapshot();
-    expect(before.world.objects.some((object) => object.id === wish.requestedObjectId)).toBe(false);
     const updated = await controller.resolveWish(wish.id, 'fulfill');
-    expect(updated.wishes?.find((item) => item.id === wish.id)?.status).toBe('fulfilled');
-    expect(updated.world.objects.some((object) => object.id === wish.requestedObjectId)).toBe(true);
-    expect(updated.world.version).toBeGreaterThan(before.world.version);
+    expect(updated.wishes).toEqual([{ ...wish, status: 'fulfilled', fulfilledAt: epoch }]);
+    expect(updated.world).toEqual(before.world);
     const saved = (await store.load())!.value;
-    expect(saved.hubert.wishReceipts).toHaveLength(1);
-    expect(saved.hubert.wishReceipts[0]).toMatchObject({
-      wishId: wish.id,
-      decision: 'fulfill',
-      objectId: wish.requestedObjectId,
-    });
-    expect(updated.wishes?.[0].receiptId).toBe(saved.hubert.wishReceipts[0].id);
+    expect(saved.hubert.wishReceipts).toEqual([
+      { id: saved.hubert.wishes[0].receiptId, wishId: wish.id, decision: 'fulfill', at: epoch },
+    ]);
     await expect(controller.resolveWish(wish.id, 'fulfill')).rejects.toThrow(/not pending/);
     await stop(controller);
-    const restarted = await create({}, file);
+    const restarted = await create({ expressionProvider }, file);
     expect(restarted.controller.getSnapshot()).toEqual(updated);
   });
 
-  it('allows an owner to decline without installing an object or damaging mood', async () => {
-    const { controller, store } = await create();
+  it('allows an owner to decline without changing the world or damaging mood', async () => {
+    const { controller, store } = await create({ expressionProvider: wishing() });
     const wish = await reachWish(controller);
     const before = controller.getSnapshot();
     const result = await controller.resolveWish(wish.id, 'decline');
     expect(result.wishes?.[0].status).toBe('declined');
     expect(result.character.mood).toBe(before.character.mood);
     expect(result.world).toEqual(before.world);
-    expect(result.world.objects.some((object) => object.id === wish.requestedObjectId)).toBe(false);
     expect((await store.load())!.value.hubert.wishReceipts[0].decision).toBe('decline');
   });
 
-  it('preserves fulfilled features, wishes, receipts and monotonic world version when resetting', async () => {
-    const { controller, store } = await create();
+  it('preserves wishes, receipts and a monotonic world version when resetting', async () => {
+    const expressionProvider = wishing();
+    const { controller, store } = await create({ expressionProvider });
     const wish = await reachWish(controller);
     const fulfilled = await controller.resolveWish(wish.id, 'fulfill');
     const receipts = (await store.load())!.value.hubert.wishReceipts;
@@ -644,11 +688,59 @@ describe('owner wishes and world upgrades', () => {
     expect(reset.runtime.tick).toBe(0);
     expect(reset.runtime.paused).toBe(true);
     expect(reset.world.version).toBeGreaterThan(fulfilled.world.version);
-    expect(reset.world.objects.some((object) => object.id === wish.requestedObjectId)).toBe(true);
     expect(reset.wishes).toEqual(fulfilled.wishes);
     expect((await store.load())!.value.hubert.wishReceipts).toEqual(receipts);
     for (let i = 0; i < 30; i++) await controller.step();
     expect(controller.getSnapshot().wishes).toHaveLength(1);
+    expect(wishAsks(expressionProvider)).toHaveLength(1);
+  });
+
+  it('retires catalog wishes and the objects they installed from a saved world', async () => {
+    const file = databaseFile();
+    const first = await create({}, file);
+    const saved = (await first.store.load())!;
+    const legacy = structuredClone(saved.value);
+    const scope = legacy.world.objects.find((object) => object.id === 'lookout-telescope')!;
+    const installed = { ...scope, id: 'telescope', name: 'Hubert’s telescope' };
+    legacy.world.objects.push(installed);
+    legacy.world.events.push({
+      id: 'notice',
+      at: epoch,
+      type: 'feature_installed',
+      message: 'An owner-approved world update added hubert’s telescope.',
+      objectId: 'telescope',
+    });
+    legacy.hubert.knownObjects.telescope = installed;
+    legacy.hubert.knownObjects['lookout-telescope'] = scope;
+    legacy.hubert.wishes = [
+      {
+        id: 'wish:hubert:1:telescope',
+        title: 'A small telescope',
+        description: 'I wonder what I might notice if I could look farther from the courtyard.',
+        reason: 'There seem to be patterns here that reward a longer look.',
+        createdAt: epoch,
+        status: 'fulfilled',
+        requestedObjectId: 'telescope',
+        receiptId: 'old',
+      } as never,
+    ];
+    legacy.hubert.wishReceipts = [
+      { id: 'old', wishId: 'wish:hubert:1:telescope', decision: 'fulfill', at: epoch },
+    ];
+    await first.store.save(legacy, saved.version);
+    await stop(first.controller);
+    const { controller, store } = await create({}, file);
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.wishes).toEqual([]);
+    expect(snapshot.world.objects.map((object) => object.id)).not.toContain('telescope');
+    expect(snapshot.world.objects.map((object) => object.id)).toContain('lookout-telescope');
+    expect(snapshot.events.some((event) => event.type === 'feature_installed')).toBe(false);
+    const stored = (await store.load())!.value;
+    expect(stored.hubert.wishes).toEqual([]);
+    expect(stored.hubert.wishReceipts).toEqual([]);
+    expect(Object.keys(stored.hubert.knownObjects)).not.toContain('telescope');
+    expect(Object.keys(stored.hubert.knownObjects)).toContain('lookout-telescope');
+    expect(stored.world.objects.map((object) => object.id)).not.toContain('telescope');
   });
 
   it('migrates a lived-in world to wildlife and bird curiosity once without inventing history', async () => {

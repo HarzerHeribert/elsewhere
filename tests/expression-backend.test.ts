@@ -15,6 +15,8 @@ import {
 import { readChatGPTStream } from '../packages/adapters/src/models/chatgpt';
 import {
   expressionMessages,
+  PublicExpressionInputSchema,
+  validatePublicWish,
   type PublicExpressionInput,
 } from '../packages/adapters/src/models/expression';
 
@@ -355,4 +357,33 @@ it('consumes an overflowing provider note to preserve reported usage without blo
     }),
   ).toEqual({ type: 'reflect' });
   expect(h.broker.getState().allowance.calls).toBe(2);
+});
+
+describe('a wish is asked for, never supplied', () => {
+  const wish: PublicExpressionInput = { ...input, form: 'wish' };
+  it('accepts the wish form, keeps it out of the data and leaves the wish to the resident', () => {
+    expect(PublicExpressionInputSchema.safeParse(wish).success).toBe(true);
+    expect(PublicExpressionInputSchema.safeParse({ ...input, form: 'catalog' }).success).toBe(
+      false,
+    );
+    const [system, user] = expressionMessages('Hubert.', wish);
+    expect(user.content).not.toContain('"form"');
+    expect(user.content).toContain('public-chime');
+    expect(system.content).toMatch(/^Hubert\.\n/);
+    expect(system.content).toContain('something you wish existed in Elsewhere');
+    expect(system.content).toContain('saying nothing is the ordinary answer');
+    expect(system.content).toContain('return an empty response');
+    // No object, name or example of a wish is suggested to the resident.
+    expect(system.content).not.toMatch(/telescope|weather station|for example|such as/i);
+    expect(system.content).not.toBe(expressionMessages('Hubert.', input)[0].content);
+  });
+  it('publishes one short paragraph or nothing', () => {
+    expect(validatePublicWish(' “I would like a bench by the pond.” ')).toBe(
+      'I would like a bench by the pond.',
+    );
+    expect(validatePublicWish('')).toBe('');
+    expect(() => validatePublicWish('One line.\nAnother line.')).toThrow(/short wish/);
+    expect(() => validatePublicWish('a'.repeat(281))).toThrow(/short wish/);
+    expect(() => validatePublicWish('{"wish":"a bench"}')).toThrow();
+  });
 });

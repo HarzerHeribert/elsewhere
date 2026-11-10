@@ -35,8 +35,9 @@ import {
 import { researchContext, type HubertResearchState } from './research';
 import type { CharacterWish, WishReceipt } from './wishes';
 export {
-  WISH_CATALOG,
-  considerWish,
+  wishDue,
+  wishInput,
+  recordWish,
   resolveWish,
   preserveWishLedger,
   publicWishes,
@@ -135,6 +136,8 @@ export interface HubertState {
   lastReflection: string;
   wishes: CharacterWish[];
   wishReceipts: WishReceipt[];
+  /** Real time the resident was last given the chance to wish, whether or not they did. */
+  wishesAskedAtReal?: number;
   dreams: DreamState;
   progress: ProgressLedger;
   progressGuidance: ProgressGuidance | null;

@@ -119,9 +119,7 @@ export function useOwnerActions(
       run(
         'wishes/' + encodeURIComponent(id),
         { decision },
-        decision === 'fulfill'
-          ? 'The requested object was added to Elsewhere.'
-          : 'The wish was declined for now.',
+        decision === 'fulfill' ? 'The wish is marked as built.' : 'The wish was declined for now.',
       ),
   };
 }

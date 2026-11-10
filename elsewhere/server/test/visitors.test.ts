@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   createInitialWorld,
   findPath,
-  installWishFeature,
   isWalkable,
   observeWorld,
   upgradeWorldLayout,
@@ -128,18 +127,40 @@ describe('expanded explorable world', () => {
     expect(upgradeWorldLayout(upgraded)).toBe(upgraded);
   });
 
-  it('only installs explicit owner feature presets and records a real world change', () => {
+  it('retires the objects a host catalog once installed and keeps everything else', () => {
     const world = createInitialWorld(1000);
-    expect(world.objects.some((object) => object.id === 'painting-kit')).toBe(false);
-    const upgraded = installWishFeature(world, 'painting-kit', 2000);
-    expect(upgraded.objects.find((object) => object.id === 'painting-kit')?.affordances).toContain(
-      'inspect',
+    const scope = world.objects.find((object) => object.id === 'lookout-telescope')!;
+    world.objects.push({ ...scope, id: 'telescope', name: 'Hubert’s telescope' });
+    world.residents[0].gazeTargetId = 'telescope';
+    world.events.push(
+      { id: 'kept', at: 1500, type: 'inspected', message: 'Kept.', objectId: 'telescope' },
+      // A later, real addition keeps its notice: only the retired catalog's are removed.
+      {
+        id: 'other',
+        at: 1600,
+        type: 'feature_installed',
+        message: 'Built.',
+        objectId: 'pond-bench',
+      },
+      {
+        id: 'notice',
+        at: 2000,
+        type: 'feature_installed',
+        message: 'Added.',
+        objectId: 'telescope',
+      },
     );
-    expect(upgraded.events.at(-1)?.type).toBe('feature_installed');
+    const upgraded = upgradeWorldLayout(world);
+    expect(upgraded.objects.map((object) => object.id)).toEqual(
+      world.objects.map((object) => object.id).filter((id) => id !== 'telescope'),
+    );
+    expect(upgraded.objects).toContainEqual(scope);
+    expect(upgraded.events.map((event) => event.id)).toEqual(
+      world.events.map((event) => event.id).filter((id) => id !== 'notice'),
+    );
+    expect(upgraded.residents[0].gazeTargetId).toBeUndefined();
     expect(upgraded.version).toBeGreaterThan(world.version);
-    expect(() => installWishFeature(upgraded, 'painting-kit', 3000)).toThrow('already installed');
-    expect(() => installWishFeature(world, 'shell-tool', 2000)).toThrow('catalog');
-    expect(() => installWishFeature(world, '__proto__', 2000)).toThrow('catalog');
+    expect(upgradeWorldLayout(upgraded)).toBe(upgraded);
   });
 });
 

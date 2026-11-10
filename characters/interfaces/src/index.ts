@@ -355,17 +355,16 @@ export interface PublicArtifact {
   createdAt: number;
 }
 
+/** Something a resident said they would like, in their own words. It installs nothing. */
 export interface PublicWish {
   id: string;
-  title: string;
-  description: string;
-  reason: string;
+  text: string;
+  /** Real wall-clock time. */
   createdAt: number;
+  /** 'fulfilled' is the owner's word that the wish was built. */
   status: 'pending' | 'fulfilled' | 'declined';
-  requestedObjectId: string;
   fulfilledAt?: number;
   declinedAt?: number;
-  receiptId?: string;
 }
 
 export const VisitorMessageSchema = z.object({ text: z.string().trim().min(1).max(500) }).strict();
