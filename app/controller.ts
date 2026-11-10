@@ -3,6 +3,7 @@ import { addCreation, publicCreations, setCreationPinned } from '../packages/cre
 import type { CreateCreationInput } from '../characters/interfaces/src/creations';
 import {
   InvalidDecisionError,
+  reproducesPrivateText,
   activePursuit,
   publicPursuits,
   recordPursuitEntry,
@@ -12,8 +13,10 @@ import { BrokerModelError } from '../packages/adapters/src/models/broker';
 import { displayMemorySummary } from '../characters/hubert/src/memoryQuality';
 import {
   validatePublicWish,
+  validatePublicWork,
   type ExpressionProvider,
 } from '../packages/adapters/src/models/expression';
+import { STUDIO_TEXT_LIMIT, type CharacterStudio } from '../characters/interfaces/src/studio';
 import { randomUUID } from 'node:crypto';
 import hubertAppearance from '../characters/hubert/appearance.json' with { type: 'json' };
 import type {
@@ -41,6 +44,7 @@ import {
   applySetAside,
   isMindCommand,
   isMindType,
+  atMakingPlace,
   chooseActionWithProvider,
   createInitialHubert,
   upgradeHubertState,
@@ -169,6 +173,8 @@ export interface ControllerOptions {
   reflectionProvider?: ReflectionProvider;
   expressionProvider?: ExpressionProvider;
   research?: CharacterResearchPort;
+  /** Where the character can publish files of its own; without one it cannot make things. */
+  studio?: CharacterStudio;
 }
 
 /** Character definitions supply their body dimensions; the shared world stays species-agnostic. */
@@ -772,6 +778,7 @@ export class ElsewhereController {
               Boolean(this.options.research),
               s.creations ?? [],
               mailContext,
+              this.options.studio ? { site: this.options.studio.site().url } : undefined,
             );
             this.resolveProviderIssue('decision');
             s.runtime.invalidDecisionCount = 0;
@@ -851,7 +858,11 @@ export class ElsewhereController {
       if (policy.allowed) {
         s.runtime.lastCommandType = policy.command.type;
         // A reading only exists once the world answers, so `use` is recorded with its outcome.
-        if (!isMindCommand(policy.command) && policy.command.type !== 'use')
+        if (
+          !isMindCommand(policy.command) &&
+          policy.command.type !== 'use' &&
+          policy.command.type !== 'make'
+        )
           this.recordTrail(policy.command, decision.why, observation.placeId, now);
         if (policy.command.type === 'draft_mail') {
           const command = policy.command;
@@ -941,6 +952,8 @@ export class ElsewhereController {
             };
           }
           s.runtime.activityUntil = now + 90_000;
+        } else if (policy.command.type === 'make') {
+          await this.makeStep(policy.command, decision.why, observation, now);
         } else if (isMindCommand(policy.command)) {
           await this.mindStep(policy.command, decision.why, observation, now);
         } else {
@@ -1075,6 +1088,182 @@ export class ElsewhereController {
       if (this.halted) throw Error('Mind step stopped after persistence failure.');
       outcome('rejected', 'That step is no longer available.');
     }
+  }
+  /**
+   * Making is a step of its own: the decision names only the file and the intent, the text is
+   * written by a second request, and the result is published at once. Nothing is reviewed.
+   * Failures say which kind of thing went wrong, never what a provider or a file contained.
+   */
+  private async makeStep(
+    command: Extract<CharacterCommand, { type: 'make' }>,
+    why: string,
+    observation: Observation,
+    now: number,
+  ) {
+    const s = this.state;
+    const studio = this.options.studio;
+    const settle = (status: 'completed' | 'rejected', summary: string, label?: string) => {
+      s.hubert.lastOutcome = {
+        id: randomUUID(),
+        at: now,
+        action: command.type,
+        status,
+        summary,
+      };
+      s.hubert.intent = summary;
+      if (label) s.hubert.activity = { kind: command.type, label, startedAt: now };
+      s.runtime.activityUntil = now + hubertActivityDurationMs(command);
+    };
+    const refuse = (summary: string) => {
+      settle('rejected', summary);
+      s.hubert.lastDecisionProblem = {
+        at: now,
+        code: 'unavailable_action',
+        message: summary,
+        fields: [],
+      };
+    };
+    // A failed attempt is public, but only as an attempt: the reason stays private.
+    const failed = (reason: string) => {
+      this.recordTrail(command, why, observation.placeId, now, {
+        text: `${command.title} — not published`,
+      });
+      settle('rejected', `Could not publish ${command.path}: ${reason}.`);
+    };
+    if (!studio) return refuse('There is no studio to publish to, so nothing can be made.');
+    if (!atMakingPlace(observation))
+      return refuse('Making needs a place where things can be made. Go to the workbench first.');
+    const privateTexts = s.hubert.outsideMessages.map((message) => message.text);
+    if ([command.title, command.about].some((text) => reproducesPrivateText(text, privateTexts)))
+      return failed('the title or description repeated an outside message');
+    const provider = this.options.expressionProvider;
+    if (!provider || provider.isAvailable?.() === false)
+      return failed('the writing service is unavailable');
+    // The authoring request is one more model call; without allowance nothing is written.
+    const reservation = this.reserveCall(this.wallNow());
+    if (!('allowance' in reservation))
+      return settle('rejected', 'There is no model allowance left to write that file just now.');
+    s.modelAllowance = reservation.allowance;
+    await this.commit(); // One durable reservation; an abandoned request is never replayed.
+    let existing: { text: string; sha: string } | null;
+    try {
+      existing = await studio.read(command.path);
+    } catch {
+      if (this.halted) throw Error('Make stopped after persistence failure.');
+      return failed('the studio could not be read');
+    }
+    const active = activePursuit(s.hubert.pursuits);
+    const entries = active?.entries ?? [];
+    const own = (s.creations ?? []).filter(
+      (creation) => creation.characterId === s.hubert.id && creation.origin,
+    );
+    let text: string;
+    this.modelDispatchActive = true;
+    try {
+      text = validatePublicWork(
+        await provider.express({
+          form: 'work',
+          path: command.path,
+          title: command.title,
+          about: command.about,
+          ...(existing ? { existing: existing.text.slice(0, STUDIO_TEXT_LIMIT) } : {}),
+          siteUrl: studio.site().url,
+          material: {
+            ...(active ? { question: active.question, why: active.why } : {}),
+            notes: entries
+              .flatMap((entry) => (entry.kind === 'note' ? [entry.text] : []))
+              .slice(-12),
+            readings: entries
+              .flatMap((entry) => (entry.kind === 'tried' ? [entry.text] : []))
+              .slice(-30),
+            openQuestions: active?.questions ?? [],
+          },
+          shelf: own.slice(-32).map((creation) => ({
+            path: creation.origin!.path,
+            title: creation.title,
+          })),
+        }),
+      );
+    } catch {
+      if (this.halted) throw Error('Make stopped after persistence failure.');
+      return failed('the text could not be written');
+    } finally {
+      this.modelDispatchActive = false;
+    }
+    if (reproducesPrivateText(text, privateTexts))
+      return failed('the text repeated an outside message');
+    let written: Awaited<ReturnType<CharacterStudio['write']>>;
+    try {
+      written = await studio.write({
+        path: command.path,
+        text,
+        message: command.title,
+        ...(existing ? { expectedSha: existing.sha } : {}),
+      });
+    } catch {
+      return failed('the studio refused the file');
+    }
+    const name = publicCharacter(s.hubert).name;
+    let creationId = '';
+    try {
+      s.creations = addCreation(
+        s.creations ?? [],
+        {
+          title: command.title,
+          description: command.about.slice(0, 500),
+          url: written.pageUrl,
+          kind: /\.(md|txt|csv|json)$/.test(command.path) ? 'document' : 'website',
+        },
+        {
+          id: 'creation-' + randomUUID(),
+          characterId: s.hubert.id,
+          createdAt: now,
+          provenance: 'character',
+          origin: {
+            ...(active ? { pursuitId: active.id } : {}),
+            path: command.path,
+            commitSha: written.commitSha,
+          },
+        },
+      );
+      const href = new URL(written.pageUrl).href;
+      creationId =
+        s.creations.find(
+          (creation) => creation.characterId === s.hubert.id && creation.url === href,
+        )?.id ?? '';
+    } catch {
+      // The file is public all the same; only the shelf could not take it.
+    }
+    if (active)
+      s.hubert.pursuits = recordPursuitEntry(
+        s.hubert.pursuits,
+        active.id,
+        {
+          kind: 'made',
+          id: 'made-' + randomUUID(),
+          at: now,
+          creationId,
+          path: command.path,
+          title: command.title,
+          url: written.pageUrl,
+          commitSha: written.commitSha,
+        },
+        now,
+      );
+    this.recordTrail(command, why, observation.placeId, now, {
+      text: command.title,
+      url: written.pageUrl,
+    });
+    s.world.events.push({
+      id: 'made-' + randomUUID(),
+      at: now,
+      type: 'creation_made',
+      characterId: s.hubert.id,
+      message: `${name} made ${command.title}.`,
+    });
+    s.world.events = s.world.events.slice(-100);
+    s.world.version++;
+    settle('completed', `Published ${command.path} at ${written.pageUrl}.`, 'Making something');
   }
   /** Search and read reach an external service: the attempt is persisted before the call. */
   private async researchStep(

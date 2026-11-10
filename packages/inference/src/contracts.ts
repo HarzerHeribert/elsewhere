@@ -199,7 +199,8 @@ export const BrokerExpressionFrameSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('complete'),
-      value: z.string().max(360),
+      // A file of the character's own site is longer than a wish; each form validates its own.
+      value: z.string().max(16000),
       usage: BrokerUsageSchema.optional(),
     })
     .strict(),

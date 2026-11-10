@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -40,6 +41,14 @@ const schema = z.object({
   MODEL_MAX_CALLS_PER_DAY: z.coerce.number().int().min(1).max(1000).default(150),
   MODEL_MAX_CALLS_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(60),
   MODEL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15000),
+  /** Development only: publish the resident's files into this folder instead of a GitHub site. */
+  STUDIO_FOLDER: z.string().min(1).max(4096).refine(isAbsolute).optional(),
+  STUDIO_FOLDER_URL: z
+    .string()
+    .url()
+    .max(2048)
+    .refine((value) => /^https?:/.test(value))
+    .default('https://studio.invalid/'),
 });
 
 /** Never print Zod's input-bearing error details for environment configuration. */

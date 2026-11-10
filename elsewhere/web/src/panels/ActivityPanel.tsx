@@ -195,11 +195,12 @@ export function ActivityPanel({
                     ) : (
                       <p>{item.entry.text}</p>
                     ))}
-                  {item.entry.kind === 'read' && item.entry.url?.startsWith('https://') && (
-                    <a href={item.entry.url} target="_blank" rel="noopener noreferrer">
-                      Open the page ↗
-                    </a>
-                  )}
+                  {(item.entry.kind === 'read' || item.entry.kind === 'make') &&
+                    item.entry.url?.startsWith('https://') && (
+                      <a href={item.entry.url} target="_blank" rel="noopener noreferrer">
+                        {item.entry.kind === 'make' ? 'Open the file ↗' : 'Open the page ↗'}
+                      </a>
+                    )}
                 </>
               ) : item.kind === 'memory' ? (
                 <>

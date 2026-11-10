@@ -13,10 +13,11 @@ import {
   executeWorldCommand,
   observeWorld,
 } from '../../../elsewhere/server/src/world';
-import { createInitialHubert, workingContext } from '../src/index';
+import { createInitialHubert, workingContext, type HubertState } from '../src/index';
 import {
   actionOutcomeFeedback,
   assessHubertSpatialAction,
+  atMakingPlace,
   canInspectObservedEntity,
   hubertActionOffers,
   hubertSpatialChoices,
@@ -159,22 +160,12 @@ describe('grounded Hubert action offers', () => {
       cooldownUntil: f.now + 90000,
       projectCompleted: true,
     });
-    expect(
-      assessHubertSpatialAction(
-        f.state,
-        observation,
-        { type: 'work', targetId: 'workbench' },
-        f.now,
-      ).status,
-    ).toBe('unavailable');
-    expect(
-      assessHubertSpatialAction(
-        f.state,
-        observation,
-        { type: 'work', targetId: 'workbench' },
-        f.now + 90000,
-      ).status,
-    ).toBe('ready');
+    // The retired fixed experiment is never offered, cooldown or not.
+    for (const at of [f.now, f.now + 90000])
+      expect(
+        assessHubertSpatialAction(f.state, observation, { type: 'work', targetId: 'workbench' }, at)
+          .status,
+      ).toBe('not-spatial');
     expect(
       assessHubertSpatialAction(f.state, observation, { type: 'rest', durationMs: 60000 }, f.now)
         .status,
@@ -233,7 +224,7 @@ describe('grounded Hubert action offers', () => {
           const command: CharacterCommand =
             type === 'use'
               ? { type, targetId: offer.id, control: control!.id, value: control!.value?.min }
-              : { type, targetId: offer.id };
+              : { type: type as 'look' | 'inspect' | 'interact', targetId: offer.id };
           expect(executeWorldCommand(f.world, 'hubert', command).outcome.status).toBe('completed');
         }
       }
@@ -294,7 +285,7 @@ describe('grounded Hubert action offers', () => {
 });
 
 describe('turn choices derived from grounded offers', () => {
-  const spatial = ['move', 'look', 'inspect', 'interact', 'work'] as const;
+  const spatial = ['move', 'look', 'inspect', 'interact'] as const;
   const offeredTargets = (
     choices: ReturnType<typeof hubertSpatialChoices>,
     type: (typeof spatial)[number],
@@ -397,5 +388,95 @@ describe('turn choices derived from grounded offers', () => {
       publicEntries: [{ id: 'note-1', text: 'A sparrow.' }],
     }).choices!;
     expect(halted.some((choice) => choice.type === 'draft_mail')).toBe(false);
+  });
+
+  describe('making', () => {
+    const bench = () => {
+      const f = fixture();
+      f.world.objects[0] = {
+        ...f.world.objects[0],
+        id: 'workbench',
+        position: { x: 0, z: 1 },
+        affordances: ['inspect', 'interact', 'work'],
+      };
+      f.state.knownObjects.workbench = structuredClone(f.world.objects[0]);
+      return { ...f, observation: observeWorld(f.world, 'hubert') };
+    };
+    const choiceTypes = (state: HubertState, observation: Observation, studio?: { site: string }) =>
+      workingContext(
+        state,
+        observation,
+        1000,
+        false,
+        [],
+        { available: false },
+        studio,
+      ).choices!.map((choice) => choice.type);
+
+    it('is ready only at the workbench with a studio, and work is never offered', () => {
+      const f = bench();
+      const withStudio = offerFor(
+        hubertActionOffers(f.state, f.observation, f.now, undefined, true),
+        'workbench',
+      );
+      expect(withStudio.ready).toContain('make');
+      expect(withStudio.ready).not.toContain('work');
+      expect(withStudio.approachFor).toBeUndefined();
+      const without = offerFor(hubertActionOffers(f.state, f.observation, f.now), 'workbench');
+      expect(without.ready).not.toContain('make');
+      expect(without.ready).not.toContain('work');
+      expect(atMakingPlace(f.observation)).toBe(true);
+      expect(choiceTypes(f.state, f.observation, { site: 'https://x.example/' })).toContain('make');
+      expect(choiceTypes(f.state, f.observation)).not.toContain('make');
+      for (const studio of [undefined, { site: 'https://x.example/' }])
+        expect(choiceTypes(f.state, f.observation, studio)).not.toContain('work');
+    });
+
+    it('lists make as something to approach when the workbench is farther away', () => {
+      const f = bench();
+      f.world.objects[0].position = { x: 0, z: 6 };
+      f.state.knownObjects.workbench = structuredClone(f.world.objects[0]);
+      const observation = observeWorld(f.world, 'hubert');
+      const offer = offerFor(
+        hubertActionOffers(f.state, observation, f.now, undefined, true),
+        'workbench',
+      );
+      expect(offer.ready).not.toContain('make');
+      expect(offer.approachFor).toContain('make');
+      expect(atMakingPlace(observation)).toBe(false);
+      expect(choiceTypes(f.state, observation, { site: 'https://x.example/' })).not.toContain(
+        'make',
+      );
+    });
+
+    it('describes the studio and the files made through make in the decision context', () => {
+      const f = bench();
+      const creation = {
+        id: 'c1',
+        characterId: 'hubert',
+        title: 'Fin angle',
+        description: 'Notes',
+        url: 'https://x.example/notes/fin-angle.html',
+        kind: 'document',
+        createdAt: 7,
+        provenance: 'character',
+        origin: { path: 'notes/fin-angle.md', commitSha: 'abc' },
+      } as unknown as PublicCreation;
+      const owner = { ...creation, id: 'c2', provenance: 'owner', origin: undefined };
+      const context = workingContext(
+        f.state,
+        f.observation,
+        1000,
+        false,
+        [creation, owner as unknown as PublicCreation],
+        { available: false },
+        { site: 'https://x.example/' },
+      );
+      expect(context.state.studio).toEqual({
+        site: 'https://x.example/',
+        files: [{ path: 'notes/fin-angle.md', title: 'Fin angle', at: 7 }],
+      });
+      expect(workingContext(f.state, f.observation).state).not.toHaveProperty('studio');
+    });
   });
 });

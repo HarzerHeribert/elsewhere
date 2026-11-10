@@ -59,11 +59,9 @@ function currentOpportunity(
   };
   if (action.type === 'reflect') {
     if (!target || !target.visible) return waitForPerception;
-    const preferred = [
-      ...(!state.inspections[target.id] ? ['inspect'] : []),
-      ...(!state.project.completed ? ['work'] : []),
-      'interact',
-    ].find((type) => target.ready.includes(type as 'inspect' | 'work' | 'interact'));
+    const preferred = [...(!state.inspections[target.id] ? ['inspect'] : []), 'interact'].find(
+      (type) => target.ready.includes(type as 'inspect' | 'interact'),
+    );
     if (preferred)
       return { status: 'available', smallestStep: { type: preferred, targetKey: target.id } };
     if (target.nextAction && target.approachFor?.length)
@@ -127,7 +125,7 @@ export function trackHubertIntent(
             (offer) =>
               offer.kind === 'object' &&
               offer.visible &&
-              (offer.ready.some((type) => ['inspect', 'work', 'interact'].includes(type)) ||
+              (offer.ready.some((type) => ['inspect', 'interact'].includes(type)) ||
                 (offer.nextAction && offer.approachFor?.length)),
           )
           .sort(
@@ -203,7 +201,7 @@ export function followThrough(
   if (guidance.kind === 'shrink' && guidance.reason === 'repeated-deliberation') {
     const targetId = guidance.smallestStep?.targetKey;
     const type = guidance.smallestStep?.type;
-    if (targetId && type && ['move', 'inspect', 'work', 'interact'].includes(type)) {
+    if (targetId && type && ['move', 'inspect', 'interact'].includes(type)) {
       const assessment = assessHubertSpatialAction(
         state,
         observation,

@@ -13,7 +13,7 @@ export class CreationError extends Error {}
 export function addCreation(
   items: readonly PublicCreation[],
   input: CreateCreationInput,
-  author: Pick<PublicCreation, 'id' | 'characterId' | 'createdAt' | 'provenance'>,
+  author: Pick<PublicCreation, 'id' | 'characterId' | 'createdAt' | 'provenance' | 'origin'>,
 ): PublicCreation[] {
   const parsed = CreateCreationSchema.safeParse(input);
   if (!parsed.success) throw new CreationError('Creation details are invalid.');

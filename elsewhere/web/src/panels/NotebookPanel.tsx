@@ -9,7 +9,7 @@ export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPur
     .filter(
       (pursuit) =>
         pursuit.questions.length > 0 ||
-        pursuit.entries.some((e) => e.kind === 'note' || e.kind === 'tried'),
+        pursuit.entries.some((e) => e.kind === 'note' || e.kind === 'tried' || e.kind === 'made'),
     )
     .sort((a, b) => b.lastAt - a.lastAt);
   return (
@@ -20,6 +20,7 @@ export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPur
       {withNotes.map((pursuit) => {
         const notes = pursuit.entries.flatMap((entry) => (entry.kind === 'note' ? [entry] : []));
         const tried = pursuit.entries.flatMap((entry) => (entry.kind === 'tried' ? [entry] : []));
+        const made = pursuit.entries.flatMap((entry) => (entry.kind === 'made' ? [entry] : []));
         let lastDay: number | undefined;
         return (
           <section key={pursuit.id} aria-label={pursuit.question}>
@@ -44,6 +45,21 @@ export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPur
                 {tried.map((entry) => (
                   <li key={entry.id}>
                     <span>{entry.text}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {made.length > 0 && (
+              <ul className="note-topics" aria-label="Made">
+                {made.map((entry) => (
+                  <li key={entry.id}>
+                    {entry.url.startsWith('https://') ? (
+                      <a href={entry.url} target="_blank" rel="noopener noreferrer">
+                        {entry.title} ↗
+                      </a>
+                    ) : (
+                      <span>{entry.title}</span>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -4,6 +4,7 @@ import {
   CharacterCommandSchema,
   CharacterDecisionSchema,
   MODEL_ACTION_FORMAT,
+  MODEL_ACTION_INSTRUCTIONS,
   narrowActionFormat,
   type ActionChoice,
 } from './commands';
@@ -270,5 +271,44 @@ describe('turn-specific action choices', () => {
     expect(
       CharacterCommandSchema.safeParse({ type: 'look', targetId: 'x'.repeat(101) }).success,
     ).toBe(false);
+  });
+
+  it('accepts a make command only with a lowercase site path and bounded text', () => {
+    const make = { type: 'make', path: 'notes/fin-angle.md', title: 'Fin angle', about: 'Notes.' };
+    expect(CharacterCommandSchema.safeParse(make).success).toBe(true);
+    expect(CharacterCommandSchema.safeParse({ ...make, path: 'index.html' }).success).toBe(true);
+    for (const path of [
+      'Notes.md',
+      '../secret.md',
+      '/etc/passwd.txt',
+      'notes/.hidden.md',
+      'notes//a.md',
+      'notes/a.exe',
+      'notes/a',
+      'a/' + 'b'.repeat(120) + '.md',
+    ])
+      expect(CharacterCommandSchema.safeParse({ ...make, path }).success, path).toBe(false);
+    expect(CharacterCommandSchema.safeParse({ ...make, title: '' }).success).toBe(false);
+    expect(CharacterCommandSchema.safeParse({ ...make, title: 'x'.repeat(81) }).success).toBe(
+      false,
+    );
+    expect(CharacterCommandSchema.safeParse({ ...make, about: 'x'.repeat(601) }).success).toBe(
+      false,
+    );
+    expect(CharacterCommandSchema.safeParse({ ...make, extra: 1 }).success).toBe(false);
+  });
+
+  it('offers make to the model and no longer offers work', () => {
+    const types = MODEL_ACTION_FORMAT.anyOf.map(
+      (item) => (item.properties as { type: { const: string } }).type.const,
+    );
+    expect(types).toContain('make');
+    expect(types).not.toContain('work');
+    expect(MODEL_ACTION_INSTRUCTIONS).toContain('make: writes or rewrites one file');
+    expect(MODEL_ACTION_INSTRUCTIONS).not.toContain('work: targetId');
+    // The command stays valid for the world code that still understands it.
+    expect(CharacterCommandSchema.safeParse({ type: 'work', targetId: 'workbench' }).success).toBe(
+      true,
+    );
   });
 });

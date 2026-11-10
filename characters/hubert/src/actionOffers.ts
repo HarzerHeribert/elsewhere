@@ -14,8 +14,20 @@ import type { HubertState } from './index';
 const OBJECT_REACH = 1.5;
 const ENTITY_INSPECT_RANGE = 8;
 const OBJECT_REUSE_COOLDOWN = 90_000;
-const SUPPORTED_OBJECT_ACTIONS = ['inspect', 'interact', 'work', 'use'] as const;
-type ObjectAction = (typeof SUPPORTED_OBJECT_ACTIONS)[number];
+/** The retired fixed experiment, `work`, is no longer offered; `make` at a place for work replaces it. */
+const SUPPORTED_OBJECT_ACTIONS = ['inspect', 'interact', 'use'] as const;
+type ObjectAction = (typeof SUPPORTED_OBJECT_ACTIONS)[number] | 'make';
+/** Affordance that marks a place where things can be made. */
+const MAKING_AFFORDANCE = 'work';
+
+/** Whether the resident stands within reach of a visible place for making things. */
+export function atMakingPlace(observation: Observation): boolean {
+  return observation.visibleObjects.some(
+    (object) =>
+      object.affordances.includes(MAKING_AFFORDANCE) &&
+      distanceTo(observation, object) <= object.radius + OBJECT_REACH,
+  );
+}
 
 export type HubertTargetOffer = {
   id: string;
@@ -109,6 +121,8 @@ export function hubertActionOffers(
   observation: Observation,
   now: number,
   preferredTargetId?: string,
+  /** Whether a studio is configured, so that making is something this character can offer. */
+  studio = false,
 ): HubertTargetOffer[] {
   if (observation.characterId !== state.id)
     throw Error('Action offers belong to another character.');
@@ -128,11 +142,13 @@ export function hubertActionOffers(
       const visible = visibleObjects.has(object.id);
       const distance = distanceTo(observation, object);
       const cooldownUntil = (state.lastObjectUse[object.id] ?? -Infinity) + OBJECT_REUSE_COOLDOWN;
-      const supported = SUPPORTED_OBJECT_ACTIONS.filter((action) =>
+      const supported: ObjectAction[] = SUPPORTED_OBJECT_ACTIONS.filter((action) =>
         action === 'use' ? Boolean(object.controls?.length) : object.affordances.includes(action),
       );
+      if (studio && object.affordances.includes(MAKING_AFFORDANCE)) supported.push('make');
       const available = supported.filter(
-        (action) => action === 'inspect' || action === 'use' || now >= cooldownUntil,
+        (action) =>
+          action === 'inspect' || action === 'use' || action === 'make' || now >= cooldownUntil,
       );
       const withinReach = visible && distance <= object.radius + OBJECT_REACH;
       return {
@@ -201,7 +217,7 @@ export function hubertActionOffers(
   return [...objectOffers, ...entityOffers, ...places];
 }
 
-const SPATIAL_ACTIONS = ['move', 'look', 'inspect', 'interact', 'work', 'use'] as const;
+const SPATIAL_ACTIONS = ['move', 'look', 'inspect', 'interact', 'use'] as const;
 type SpatialAction = (typeof SPATIAL_ACTIONS)[number];
 
 /** The single admission rule behind prompts, output constraints and proposal validation. */
@@ -234,6 +250,15 @@ export function hubertSpatialChoices(offers: readonly HubertTargetOffer[]): Acti
         type === 'use' ? { targetId, control: 'any' } : { targetId };
       return [{ type, where }];
     }),
+    // Making names no target: it is ready wherever the resident stands at a place for it.
+    ...(offers.some((offer) => offer.ready.includes('make'))
+      ? [
+          {
+            type: 'make' as const,
+            where: { path: 'any' as const, title: 'any' as const, about: 'any' as const },
+          },
+        ]
+      : []),
     // Free movement stays a proposal; geometry and path admission belong to the world.
     { type: 'move', where: { position: 'any' } },
   ];

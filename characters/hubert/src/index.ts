@@ -47,6 +47,7 @@ export {
   preserveWishLedger,
   publicWishes,
 } from './wishes';
+export { atMakingPlace } from './actionOffers';
 export type { CharacterWish, WishReceipt, WishResolution, WishStatus } from './wishes';
 
 import {
@@ -334,23 +335,25 @@ function recordIntent(
         ? 'Taking a walk'
         : action.type === 'rest'
           ? 'Resting for a while'
-          : action.type === 'work'
-            ? 'Working on a small experiment'
-            : action.type === 'inspect'
-              ? 'Looking more closely'
-              : action.type === 'reflect'
-                ? 'Putting things together'
-                : action.type === 'search'
-                  ? 'Searching the web'
-                  : action.type === 'read'
-                    ? 'Reading'
-                    : action.type === 'note'
-                      ? 'Writing a note'
-                      : action.type === 'pursue'
-                        ? 'Following a question'
-                        : action.type === 'set_aside'
-                          ? 'Setting a question aside'
-                          : 'Exploring Elsewhere',
+          : action.type === 'make'
+            ? 'Making something'
+            : action.type === 'work'
+              ? 'Working on a small experiment'
+              : action.type === 'inspect'
+                ? 'Looking more closely'
+                : action.type === 'reflect'
+                  ? 'Putting things together'
+                  : action.type === 'search'
+                    ? 'Searching the web'
+                    : action.type === 'read'
+                      ? 'Reading'
+                      : action.type === 'note'
+                        ? 'Writing a note'
+                        : action.type === 'pursue'
+                          ? 'Following a question'
+                          : action.type === 'set_aside'
+                            ? 'Setting a question aside'
+                            : 'Exploring Elsewhere',
     startedAt: now,
     ...('targetId' in action && action.targetId ? { objectId: action.targetId } : {}),
   };
@@ -706,7 +709,12 @@ export function recalledMemory(state: HubertState, now: number): PublicMemory | 
   return memory ? toPublicMemory(memory) : null;
 }
 /** A compact planning view; original episodes, memories and cue records stay in character state. */
-function planningSummary(state: HubertState, observation: Observation, nowReal: number) {
+function planningSummary(
+  state: HubertState,
+  observation: Observation,
+  nowReal: number,
+  studio = false,
+) {
   const now = observation.observedAt;
   const objects = Object.values(state.knownObjects)
     .sort((a, b) => {
@@ -765,7 +773,9 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
         action,
         retryCondition,
       })),
-    actionOffers: hubertActionOffers(state, observation, now).map((offer) => ({ ...offer })),
+    actionOffers: hubertActionOffers(state, observation, now, undefined, studio).map((offer) => ({
+      ...offer,
+    })),
     lastOutcome: state.lastOutcome ? { ...state.lastOutcome } : null,
     lastProposal: state.lastProposal ? { ...state.lastProposal } : null,
     lastDecisionProblem: state.lastDecisionProblem ? { ...state.lastDecisionProblem } : null,
@@ -791,6 +801,7 @@ function actionChoices(
   research: ReturnType<typeof researchContext>,
   creationIds: readonly string[],
   mail: JsonObject,
+  studio: boolean,
 ): ActionChoice[] {
   const ids = (value: JsonObject[string]) =>
     Array.isArray(value)
@@ -811,7 +822,9 @@ function actionChoices(
   const contacts = ids(mail.contacts).slice(0, 64);
   const pursuitIds = state.pursuits.items.map((item) => item.id);
   return [
-    ...hubertSpatialChoices(hubertActionOffers(state, observation, observation.observedAt)),
+    ...hubertSpatialChoices(
+      hubertActionOffers(state, observation, observation.observedAt, undefined, studio),
+    ),
     { type: 'rest' },
     { type: 'reflect' },
     { type: 'pursue', where: { question: 'any', why: 'any' } },
@@ -848,6 +861,7 @@ export function workingContext(
   researchEnabled = false,
   creations: readonly PublicCreation[] = [],
   mail: JsonObject = { available: false },
+  studio?: { site: string },
 ): DecisionContext {
   const research = researchContext(state, nowReal, researchEnabled);
   const ownCreations = creations.filter((creation) => creation.characterId === state.id).slice(-32);
@@ -860,10 +874,26 @@ export function workingContext(
         research,
         ownCreations.map((creation) => creation.id),
         mail,
+        Boolean(studio),
       ),
       state: {
-        ...planningSummary(state, observation, nowReal),
+        ...planningSummary(state, observation, nowReal, Boolean(studio)),
         mail,
+        ...(studio
+          ? {
+              studio: {
+                site: studio.site,
+                files: creations
+                  .filter((creation) => creation.characterId === state.id && creation.origin)
+                  .slice(-32)
+                  .map((creation) => ({
+                    path: creation.origin!.path,
+                    title: creation.title,
+                    at: creation.createdAt,
+                  })),
+              },
+            }
+          : {}),
         creations: ownCreations.map(
           ({ id, title, description, url, kind, pinnedAt, provenance }) => ({
             id,
@@ -946,6 +976,7 @@ function publicTexts(why: string, action: CharacterCommand): string[] {
   else if (action.type === 'set_aside') fields.push(action.reason);
   else if (action.type === 'search') fields.push(action.query);
   else if (action.type === 'note') fields.push(action.text, action.next);
+  else if (action.type === 'make') fields.push(action.title, action.about);
   return fields.filter((text): text is string => Boolean(text));
 }
 
@@ -975,6 +1006,8 @@ function mindStepProblem(
       return readableSources(state, nowReal).some((offer) => offer.sourceId === action.sourceId)
         ? undefined
         : 'That source is not available to read. Use a sourceId from state.research.sources.';
+    case 'work':
+      return 'That fixed experiment is retired. Use make at the workbench to make something of your own.';
     default:
       return undefined;
   }
@@ -990,11 +1023,12 @@ export async function chooseActionWithProvider(
   researchEnabled = false,
   creations: readonly PublicCreation[] = [],
   mail: JsonObject = { available: false },
+  studio?: { site: string },
 ): Promise<HubertDecision> {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
   const result = await provider.propose(
-    workingContext(state, observation, nowReal, researchEnabled, creations, mail),
+    workingContext(state, observation, nowReal, researchEnabled, creations, mail, studio),
   );
   const parsed = CharacterDecisionSchema.safeParse(result);
   if (!parsed.success)

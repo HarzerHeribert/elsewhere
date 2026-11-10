@@ -5,6 +5,7 @@ import { boundedChatGPTJson, chatGPTFailure, ChatGPTSession } from '../../../sec
 import { decisionMessages, reportedUsage } from './shared';
 import { parseResponsesAction, responsesActionFormat } from './responses-action';
 import { ResponseTextChannels } from './response-text-channels';
+import { STUDIO_TEXT_LIMIT } from '../../../../characters/interfaces/src/studio';
 import {
   reflectionMessages,
   validateReflectionProposal,
@@ -44,6 +45,7 @@ export async function readChatGPTStream(
   response: Response,
   usage: (value: ModelUsage | undefined) => void,
   onDelta?: (text: string) => void,
+  maxOutputBytes?: number,
 ): Promise<string> {
   if (!response.ok) {
     // An HTTP error status arrives in place of a stream: the provider refused the request
@@ -63,7 +65,7 @@ export async function readChatGPTStream(
   const reader = response.body?.getReader();
   if (!reader) throw new ChatGPTError('empty_response');
   const decoder = new TextDecoder('utf-8', { fatal: true });
-  const channels = new ResponseTextChannels(onDelta);
+  const channels = new ResponseTextChannels(onDelta, maxOutputBytes);
   let buffer = '',
     bytes = 0;
   try {
@@ -195,6 +197,7 @@ export class ChatGPTClient {
     signal?: AbortSignal,
     onDelta?: (text: string) => void,
     format?: ReturnType<typeof responsesActionFormat>,
+    maxOutputBytes?: number,
   ): Promise<string> {
     let sent = false;
     try {
@@ -232,6 +235,7 @@ export class ChatGPTClient {
           this.options.onUsageDetails?.(usage);
         },
         onDelta,
+        maxOutputBytes,
       );
     } catch (error) {
       const failure =
@@ -292,11 +296,21 @@ export class ChatGPTExpressionProvider implements ExpressionProvider {
   async express(input: PublicExpressionInput, onDelta?: (text: string) => void) {
     let length = 0;
     return validatePublicExpression(
-      await this.client.text(expressionMessages(this.identity, input), undefined, (text) => {
-        length += text.length;
-        if (length > 360) return; // Consume the bounded terminal event so known usage is retained.
-        onDelta?.(text);
-      }),
+      await this.client.text(
+        expressionMessages(this.identity, input),
+        undefined,
+        (text) => {
+          // A file is returned whole; only a wish is passed on as it is written.
+          if (input.form === 'work') return;
+          length += text.length;
+          if (length > 360) return; // Consume the bounded terminal event so known usage is retained.
+          onDelta?.(text);
+        },
+        undefined,
+        // A file may be 16,000 characters, which can take several bytes each.
+        input.form === 'work' ? 4 * STUDIO_TEXT_LIMIT : undefined,
+      ),
+      input.form,
     );
   }
 }

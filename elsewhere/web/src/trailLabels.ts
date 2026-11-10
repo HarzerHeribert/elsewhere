@@ -12,6 +12,7 @@ const labels: Record<string, string> = {
   rest: 'I rested',
   interact: 'I tried something',
   use: 'Tried something',
+  make: 'Made something',
   work: 'I worked on something',
   reflect: 'I thought it over',
   pin_creation: 'I tidied my creations',

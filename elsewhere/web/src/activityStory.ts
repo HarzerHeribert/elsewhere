@@ -23,7 +23,7 @@ export interface DayStory {
   routineCount: number;
 }
 
-const madeTypes = new Set(['artifact_created', 'feature_installed']);
+const madeTypes = new Set(['artifact_created', 'feature_installed', 'creation_made']);
 /** Steps of the mind: what the resident follows, reads and writes down. */
 export const mindKinds: ReadonlySet<string> = new Set([
   'pursue',
@@ -31,6 +31,7 @@ export const mindKinds: ReadonlySet<string> = new Set([
   'search',
   'read',
   'note',
+  'make',
 ]);
 
 /** One entry per calendar day that has anything to tell, newest day first. */

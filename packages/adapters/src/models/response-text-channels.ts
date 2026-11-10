@@ -21,7 +21,9 @@ function index(value: unknown) {
     throw new ChatGPTError('invalid_stream_event');
   return value as number;
 }
-function text(message: Envelope): string {
+/** Bytes of answer text accepted by default; a longer answer is asked for explicitly. */
+export const DEFAULT_OUTPUT_BYTES = 16000;
+function text(message: Envelope, limit: number): string {
   if (message.role !== 'assistant' || !Array.isArray(message.content))
     throw new ChatGPTError('invalid_completed_response');
   const result = message.content
@@ -32,7 +34,7 @@ function text(message: Envelope): string {
       return part.text;
     })
     .join('');
-  if (Buffer.byteLength(result) > 16000) throw new ChatGPTError('output_too_large');
+  if (Buffer.byteLength(result) > limit) throw new ChatGPTError('output_too_large');
   return result;
 }
 const partsText = (output: Output) =>
@@ -48,7 +50,10 @@ export class ResponseTextChannels {
   private legacy = '';
   private legacySeen = false;
   private bytes = 0;
-  constructor(private readonly onDelta?: (value: string) => void) {}
+  constructor(
+    private readonly onDelta?: (value: string) => void,
+    private readonly limit = DEFAULT_OUTPUT_BYTES,
+  ) {}
 
   private output(at: number, id: unknown) {
     if (typeof id !== 'string' || !id || id.length > 200)
@@ -80,7 +85,7 @@ export class ResponseTextChannels {
       output.phase ??= nextPhase;
       output.seen = true;
       if (event.type === 'response.output_item.done') {
-        const final = text(item);
+        const final = text(item, this.limit);
         if (output.parts.size && partsText(output) !== final)
           throw new ChatGPTError('invalid_completed_output');
         this.emit(output, final);
@@ -90,7 +95,7 @@ export class ResponseTextChannels {
     if (typeof event.delta !== 'string') throw new ChatGPTError('invalid_stream_event');
     if (!event.delta) return;
     this.bytes += Buffer.byteLength(event.delta);
-    if (this.bytes > 16000) throw new ChatGPTError('output_too_large');
+    if (this.bytes > this.limit) throw new ChatGPTError('output_too_large');
     if (event.output_index === undefined && event.item_id === undefined) {
       this.legacySeen = true;
       this.legacy += event.delta;
@@ -123,7 +128,7 @@ export class ResponseTextChannels {
       const item = object(value[at]);
       if (!item || item.type !== 'message' || item.id !== output.id)
         throw new ChatGPTError('invalid_completed_output');
-      if (output.parts.size && partsText(output) !== text(item))
+      if (output.parts.size && partsText(output) !== text(item, this.limit))
         throw new ChatGPTError('invalid_completed_output');
     }
     const finals = messages.filter((item) => item.phase === 'final_answer');
@@ -134,7 +139,7 @@ export class ResponseTextChannels {
           ? messages[0]
           : undefined;
     if (!selected) throw new ChatGPTError('invalid_completed_output');
-    const result = text(selected.item);
+    const result = text(selected.item, this.limit);
     if (!result && !this.onDelta) throw new ChatGPTError('invalid_completed_output');
     if (this.legacySeen && (this.outputs.size || messages.length !== 1 || this.legacy !== result))
       throw new ChatGPTError('invalid_completed_output');

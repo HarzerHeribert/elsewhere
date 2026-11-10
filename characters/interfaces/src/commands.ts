@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { STUDIO_PATH, STUDIO_PATH_LIMIT } from './studio';
 
 export const PositionSchema = z.object({ x: z.number().finite(), z: z.number().finite() }).strict();
 export type Position = z.infer<typeof PositionSchema>;
@@ -109,6 +110,18 @@ const definitions = [
   },
   {
     schema: z
+      .object({
+        type: z.literal('make'),
+        path: z.string().max(STUDIO_PATH_LIMIT).regex(STUDIO_PATH),
+        title: z.string().trim().min(1).max(80),
+        about: z.string().trim().min(1).max(600),
+      })
+      .strict(),
+    instruction:
+      "make: writes or rewrites one file of your own public site. path is the file (lowercase, like notes/fin-angle.md or index.html), title names it in a few words, and about says what the file is and what should be in it or change; all three are public. The file's text is written in a following step from your notes and readings. It needs a place where things can be made and the studio to be available.",
+  },
+  {
+    schema: z
       .object({ type: z.literal('search'), query: z.string().trim().min(3).max(240) })
       .strict(),
     instruction:
@@ -193,10 +206,13 @@ function fieldFormat(schema: z.ZodTypeAny): JsonSchema {
   return format;
 }
 
+/** Commands the model is never offered: disabled by policy, or retired in favour of another. */
+const MODEL_HIDDEN: readonly string[] = ['say', 'delegate', 'work'];
+
 export const MODEL_ACTION_FORMAT = {
   type: 'object',
   anyOf: definitions
-    .filter((item) => !['say', 'delegate'].includes(item.schema.shape.type.value))
+    .filter((item) => !MODEL_HIDDEN.includes(item.schema.shape.type.value))
     .flatMap((item) => {
       const format = fieldFormat(item.schema);
       if (item.schema.shape.type.value === 'pursue') {
@@ -219,7 +235,10 @@ export const MODEL_ACTION_FORMAT = {
       }));
     }),
 };
-export const MODEL_ACTION_INSTRUCTIONS = definitions.map((item) => item.instruction).join(' ');
+export const MODEL_ACTION_INSTRUCTIONS = definitions
+  .filter((item) => item.schema.shape.type.value !== 'work')
+  .map((item) => item.instruction)
+  .join(' ');
 
 export type CommandType = CharacterCommand['type'];
 const commandTypes = definitions.map((item) => item.schema.shape.type.value) as [

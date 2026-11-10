@@ -8,6 +8,7 @@ import type { DecisionContext } from '@elsewhere/character-runtime';
 import { CompatibleDecisionProvider } from './compatible';
 import { OllamaDecisionProvider } from './ollama';
 import { readModelPayload, usageCount } from './shared';
+import { STUDIO_PATH } from '../../../../characters/interfaces/src/studio';
 
 const context: DecisionContext = {
   identity: 'You are Ada, a winged creature with an interest in aircraft.',
@@ -220,6 +221,11 @@ describe('bounded model envelopes and canonical commands', () => {
           'pattern' in field
         )
           expect(field.pattern).toBe('^[a-z][a-z-]*$');
+        else if (
+          (alternative.properties as { type: { const: string } }).type.const === 'make' &&
+          'pattern' in field
+        )
+          expect(field.pattern).toBe(STUDIO_PATH.source);
         else expect(field).not.toHaveProperty('pattern');
       }
     }
