@@ -1,11 +1,13 @@
 import { resolve } from 'node:path';
 import type { LocalAuthOptions } from './index';
+import { socialProvidersFromEnvironment } from './social-providers';
 
 /** One configuration boundary for the application and trusted account-administration CLI. */
 export function authOptionsFromEnvironment(
   environment: NodeJS.ProcessEnv,
   overrides: Partial<LocalAuthOptions> = {},
 ): LocalAuthOptions {
+  const socialProviders = socialProvidersFromEnvironment(environment);
   const origin = environment.WEB_ORIGIN ?? 'http://127.0.0.1:5173';
   return {
     dataDirectory: resolve(environment.DATA_DIR ?? '.data'),
@@ -21,6 +23,7 @@ export function authOptionsFromEnvironment(
       : {
           emailDeliveryLimits: { maxPerDay: Number(environment.AUTH_EMAIL_MAX_PER_DAY) },
         }),
+    ...(Object.keys(socialProviders).length ? { socialProviders } : {}),
     production: environment.NODE_ENV === 'production',
     ...overrides,
   };

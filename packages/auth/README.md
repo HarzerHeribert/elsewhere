@@ -70,3 +70,22 @@ GitHub, Google and Apple social sign-in are supported by Better Auth but require
 ## Account-email admission
 
 Verification and sign-in mail share a durable one-row delivery ledger. Defaults are one send per recipient per minute, three per hour, ten per UTC day, and 100 total sends per UTC day. `AUTH_EMAIL_MAX_PER_DAY` can set the global cap (bounded to 1–10,000); recipient storage is independently capped at 200 recently used HMAC identifiers and pruned on each bounded reservation. The ledger stores no recipient addresses or login tokens. SQLite reservations are atomic IMMEDIATE transactions; PostgreSQL uses a row lock. Restarting cannot replenish the allowance, and failed delivery remains charged. Throttled requests retain the same generic success response and leave existing delivered links usable. Current mail callbacks cover verification and magic-link sign-in; password-reset mail is not configured and any future reset callback must use this same admission gate. Existing IP limits remain, using only a server-owned authenticated-ingress address header, not caller-controlled forwarding headers.
+
+## Optional Google and GitHub sign-in setup
+
+Passkeys need no Google/GitHub application. To additionally offer social sign-in, create a dedicated **Elsewhere login** provider application and configure the complete pair in the runtime's private environment:
+
+```dotenv
+AUTH_GITHUB_CLIENT_ID=your-login-app-client-id
+AUTH_GITHUB_CLIENT_SECRET=your-login-app-client-secret
+AUTH_GOOGLE_CLIENT_ID=your-web-oauth-client-id
+AUTH_GOOGLE_CLIENT_SECRET=your-web-oauth-client-secret
+```
+
+Each provider is optional; a missing/empty member of a configured pair safely fails startup. No configured pairs means no social buttons. The public capability lists only provider IDs; linked-provider IDs are private to the current account. Secrets and OAuth access/refresh tokens never enter the web build, public JSON, character context or connector registry. OAuth tokens are encrypted in the auth database; HTTP token-export and refresh endpoints are blocked.
+
+For GitHub, create an OAuth App at GitHub → Settings → Developer settings → OAuth Apps. Set its homepage to `https://www.elswhr.dev` and authorization callback to **`https://www.elswhr.dev/api/auth/callback/github`**. Login requests only `read:user` and `user:email`; no repository permission is needed. If using a GitHub App instead, allow account Email addresses read-only. This login application must remain separate from Hubert's selected-repository installation.
+
+For Google, create a Web application OAuth client in Google Cloud → Google Auth Platform / APIs & Services → Credentials. Configure application branding and the exact authorized redirect **`https://www.elswhr.dev/api/auth/callback/google`**. Only `openid email profile` are requested; incremental scope carry-over is disabled and caller requests cannot expand scopes to Gmail, Drive or other services. Use a separate development OAuth client for `http://localhost:5173/api/auth/callback/google` and the corresponding local GitHub callback; do not loosen production callbacks or origins.
+
+An existing account must sign in through its current method, then explicitly **link** the provider before signing out. A social login with the same email does not silently merge with an existing account or inherit its admin role/Hubert ownership. Existing passkey-required owner controls remain protected when social sign-in is added; Google/GitHub sessions do not count as a recent verified passkey. Apple can be added later but currently has no environment configuration or UI; it requires an active Apple Developer account and expiring client-secret maintenance.

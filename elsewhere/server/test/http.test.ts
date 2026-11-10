@@ -984,3 +984,32 @@ it('gates owner/world mutations on fresh passkey assurance after opt-in while pr
   expect((await post('/api/admin/pause', {}, true)).status).toBe(200);
   expect(pause).toHaveBeenCalledTimes(1);
 });
+
+it('exposes configured social provider IDs publicly and linked IDs only to their current account', async () => {
+  let account: AccountSummary | null = null;
+  const linked = vi.fn(async () => ['github'] as Array<'github' | 'google'>);
+  const { url } = await start({
+    auth: {
+      handle: async () => {},
+      getAccount: async () => account,
+      isWorldAdmin: async () => false,
+      socialProviders: ['github', 'google'],
+      getLinkedSocialProviders: linked,
+    },
+  });
+  const guest = await fetch(url + '/api/account').then((r) => r.json());
+  expect(guest.socialProviders).toEqual(['github', 'google']);
+  expect(guest.linkedSocialProviders).toBeUndefined();
+  expect(linked).not.toHaveBeenCalled();
+  account = {
+    id: 'fixture-user',
+    name: 'Visitor',
+    email: 'visitor@example.invalid',
+    emailVerified: true,
+    role: 'user',
+    isWorldAdmin: false,
+  };
+  const signed = await fetch(url + '/api/account').then((r) => r.json());
+  expect(signed.linkedSocialProviders).toEqual(['github']);
+  expect(signed.managedCharacterIds).toEqual([]);
+});

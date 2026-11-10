@@ -50,6 +50,10 @@ const server = createApiServer({
     getAccount: (req) => auth!.getAccount(req),
     isWorldAdmin: (req) => auth!.isWorldAdmin(req),
     getSecurityState: (req) => auth!.getSecurityState(req),
+    getLinkedSocialProviders: (req) => auth!.getLinkedSocialProviders(req),
+    get socialProviders() {
+      return auth?.socialProviders ?? [];
+    },
     canUseOwnerControls: (req) => auth!.canUseOwnerControls(req),
     get passwordAuthEnabled() {
       return auth?.passwordAuthEnabled ?? false;

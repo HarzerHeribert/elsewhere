@@ -14,6 +14,13 @@ import { magicLink } from 'better-auth/plugins/magic-link';
 import { AuthMailBudget, type AuthMailLimits } from './mail-budget';
 import { mutateCredentialPolicy, CredentialPolicyError } from './credential-policy';
 import { AuthMutationLocks, AuthMutationBusy } from './mutation-lock';
+import {
+  SOCIAL_PROVIDER_IDS,
+  SOCIAL_IDENTITY_SCOPES,
+  socialProviderOptions,
+  type SocialProviderConfiguration,
+  type SocialProviderId,
+} from './social-providers';
 import type { AccountSummary } from '@elsewhere/character-interfaces';
 export type { AccountSummary } from '@elsewhere/character-interfaces';
 export { authOptionsFromEnvironment } from './environment';
@@ -27,6 +34,7 @@ export interface LocalAuthOptions {
   production?: boolean;
   bodyTimeoutMs?: number;
   emailDeliveryLimits?: Partial<AuthMailLimits>;
+  socialProviders?: SocialProviderConfiguration;
   sendVerificationEmail?: (message: { email: string; name: string; url: string }) => Promise<void>;
   sendSignInEmail?: (message: { email: string; url: string }) => Promise<void>;
 }
@@ -99,6 +107,8 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   pool?.on('error', () => {
     // pg discards failed idle clients; individual active operations still reject normally.
   });
+  const providerOptions = socialProviderOptions(options.socialProviders);
+  const socialProviders = SOCIAL_PROVIDER_IDS.filter((id) => providerOptions[id] !== undefined);
   const explicitAdmins = new Set(options.adminUserIds ?? []);
   const mailBudget =
     options.sendVerificationEmail || options.sendSignInEmail
@@ -146,6 +156,7 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     },
     account: {
       modelName: 'elsewhere_auth_account',
+      encryptOAuthTokens: true,
       accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: false },
     },
     databaseHooks: {
@@ -161,6 +172,7 @@ export async function createLocalAuth(options: LocalAuthOptions) {
         },
       },
     },
+    socialProviders: providerOptions,
     verification: { modelName: 'elsewhere_auth_verification' },
     emailAndPassword: {
       enabled: passwordAuthEnabled,
@@ -308,6 +320,11 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       return failure(400, 'Invalid authentication route.');
     if (path === '/api/auth/admin' || path.startsWith('/api/auth/admin/'))
       return failure(403, 'Account-administration endpoints are not enabled.');
+    if (['/api/auth/get-access-token', '/api/auth/refresh-token'].includes(path))
+      return failure(
+        403,
+        'Login-provider tokens are not available to browser or character clients.',
+      );
     if (path === '/api/auth/one-time-token/generate')
       return failure(403, 'Sign-in links are issued only by the private operator command.');
     if (path === '/api/auth/magic-link/verify') {
@@ -323,10 +340,9 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     if (origin && !allowedOrigins.has(origin)) return failure(403, 'Origin is not permitted.');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !origin)
       return failure(403, 'A trusted origin is required for authentication changes.');
-    if (
-      !mutationLocked &&
-      (sensitiveAuthRoutes.has(path) || path === '/api/auth/security/owner-passkey')
-    ) {
+    const credentialMutation =
+      sensitiveAuthRoutes.has(path) || path.startsWith('/api/auth/callback/');
+    if (!mutationLocked && (credentialMutation || path === '/api/auth/security/owner-passkey')) {
       const current = await sessionFromHeaders(request.headers);
       if (current) {
         if (current.user.ownerControlsRequirePasskey && !freshPasskey(current.session))
@@ -340,7 +356,7 @@ export async function createLocalAuth(options: LocalAuthOptions) {
         }
       }
     }
-    if (sensitiveAuthRoutes.has(path)) {
+    if (credentialMutation) {
       const current = await sessionFromHeaders(request.headers);
       if (current?.user.ownerControlsRequirePasskey && !freshPasskey(current.session))
         return failure(403, 'Verify a passkey to change protected sign-in methods.');
@@ -463,6 +479,35 @@ export async function createLocalAuth(options: LocalAuthOptions) {
         }
         return Response.json({ status: true }, { headers: { 'cache-control': 'no-store' } });
       }
+      if (path === '/api/auth/sign-in/social' || path === '/api/auth/link-social') {
+        let input: Record<string, unknown>;
+        try {
+          input = JSON.parse(body.toString());
+        } catch {
+          return failure(400, 'Invalid sign-in request.');
+        }
+        if (
+          !input ||
+          typeof input !== 'object' ||
+          Array.isArray(input) ||
+          !socialProviders.includes(input.provider as SocialProviderId)
+        )
+          return failure(400, 'This sign-in provider is not configured.');
+        const provider = input.provider as SocialProviderId;
+        if (
+          ['callbackURL', 'newUserCallbackURL', 'errorCallbackURL'].some(
+            (key) => !validReturn(input[key]),
+          ) ||
+          input.additionalParams !== undefined ||
+          (input.scopes !== undefined &&
+            (!Array.isArray(input.scopes) ||
+              input.scopes.some(
+                (scope) =>
+                  typeof scope !== 'string' || !SOCIAL_IDENTITY_SCOPES[provider].includes(scope),
+              )))
+        )
+          return failure(403, 'Sign-in is limited to this instance and identity permissions.');
+      }
       if (path === '/api/auth/sign-in/magic-link') {
         let input: Record<string, unknown>;
         try {
@@ -555,6 +600,20 @@ export async function createLocalAuth(options: LocalAuthOptions) {
   async function canUseOwnerControls(req: IncomingMessage) {
     return (await getSecurityState(req))?.ownerControlsUnlocked === true;
   }
+  async function getLinkedSocialProviders(req: IncomingMessage): Promise<SocialProviderId[]> {
+    if (!socialProviders.length) return [];
+    const session = await getSession(req);
+    if (!session || ('banned' in session.user && session.user.banned)) return [];
+    const accounts = await (
+      await auth.$context
+    ).adapter.findMany<{ providerId: string }>({
+      model: 'account',
+      where: [{ field: 'userId', value: session.user.id }],
+      select: ['providerId'],
+      limit: 20,
+    });
+    return socialProviders.filter((id) => accounts.some((account) => account.providerId === id));
+  }
   async function isWorldAdmin(req: IncomingMessage) {
     return (await getAccount(req))?.isWorldAdmin ?? false;
   }
@@ -621,6 +680,8 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     getSession,
     getAccount,
     getSecurityState,
+    getLinkedSocialProviders,
+    socialProviders,
     canUseOwnerControls,
     isWorldAdmin,
     setWorldAdmin,

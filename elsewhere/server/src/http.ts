@@ -31,6 +31,8 @@ export interface ApiAuth {
   passwordAuthEnabled?: boolean;
   emailLinkAuthEnabled?: boolean;
   passkeyAuthEnabled?: boolean;
+  socialProviders?: ReadonlyArray<'github' | 'google'>;
+  getLinkedSocialProviders?(req: IncomingMessage): Promise<Array<'github' | 'google'>>;
   getSecurityState?(req: IncomingMessage): Promise<{
     ownerControlsRequirePasskey: boolean;
     ownerControlsUnlocked: boolean;
@@ -608,6 +610,17 @@ export function createApiServer(deps: ApiDependencies) {
           ...(deps.auth.emailLinkAuthEnabled ? { emailLinkAuthEnabled: true } : {}),
           ...(deps.auth.passkeyAuthEnabled ? { passkeyAuthEnabled: true } : {}),
           requiresEmailVerification: deps.auth.requiresEmailVerification ?? false,
+          ...(deps.auth.socialProviders?.length
+            ? {
+                socialProviders: [...deps.auth.socialProviders],
+                ...(account
+                  ? {
+                      linkedSocialProviders:
+                        (await deps.auth.getLinkedSocialProviders?.(req)) ?? [],
+                    }
+                  : {}),
+              }
+            : {}),
           ...(account ? await deps.auth.getSecurityState?.(req) : {}),
           managedCharacterIds: managesCharacter ? [characterId] : [],
           ...(managesCharacter

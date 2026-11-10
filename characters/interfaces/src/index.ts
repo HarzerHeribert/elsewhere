@@ -151,6 +151,8 @@ export interface AccountSummary {
 export interface AccountCapabilities {
   emailLinkAuthEnabled?: boolean;
   passkeyAuthEnabled?: boolean;
+  socialProviders?: Array<'github' | 'google'>;
+  linkedSocialProviders?: Array<'github' | 'google'>;
   ownerControlsRequirePasskey?: boolean;
   ownerControlsUnlocked?: boolean;
   passkeyVerifiedRecently?: boolean;
