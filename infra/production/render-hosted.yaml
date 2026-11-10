@@ -34,7 +34,7 @@ services:
       - key: MODEL_MAX_CALLS_PER_DAY
         value: '150'
       - key: MODEL_MAX_CALLS_PER_HOUR
-        value: '30'
+        value: '60'
       - key: MODEL_TIMEOUT_MS
         value: '30000'
       - key: CHATGPT_PROFILE
@@ -62,7 +62,7 @@ services:
       - key: MODEL_MAX_CALLS_PER_DAY
         value: '150'
       - key: MODEL_MAX_CALLS_PER_HOUR
-        value: '30'
+        value: '60'
       - key: MODEL_TIMEOUT_MS
         value: '40000'
       - key: HUBERT_OWNER_USER_ID

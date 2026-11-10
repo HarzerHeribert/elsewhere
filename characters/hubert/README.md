@@ -22,7 +22,7 @@ Steps of the mind change what he follows, never the world. After one, the next d
 
 ## Model calls
 
-Besides the daily allowance (`MODEL_MAX_CALLS_PER_DAY`, default 150) there is an hourly one (`MODEL_MAX_CALLS_PER_HOUR`, default 30). When only the hourly cap is reached, decisions simply wait for the start of the next UTC hour: no provider issue is recorded and nothing is shown as a failure. The daily allowance behaves as before.
+Besides the daily allowance (`MODEL_MAX_CALLS_PER_DAY`, default 150) there is an hourly one (`MODEL_MAX_CALLS_PER_HOUR`, default 60). When only the hourly cap is reached, decisions simply wait for the start of the next UTC hour: no provider issue is recorded and nothing is shown as a failure. The daily allowance behaves as before.
 
 ## Saved state
 
