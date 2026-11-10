@@ -505,37 +505,43 @@ test('encountering Hubert shows his actual activity and opens his inspector', as
   expect((await snapshot(request)).world.residents[0]!.position).toEqual(hubert.position);
 });
 
-test('an owner fulfills an encoded wish through the sidebar and installs the world object', async ({
+test('an owner marks a wish in Hubert’s own words as built, and the world is not changed by it', async ({
   page,
   request,
-}, info) => {
-  await enableDecisionScenario(request, page, info, 'wish');
-  let state = await snapshot(request);
-  for (let step = 0; step < 60 && !state.wishes?.some((wish) => wish.status === 'pending'); step++)
-    state = await admin(request, 'tick');
-  const wish = state.wishes?.find((item) => item.status === 'pending');
-  expect(wish, 'Hubert should form a wish after enough verified experiences').toBeDefined();
-  if (!wish) throw new Error('No pending wish was formed.');
-  expect(wish.id).toContain(':');
-  expect(state.world.objects.some((object) => object.id === wish.requestedObjectId)).toBe(false);
+}) => {
+  // Wishes are authored by the resident's model, which this isolated instance does not run:
+  // the wish is supplied here, and the controller and server tests cover making and recording one.
+  const live = await snapshot(request);
+  const wish = {
+    id: 'wish-fixture',
+    text: 'I would like a bench by the pond, so I can watch the mallard sitting down.',
+    createdAt: Date.UTC(2026, 10, 10, 11),
+    status: 'pending' as 'pending' | 'fulfilled',
+  };
+  let wishes: PublicSnapshot['wishes'] = [wish];
+  await page.route('**/api/world', async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), wishes } });
+  });
+  const decisions: unknown[] = [];
+  await page.route('**/api/admin/wishes/**', async (route) => {
+    expect(new URL(route.request().url()).pathname).toBe('/api/admin/wishes/wish-fixture');
+    decisions.push(route.request().postDataJSON());
+    wishes = [{ ...wish, status: 'fulfilled', fulfilledAt: wish.createdAt + 60_000 }];
+    await route.fulfill({ json: { ...live, wishes } });
+  });
   await visit(page, `/#owner=${TEST_OWNER}`);
   await openPanel(page, 'Wishes');
-  const card = panel(page)
-    .locator('.wish-card')
-    .filter({ has: page.getByRole('heading', { name: wish.title, exact: true }) });
-  await expect(card.getByText('pending', { exact: true })).toBeVisible();
-  const receipt = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      new URL(response.url()).pathname.startsWith('/api/admin/wishes/'),
-  );
-  await card.getByRole('button', { name: 'Add to Elsewhere', exact: true }).click();
-  expect((await receipt).status()).toBe(200);
-  await expect(card.getByText('fulfilled', { exact: true })).toBeVisible();
-  const after = await snapshot(request);
-  expect(after.wishes?.find((item) => item.id === wish.id)?.status).toBe('fulfilled');
-  expect(after.world.objects.some((object) => object.id === wish.requestedObjectId)).toBe(true);
-  await expect(card.getByRole('button', { name: 'Add to Elsewhere', exact: true })).toHaveCount(0);
+  const card = panel(page).locator('.wish-card').filter({ hasText: wish.text });
+  await expect(card.getByText('open', { exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Decline for now', exact: true })).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('wish-open.png') });
+  await card.getByRole('button', { name: 'Mark as built', exact: true }).click();
+  await expect(card.getByText('built', { exact: true })).toBeVisible();
+  await expect(panel(page).getByText('The wish is marked as built.')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Mark as built', exact: true })).toHaveCount(0);
+  expect(decisions).toEqual([{ decision: 'fulfill' }]);
+  expect((await snapshot(request)).world.objects).toEqual(live.world.objects);
 });
 
 test('the fullscreen control enters and exits native browser fullscreen', async ({ page }) => {

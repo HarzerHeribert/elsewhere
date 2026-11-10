@@ -16,6 +16,7 @@ import {
 import {
   validatePublicExpression,
   validatePublicThought,
+  validatePublicWish,
   type ExpressionProvider,
 } from '../packages/adapters/src/models/expression';
 import { randomUUID, createHash } from 'node:crypto';
@@ -33,7 +34,7 @@ import {
   observeWorld,
   publicWorld,
   upgradeWorldLayout,
-  installWishFeature,
+  RETIRED_FEATURE_IDS,
 } from '@elsewhere/server';
 import {
   advanceHubert,
@@ -45,7 +46,9 @@ import {
   publicCharacter,
   publicMemories,
   recalledMemory,
-  considerWish,
+  wishDue,
+  wishInput,
+  recordWish,
   preserveWishLedger,
   publicWishes,
   resolveWish as resolveCharacterWish,
@@ -252,6 +255,8 @@ export class ElsewhereController {
         interruptedRest;
       this.state.world = upgraded;
       this.state.hubert = preserveWishLedger(upgradedHubert, upgradedHubert);
+      // A world upgrade may retire an object; the resident cannot go on choosing it.
+      for (const id of RETIRED_FEATURE_IDS) delete this.state.hubert.knownObjects[id];
       if (freezeArtifact) this.state.artifactSamples = structuredClone(this.state.weatherSamples);
       if (changed) await this.commit();
     } else {
@@ -970,17 +975,49 @@ export class ElsewhereController {
         // Denied operations never reach an executor and never receive a success reward.
       }
       s.runtime.lastDecisionAt = now;
-      s.hubert = considerWish(
-        s.hubert,
-        observeWorld(s.world, 'hubert', now),
-        this.wallNow(),
-        s.world,
-      );
     }
     await this.commit();
     await this.writeNotebook();
     await this.shareThought();
+    await this.makeWish();
     return this.getSnapshot();
+  }
+  /**
+   * Now and then the resident is given the chance to say what they wish for. The words are
+   * theirs, authored from the public snapshot alone like a thought; an empty answer is no wish.
+   * A wish installs nothing and reaches no one but the owner's wish list.
+   */
+  private async makeWish() {
+    const provider = this.options.expressionProvider;
+    if (!provider || this.halted || this.state.runtime.paused) return;
+    if (provider.isAvailable?.() === false) return;
+    const now = this.wallNow();
+    if (!wishDue(this.state.hubert, now)) return;
+    const snapshot = this.getSnapshot();
+    if (snapshot.character.status === 'resting') return;
+    // Like thoughts, wishes never spend the last fifth of the day's calls.
+    const maximum = this.options.modelMaximum ?? 100;
+    const allowance = reserveModelCall(this.state.modelAllowance, now, Math.floor(maximum * 0.8));
+    if (!allowance) return;
+    this.state.modelAllowance = allowance;
+    this.state.hubert.wishesAskedAtReal = now;
+    await this.commit(); // One durable request reservation; an abandoned wish is never replayed.
+    this.modelDispatchActive = true;
+    try {
+      const text = validatePublicWish(await provider.express(wishInput(snapshot)));
+      if (text)
+        this.state.hubert = recordWish(
+          this.state.hubert,
+          { id: 'wish-' + randomUUID(), text },
+          now,
+        );
+    } catch {
+      if (this.halted) throw Error('Wish stopped after persistence failure.');
+      // A wish that fails or does not validate is simply not made; the next chance comes later.
+    } finally {
+      this.modelDispatchActive = false;
+    }
+    await this.commit();
   }
   /**
    * A thought is authored in its own request from the public snapshot alone, exactly like a
@@ -1349,14 +1386,6 @@ export class ElsewhereController {
         this.state.hubert.thoughts = { ...structuredClone(previous.thoughts), entries: [] };
       this.publicDraft = undefined;
       this.state.world.version = Math.max(this.state.world.version, worldVersion + 1);
-      for (const wish of this.state.hubert.wishes ?? []) {
-        if (wish.status === 'fulfilled')
-          this.state.world = installWishFeature(
-            this.state.world,
-            wish.requestedObjectId,
-            this.state.runtime.simulatedAt,
-          );
-      }
       this.state.runtime.paused = true;
       await this.commit();
       return this.getSnapshot();
@@ -1379,21 +1408,12 @@ export class ElsewhereController {
     return this.serialize(async () => {
       const wish = this.state.hubert.wishes?.find((item) => item.id === id);
       if (!wish || wish.status !== 'pending') throw new Error('This wish is not pending.');
-      const world =
-        decision === 'fulfill'
-          ? installWishFeature(
-              this.state.world,
-              wish.requestedObjectId,
-              this.state.runtime.simulatedAt,
-            )
-          : this.state.world;
-      const next = resolveCharacterWish(
+      // The owner's word only: whatever was built reaches the world through its own update.
+      this.state.hubert = resolveCharacterWish(
         this.state.hubert,
-        { wishId: id, decision, receiptId: randomUUID(), world },
+        { wishId: id, decision, receiptId: randomUUID() },
         this.wallNow(),
       );
-      this.state.world = world;
-      this.state.hubert = next;
       await this.commit();
       return this.getSnapshot();
     });

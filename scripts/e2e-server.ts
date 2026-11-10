@@ -40,10 +40,7 @@ const fixture = createServer((request, response) => {
     const scenario = (await readFile(join(directory, 'decision-scenario'), 'utf8').catch(
       () => 'disabled',
     )) as BrowserDecisionScenario;
-    assert(
-      ['memories', 'wish', 'birds'].includes(scenario),
-      'No browser provider scenario opted in',
-    );
+    assert(['memories', 'birds'].includes(scenario), 'No browser provider scenario opted in');
     const chunks: Buffer[] = [];
     let bytes = 0;
     for await (const chunk of request) {

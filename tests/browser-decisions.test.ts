@@ -4,7 +4,7 @@ import { SqliteSnapshotStore } from '../packages/persistence/src/index';
 import { browserFixtureAction } from './e2e/decision-fixture';
 
 describe('explicit browser decision scenarios', () => {
-  for (const scenario of ['memories', 'wish', 'birds'] as const) {
+  for (const scenario of ['memories', 'birds'] as const) {
     it(`${scenario} proposes offered actions and obtains authoritative evidence`, async () => {
       let calls = 0;
       let enabled = false;
@@ -32,13 +32,10 @@ describe('explicit browser decision scenarios', () => {
         expect(snapshot.character.interests).toEqual([]);
         expect(snapshot.memories).toEqual([]);
         const finished = () =>
-          scenario === 'wish'
-            ? snapshot.wishes?.some((wish) => wish.status === 'pending')
-            : scenario === 'birds'
-              ? snapshot.memories.some((memory) => memory.entityId === 'courtyard-sparrow')
-              : snapshot.memories.length > 0;
-        for (let turn = 0; turn < (scenario === 'wish' ? 60 : 12) && !finished(); turn++)
-          snapshot = await controller.step();
+          scenario === 'birds'
+            ? snapshot.memories.some((memory) => memory.entityId === 'courtyard-sparrow')
+            : snapshot.memories.length > 0;
+        for (let turn = 0; turn < 12 && !finished(); turn++) snapshot = await controller.step();
         expect(calls).toBeGreaterThan(1);
         expect(controller.getCharacterIssues().every((issue) => issue.resolvedAt)).toBe(true);
         expect(finished(), `Scenario ${scenario} must create genuine evidence`).toBeTruthy();
@@ -60,7 +57,6 @@ describe('explicit browser decision scenarios', () => {
           ).toBeGreaterThan(0);
           expect(snapshot.events.some((event) => event.type === 'entity_observed')).toBe(true);
         }
-        if (scenario === 'wish') expect(snapshot.memories.length).toBeGreaterThanOrEqual(3);
       } finally {
         await controller.close();
       }

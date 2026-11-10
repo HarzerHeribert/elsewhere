@@ -40,7 +40,7 @@ Twelve specialist reviewers examined the repository. Eleven started without the 
 | Local tooling               | Consistent formatter/check; shared isolated test environment disables operator dotenv/database/credentials; test data cleanup is restricted to its own temporary directory; launcher signals supervisors once and waits for owned descendants                      |
 | Feature retention           | The [feature ledger](features.md) is canonical. One authored-content service, item ledger, creation pipeline, wish ledger, attention pipeline and interaction port are specified without collapsing different lifecycles                                           |
 
-Public speech/delegation vocabulary remains represented but policy-disabled. The current weather project and six supported wish additions remain working features. Authored notebooks, homes, inventories, richer interactions, aviation favorites/tracker, workers, external channels and wallet/cryptocurrency ambitions retain their planned status; this cleanup does not claim to have implemented them.
+Public speech/delegation vocabulary remains represented but policy-disabled. The current weather project and self-authored wishes remain working features; the six preset wish additions were retired. Authored notebooks, homes, inventories, richer interactions, aviation favorites/tracker, workers, external channels and wallet/cryptocurrency ambitions retain their planned status; this cleanup does not claim to have implemented them.
 
 ## Lossless asset consolidation
 

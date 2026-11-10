@@ -541,8 +541,36 @@ function upgradeCanonicalObjectText(input: WorldState): WorldState {
 }
 
 /** Expand the prototype without discarding a resident’s location, history, or creations. */
+/**
+ * Objects a retired host catalog once installed in answer to wishes it had itself made up.
+ * Residents now say what they wish for and a wish installs nothing, so these objects and the
+ * notices of their installation are removed from saved worlds.
+ */
+export const RETIRED_FEATURE_IDS: readonly string[] = [
+  'telescope',
+  'weather-station',
+  'painting-kit',
+  'magnifying-glass',
+  'seed-library',
+  'music-box',
+];
+function removeRetiredFeatures(input: WorldState): WorldState {
+  const retired = (id: string | undefined) => id !== undefined && RETIRED_FEATURE_IDS.includes(id);
+  const notice = (event: WorldEvent) =>
+    event.type === 'feature_installed' && retired(event.objectId);
+  if (!input.objects.some((object) => retired(object.id)) && !input.events.some(notice))
+    return input;
+  const world = copy(input);
+  world.objects = world.objects.filter((object) => !retired(object.id));
+  world.events = world.events.filter((event) => !notice(event));
+  for (const resident of world.residents)
+    if (retired(resident.gazeTargetId)) delete resident.gazeTargetId;
+  world.version++;
+  return world;
+}
+
 export function upgradeWorldLayout(input: WorldState): WorldState {
-  input = upgradeCanonicalObjectText(input);
+  input = removeRetiredFeatures(upgradeCanonicalObjectText(input));
   if ((input.layoutVersion ?? 1) >= 3 && (input.spatialVersion ?? 0) >= 1) return input;
   const world = copy(input);
   const template = createInitialWorld(input.createdAt);
@@ -679,113 +707,6 @@ export function upgradeWorldLayout(input: WorldState): WorldState {
 
 function sameBounds(a: Bounds, b: Bounds): boolean {
   return a.minX === b.minX && a.maxX === b.maxX && a.minZ === b.minZ && a.maxZ === b.maxZ;
-}
-
-/** Trusted owner-side catalog. No arbitrary code, URLs, secrets, or model-generated tools. */
-export function installWishFeature(input: WorldState, objectId: string, now: number): WorldState {
-  const presets: Record<string, WorldObject> = {
-    telescope: {
-      id: 'telescope',
-      name: 'Hubert’s telescope',
-      kind: 'telescope',
-      description: 'A personal telescope installed by the owner at Hubert’s request.',
-      position: { x: 21, z: -19 },
-      radius: 0.7,
-      height: 1.5,
-      color: '#b89963',
-      tags: ['sky', 'discovery', 'mechanism'],
-      affordances: ['inspect', 'interact'],
-      detail:
-        'A small focus dial adjusts the simulated moon view. This telescope belongs to Hubert’s collection and was installed through an owner-approved world update.',
-    },
-    'weather-station': {
-      id: 'weather-station',
-      name: 'Hubert’s weather station',
-      kind: 'weather-station',
-      description: 'A small instrument station for observing Elsewhere’s simulated weather.',
-      position: { x: -4, z: 2 },
-      radius: 0.6,
-      height: 1.5,
-      color: '#8ea69a',
-      tags: ['weather', 'patterns', 'making'],
-      affordances: ['inspect', 'interact'],
-      detail:
-        'The station has a wind vane, a rain cup, and a thermometer. It observes simulated world conditions; it does not connect to real-world sensors or a paid API.',
-    },
-    'painting-kit': {
-      id: 'painting-kit',
-      name: 'A painting kit',
-      kind: 'painting-kit',
-      description: 'A box of brushes and colors beside the workbench.',
-      position: { x: -6, z: -0.5 },
-      radius: 0.45,
-      height: 0.3,
-      color: '#cb947e',
-      tags: ['color', 'making', 'art'],
-      affordances: ['inspect', 'interact'],
-      detail:
-        'Three brushes, six colors, and a blank card provide something new to experiment with. No image-generation service is connected by this update.',
-    },
-    'magnifying-glass': {
-      id: 'magnifying-glass',
-      name: 'A magnifying glass',
-      kind: 'magnifying-glass',
-      description: 'A brass-framed lens for examining small details.',
-      position: { x: -4.5, z: -0.5 },
-      radius: 0.3,
-      height: 0.25,
-      color: '#c4ad73',
-      tags: ['discovery', 'mechanism', 'patterns'],
-      affordances: ['inspect', 'interact'],
-      detail:
-        'Through the lens, a copper edge looks less smooth than it first appeared. The object supplies a new local observation opportunity.',
-    },
-    'seed-library': {
-      id: 'seed-library',
-      name: 'The seed library',
-      kind: 'seed-library',
-      description: 'A little cabinet of labeled seeds near the orchard.',
-      position: { x: -17, z: 11 },
-      radius: 0.8,
-      height: 1.3,
-      color: '#a98e68',
-      tags: ['nature', 'patterns', 'making'],
-      affordances: ['inspect', 'interact'],
-      detail:
-        'Paper packets contain sunflower, clover and bean seeds. Their shapes suggest a small classification project.',
-    },
-    'music-box': {
-      id: 'music-box',
-      name: 'A mechanical music box',
-      kind: 'music-box',
-      description: 'A hand-cranked box on the library’s side table.',
-      position: { x: -17, z: -15 },
-      radius: 0.4,
-      height: 0.45,
-      color: '#aa8768',
-      tags: ['sound', 'mechanism', 'patterns'],
-      affordances: ['inspect', 'interact'],
-      detail:
-        'A cylinder with irregular pins drives a repeating six-note phrase. Turning it slowly makes the mechanism easier to study.',
-    },
-  };
-  if (!Object.hasOwn(presets, objectId))
-    throw new Error('That feature is not in the owner-approved local catalog.');
-  const world = upgradeWorldLayout(copy(input));
-  if (world.objects.some((object) => object.id === objectId))
-    throw new Error('That feature is already installed.');
-  const object = presets[objectId];
-  if (!isWalkable(world, object.position))
-    throw new Error('The approved installation position is unavailable.');
-  world.objects.push(object);
-  emit(
-    world,
-    now,
-    'feature_installed',
-    `An owner-approved world update added ${object.name.toLowerCase()}.`,
-    { objectId, placeId: placeAt(world, object.position) },
-  );
-  return world;
 }
 
 export function placeAt(world: WorldState, position: Position): string {

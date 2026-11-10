@@ -11,8 +11,7 @@ import {
   type HubertState,
 } from '../characters/hubert/src/index';
 import { followThrough, trackHubertIntent } from '../characters/hubert/src/attention';
-import { considerWish } from '../characters/hubert/src/wishes';
-import { createInitialWorld, observeWorld } from '../elsewhere/server/src/world';
+import { wishDue } from '../characters/hubert/src/wishes';
 
 const epoch = Date.UTC(2026, 10, 9, 12);
 const bench: WorldObject = {
@@ -233,8 +232,8 @@ describe('current opportunities and grounded follow-through', () => {
   });
 });
 
-describe('wishes need meaningful completed experiences', () => {
-  it('does not create a wish from three failed commands, including legacy diagnostic-only records', () => {
+describe('the chance to wish needs meaningful completed experiences', () => {
+  it('is not offered after three failed commands, including legacy diagnostic-only records', () => {
     const { state } = setup();
     state.memories = [
       memory(1, {
@@ -248,38 +247,27 @@ describe('wishes need meaningful completed experiences', () => {
       }),
     ];
     const before = structuredClone(state.memories);
-    const world = createInitialWorld(epoch);
-    expect(considerWish(state, observeWorld(world, 'hubert'), epoch, world).wishes).toEqual([]);
+    expect(wishDue(state, epoch)).toBe(false);
     expect(state.memories).toEqual(before);
   });
 
-  it('counts legacy nondiagnostic experiences and keeps failed private sources out of the wish explanation', () => {
+  it('counts legacy nondiagnostic experiences beside completed ones', () => {
     const { state } = setup();
-    const world = createInitialWorld(epoch);
-    state.interests = [{ id: 'mechanism', name: 'Mechanisms', strength: 0.7, encounters: 2 }];
-    for (const id of ['artifact', 'lookout-telescope'])
-      state.knownObjects[id] = world.objects.find((object) => object.id === id)!;
     state.memories = [
       memory(1, { experience: undefined }),
-      memory(2, {
-        experience: { action: 'inspect', targetId: 'artifact', status: 'completed' },
-        cues: [{ kind: 'object', value: 'artifact' }],
-      }),
-      memory(3, {
-        experience: { action: 'inspect', targetId: 'lookout-telescope', status: 'completed' },
-        cues: [{ kind: 'object', value: 'lookout-telescope' }],
-      }),
+      memory(2, { experience: { action: 'inspect', targetId: 'artifact', status: 'completed' } }),
       memory(4, {
         experience: { action: 'inspect', targetId: 'missing', status: 'rejected' },
         summary: 'PRIVATE-BLOCKER',
       }),
     ];
-    const result = considerWish(state, observeWorld(world, 'hubert'), epoch, world);
-    expect(result.wishes).toHaveLength(1);
-    expect(result.wishes[0].requestedObjectId).toBe('magnifying-glass');
-    expect(result.wishes[0].sourceMemoryIds).toEqual(['meaningful-2', 'meaningful-3']);
-    expect(JSON.stringify(result.wishes)).not.toContain('PRIVATE-BLOCKER');
-    expect(result.memories.at(-1)?.summary).toBe('PRIVATE-BLOCKER');
+    expect(wishDue(state, epoch)).toBe(false);
+    state.memories.push(
+      memory(3, {
+        experience: { action: 'inspect', targetId: 'lookout-telescope', status: 'completed' },
+      }),
+    );
+    expect(wishDue(state, epoch)).toBe(true);
   });
 
   it('does not count external readings or repeated copies of one receipt toward the three-experience gate', () => {
@@ -298,7 +286,6 @@ describe('wishes need meaningful completed experiences', () => {
         },
       }),
     ];
-    const world = createInitialWorld(epoch);
-    expect(considerWish(state, observeWorld(world, 'hubert'), epoch, world).wishes).toEqual([]);
+    expect(wishDue(state, epoch)).toBe(false);
   });
 });

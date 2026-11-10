@@ -4,7 +4,7 @@ Verified on Node 22.22.3, pnpm 11.1.2, Vitest 4.1.12 and local Chrome. The secti
 
 - `pnpm typecheck`: passes.
 - The initial deployment run passed **272 tests across 40 files** with isolated PostgreSQL profiles enabled. Subsequent model-routing verification is recorded below; the default zero-database profile still skips four PostgreSQL cases. Both world storage and Better Auth persistence, exclusive ownership loss/handoff and actual SQLite-to-PostgreSQL life transfer have been checked against isolated real PostgreSQL schemas.
-- `pnpm test:e2e`: **23 browser tests pass**, including real WebGL, overview and character camera, server-authoritative visitor walking, wildlife encounters, visitor/owner permission separation, mobile navigation, private messages, and actual owner fulfillment of a wish through an encoded-ID HTTP request.
+- `pnpm test:e2e`: **23 browser tests pass**, including real WebGL, overview and character camera, server-authoritative visitor walking, wildlife encounters, visitor/owner permission separation, mobile navigation, private messages, and an owner marking a wish as built through the sidebar.
 - `pnpm smoke`: passes against a temporary isolated API instance, including autonomous activity, SVG creation, private-data projection and exact restart recovery.
 - `pnpm build`: passes. The current monolithic 3D client bundle is roughly 989 KB / 278 KB gzip; Vite reports its standard large-chunk advisory. This is a performance optimization remaining before public release, not a failed build.
 - PostgreSQL 17 adapter verified on an isolated local Docker service, using randomly named test schemas which are removed afterward.

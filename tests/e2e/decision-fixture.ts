@@ -3,7 +3,7 @@ import type { DecisionContext } from '@elsewhere/character-runtime';
 import type { HubertPlanningSummary } from '../../characters/hubert/src/index';
 import type { HubertTargetOffer } from '../../characters/hubert/src/actionOffers';
 
-export type BrowserDecisionScenario = 'disabled' | 'memories' | 'wish' | 'birds';
+export type BrowserDecisionScenario = 'disabled' | 'memories' | 'birds';
 
 /** Explicit browser-test proposals only. The real host still executes and verifies every action. */
 export function browserFixtureAction(
@@ -37,19 +37,7 @@ export function browserFixtureAction(
     const bird = state.actionOffers.find((offer) => offer.id === 'courtyard-sparrow');
     return propose(bird, 'inspect') ?? navigate('courtyard') ?? { type: 'reflect' };
   }
-  if (scenario === 'wish') {
-    const bench = state.actionOffers.find((offer) => offer.id === 'workbench');
-    if (!bench) return navigate('workshop') ?? { type: 'reflect' };
-    if (!bench.inspections) {
-      const action = propose(bench, 'inspect');
-      if (action) return action;
-    }
-    if (!state.project.verifiedWorkSessions) {
-      const action = propose(bench, 'work');
-      if (action) return action;
-    }
-  }
-  // Fresh, genuinely encountered objects provide distinct receipts for the memory/wish UI.
+  // Fresh, genuinely encountered objects provide distinct receipts for the memory UI.
   for (const offer of state.actionOffers.filter(
     (offer) => offer.kind === 'object' && !offer.inspections,
   )) {
