@@ -19,9 +19,16 @@ export function PasskeySignIn({ session }: { session: AccountSession }) {
       </Button>
       <p className="privacy-note">
         {session.passkeysSupported
-          ? 'Use your device’s screen lock or a security key.'
+          ? 'Use a passkey you have already added to Elsewhere.'
           : 'Passkeys are not available in this browser.'}
       </p>
+      {session.passkeysSupported && (
+        <p className="privacy-note">
+          No Elsewhere passkey yet? Sign in{' '}
+          {session.capabilities.emailLinkAuthEnabled ? 'with an email link' : 'with another method'}{' '}
+          first, then add one under Your account → Passkeys.
+        </p>
+      )}
     </div>
   );
 }
@@ -39,8 +46,11 @@ export function PasskeySettings({ session }: { session: AccountSession }) {
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    const name = String(new FormData(form).get('passkey-name') ?? '');
-    if (await session.addPasskey(name)) form.reset();
+    const data = new FormData(form);
+    const name = String(data.get('passkey-name') ?? '');
+    const attachment =
+      data.get('passkey-device') === 'cross-platform' ? 'cross-platform' : 'platform';
+    if (await session.addPasskey(name, attachment)) form.reset();
   }
 
   return (
@@ -125,6 +135,21 @@ export function PasskeySettings({ session }: { session: AccountSession }) {
           required
           disabled={session.pending || locked}
         />
+        <label htmlFor="account-passkey-device">Save passkey using</label>
+        <select
+          className="ew-field"
+          id="account-passkey-device"
+          name="passkey-device"
+          defaultValue="platform"
+          disabled={session.pending || locked}
+        >
+          <option value="platform">This device</option>
+          <option value="cross-platform">A security key or another device</option>
+        </select>
+        <p className="privacy-note">
+          This creates a passkey in your device’s passkey manager. If saving here is not offered,
+          choose a security key or another device.
+        </p>
         <Button
           type="submit"
           variant="secondary"

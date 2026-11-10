@@ -60,8 +60,14 @@ export async function signInWithPasskey(signal: AbortSignal) {
   await passkeyRequest('signin', () => client.signIn.passkey({ fetchOptions: { signal } }));
 }
 
-export async function addAccountPasskey(name: string, signal: AbortSignal) {
-  await passkeyRequest('add', () => client.passkey.addPasskey({ name, fetchOptions: { signal } }));
+export async function addAccountPasskey(
+  name: string,
+  signal: AbortSignal,
+  authenticatorAttachment: AuthenticatorAttachment = 'platform',
+) {
+  await passkeyRequest('add', () =>
+    client.passkey.addPasskey({ name, authenticatorAttachment, fetchOptions: { signal } }),
+  );
 }
 
 export async function removeAccountPasskey(id: string, signal: AbortSignal) {

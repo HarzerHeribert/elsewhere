@@ -17,7 +17,12 @@ vi.mock('better-auth/client', () => ({
   }),
 }));
 vi.mock('@better-auth/passkey/client', () => ({ passkeyClient: () => ({}) }));
-import { browserSupportsPasskeys, listAccountPasskeys, signInWithPasskey } from './passkeyAuth';
+import {
+  addAccountPasskey,
+  browserSupportsPasskeys,
+  listAccountPasskeys,
+  signInWithPasskey,
+} from './passkeyAuth';
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -26,6 +31,26 @@ afterEach(() => {
 const signal = () => new AbortController().signal;
 
 describe('passkey browser boundary', () => {
+  it('defaults enrollment to this device, keeps the alternate explicit, and leaves sign-in unrestricted', async () => {
+    actions.add.mockResolvedValue({ data: { ok: true }, error: null });
+    actions.signIn.mockResolvedValue({ data: { ok: true }, error: null });
+    const requestSignal = signal();
+    await addAccountPasskey('My MacBook', requestSignal);
+    expect(actions.add).toHaveBeenLastCalledWith({
+      name: 'My MacBook',
+      authenticatorAttachment: 'platform',
+      fetchOptions: { signal: requestSignal },
+    });
+    await addAccountPasskey('My security key', requestSignal, 'cross-platform');
+    expect(actions.add).toHaveBeenLastCalledWith({
+      name: 'My security key',
+      authenticatorAttachment: 'cross-platform',
+      fetchOptions: { signal: requestSignal },
+    });
+    await signInWithPasskey(requestSignal);
+    expect(actions.signIn).toHaveBeenCalledWith({ fetchOptions: { signal: requestSignal } });
+  });
+
   it('projects account-only display metadata without exposing credential or attestation data', async () => {
     actions.list.mockResolvedValue({
       data: [
