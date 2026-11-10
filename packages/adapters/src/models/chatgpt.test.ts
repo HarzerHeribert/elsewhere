@@ -257,6 +257,58 @@ it('rejects a stream interrupted after otherwise valid-looking action deltas', a
     ),
   ).rejects.toThrow('stream_interrupted');
 });
+it('leaves the usage of an interrupted stream unknown', async () => {
+  const usage = vi.fn();
+  await expect(
+    readChatGPTStream(
+      stream(frame({ type: 'response.output_text.delta', delta: '{"type":"reflect"}' })),
+      usage,
+    ),
+  ).rejects.toThrow('stream_interrupted');
+  expect(usage).not.toHaveBeenCalled();
+});
+it.each([429, 500, 503])(
+  'reports that a request refused with HTTP %i used nothing',
+  async (status) => {
+    const fixture = client(() => Response.json({ error: { code: 'server_error' } }, { status }));
+    const failure = await new ChatGPTDecisionProvider(fixture.api)
+      .propose(context)
+      .catch((error: unknown) => error);
+    expect(failure).toMatchObject({ code: 'request_failed', status });
+    expect(fixture.usage).toHaveBeenCalledTimes(1);
+    expect(fixture.usage).toHaveBeenCalledWith({
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+    });
+  },
+);
+it('reports zero usage for a refusal whose body cannot be read', async () => {
+  const usage = vi.fn();
+  await expect(
+    readChatGPTStream(new Response('<html>bad gateway</html>', { status: 502 }), usage),
+  ).rejects.toThrow('invalid_response');
+  expect(usage).toHaveBeenCalledWith({ inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 });
+});
+it('reports zero usage when the selected model is unavailable and nothing is sent', async () => {
+  const fixture = client(() => stream(frame(completed('{"type":"reflect"}'))));
+  const usage = vi.fn();
+  const api = new ChatGPTClient(fixture.session, { model: 'absent-model', onUsageDetails: usage });
+  await expect(api.text([{ content: 'a' }, { content: 'b' }] as never)).rejects.toThrow(
+    'selected_model_unavailable',
+  );
+  expect(fixture.fetcher).toHaveBeenCalledTimes(1); // The catalog only.
+  expect(usage).toHaveBeenCalledWith({ inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 });
+});
+it('leaves usage unknown when the request was sent and the connection failed', async () => {
+  const fixture = client(() => {
+    throw new TypeError('fetch failed');
+  });
+  await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toThrow(
+    'network_or_stream_unavailable',
+  );
+  expect(fixture.usage).not.toHaveBeenCalled();
+});
 it('halts on a quota failure after deltas, preserving usage and disabling future requests', async () => {
   const fixture = client(() =>
     stream(

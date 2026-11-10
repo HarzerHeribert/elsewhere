@@ -32,6 +32,13 @@ function envelope(value: unknown): Envelope | undefined {
     : undefined;
 }
 
+/** What a request used when the provider refused it outright or it never left this process. */
+const NOTHING_USED: ModelUsage = Object.freeze({
+  inputTokens: 0,
+  outputTokens: 0,
+  cachedInputTokens: 0,
+});
+
 /** Bounded HTTP/SSE. Deltas alone never authorize a character action. */
 export async function readChatGPTStream(
   response: Response,
@@ -39,6 +46,10 @@ export async function readChatGPTStream(
   onDelta?: (text: string) => void,
 ): Promise<string> {
   if (!response.ok) {
+    // An HTTP error status arrives in place of a stream: the provider refused the request
+    // before starting a response, so nothing was generated. Saying so keeps the refusal out
+    // of the count of calls whose usage is unknown; a timeout or a broken stream stays there.
+    usage(NOTHING_USED);
     const payload = await boundedChatGPTJson(response);
     throw chatGPTFailure(
       payload,
@@ -185,11 +196,13 @@ export class ChatGPTClient {
     onDelta?: (text: string) => void,
     format?: ReturnType<typeof responsesActionFormat>,
   ): Promise<string> {
+    let sent = false;
     try {
       if (!this.catalog) await this.models();
       if (!this.catalog!.includes(this.model))
         throw new ChatGPTError('selected_model_unavailable', 400);
       const token = await this.session.accessToken();
+      sent = true;
       const response = await this.session.fetcher('https://api.openai.com/v1/responses', {
         method: 'POST',
         redirect: 'error',
@@ -223,6 +236,8 @@ export class ChatGPTClient {
     } catch (error) {
       const failure =
         error instanceof ChatGPTError ? error : new ChatGPTError('network_or_stream_unavailable');
+      // A request stopped before it was sent (no usable model or session) used nothing either.
+      if (!sent) this.options.onUsageDetails?.(NOTHING_USED);
       // A quota/policy failure stops future autonomous requests until an operator resumes.
       // Network and malformed-stream failures receive a persisted five-minute cooldown.
       await this.session.pauseFor(failure);
