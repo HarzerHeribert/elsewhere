@@ -55,7 +55,10 @@ describe('public research history', () => {
       { id: 'read-request', kind: 'read', sourceId: 'source', placeId: 'orchard' },
       2000,
     );
-    expect(publicResearch(state)[0].status).toBe('reading');
+    expect(publicResearch(state)[0]).toMatchObject({
+      status: 'reading',
+      readingSourceId: 'source',
+    });
     rememberResearch(
       state,
       {
@@ -75,6 +78,7 @@ describe('public research history', () => {
       status: 'read',
       sources: [{ status: 'read', excerpt: 'Robins forage on the ground.' }],
     });
+    expect(publicResearch(state)[0].readingSourceId).toBeUndefined();
     expect(JSON.stringify(publicResearch(state))).not.toMatch(/PRIVATE|password/);
     expect(state.memories.at(-1)?.source).toBe('web-reading');
   });

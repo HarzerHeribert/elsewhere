@@ -95,6 +95,8 @@ export interface ApiDependencies {
   ): Promise<{ accepted: boolean }>;
   getArtifact?(id: string): { contentType: string; body: string } | null;
   resolveWish?(id: string, decision: 'fulfill' | 'decline'): Promise<PublicSnapshot>;
+  /** Owner switch for the character's shared thoughts. */
+  setThoughts?(enabled: boolean): Promise<PublicSnapshot>;
 }
 
 /** Explicitly project public fields: never serialize a controller or private character state. */
@@ -132,12 +134,24 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
       ? {
           notebook: {
             enabled: snapshot.notebook.enabled === true,
-            entries: snapshot.notebook.entries.slice(-32).map(({ id, at, text, sourceIds }) => ({
-              id,
-              at,
-              text: text.slice(0, 360),
-              sourceIds: sourceIds.slice(0, 3),
-            })),
+            entries: snapshot.notebook.entries
+              .slice(-32)
+              .map(({ id, at, text, sourceIds, topics }) => ({
+                id,
+                at,
+                text: text.slice(0, 360),
+                sourceIds: sourceIds.slice(0, 3),
+                ...(topics?.length
+                  ? {
+                      topics: topics
+                        .filter(
+                          (topic) => topic.kind !== 'reading' || topic.id.startsWith('https://'),
+                        )
+                        .slice(0, 4)
+                        .map(({ kind, id, label }) => ({ kind, id, label: label.slice(0, 80) })),
+                    }
+                  : {}),
+              })),
             ...(snapshot.notebook.draft
               ? {
                   draft: {
@@ -147,6 +161,20 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
                   },
                 }
               : {}),
+          },
+        }
+      : {}),
+    ...(snapshot.thoughts
+      ? {
+          thoughts: {
+            available: snapshot.thoughts.available === true,
+            enabled: snapshot.thoughts.enabled === true,
+            entries: snapshot.thoughts.entries.slice(-48).map(({ id, at, text, placeId }) => ({
+              id,
+              at,
+              text: text.slice(0, 200),
+              ...(placeId ? { placeId } : {}),
+            })),
           },
         }
       : {}),
@@ -180,6 +208,9 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
               })),
             ...(episode.outcome ? { outcome: episode.outcome.slice(0, 360) } : {}),
             ...(episode.nextStep ? { nextStep: episode.nextStep.slice(0, 360) } : {}),
+            ...(episode.status === 'reading' && episode.readingSourceId
+              ? { readingSourceId: episode.readingSourceId }
+              : {}),
           })),
         }
       : {}),
@@ -1093,9 +1124,16 @@ export function createApiServer(deps: ApiDependencies) {
           pause: deps.pause.bind(deps),
           resume: deps.resume.bind(deps),
           reset: deps.reset.bind(deps),
+          ...(deps.setThoughts
+            ? {
+                'thoughts-on': () => deps.setThoughts!(true),
+                'thoughts-off': () => deps.setThoughts!(false),
+              }
+            : {}),
         };
         if (!Object.hasOwn(handlers, action)) throw new HttpError(404, 'Unknown owner action.');
-        const isCharacterAction = action === 'tick' || action === 'reset';
+        const isCharacterAction =
+          action === 'tick' || action === 'reset' || action.startsWith('thoughts-');
         if (isCharacterAction && !(await managesCharacter()))
           throw new HttpError(403, 'Character ownership is required.');
         const body = await readJson(req, bodyTimeoutMs);

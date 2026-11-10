@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { accountSurface, openSettings } from './settings-fixture';
 import { randomUUID } from 'node:crypto';
 import { createFixtureAccount, waitForFixtureAuthWindow } from './auth-fixture';
 
@@ -62,8 +63,8 @@ test('enrollment defaults to this device, offers an explicit security key, and s
     expect(signup.status()).toBe(200);
     const original = await page.request.get('/api/account').then((r) => r.json());
     await page.reload();
-    await page.getByRole('button', { name: 'Your account', exact: true }).click();
-    const dialog = page.getByRole('dialog'),
+    await openSettings(page, 'Sign-in & security');
+    const dialog = accountSurface(page),
       settings = dialog.getByRole('region', { name: 'Account passkeys', exact: true });
     await expect(settings).toContainText('No passkeys added yet.');
     await expect(settings.getByLabel('Save passkey using', { exact: true })).toHaveValue(
@@ -96,7 +97,7 @@ test('enrollment defaults to this device, offers an explicit security key, and s
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(dialog).toContainText('Use a passkey you have already added to Elsewhere.');
     await expect(dialog).toContainText('No Elsewhere passkey yet?');
-    await expect(dialog).toContainText('then add one under Your account → Passkeys.');
+    await expect(dialog).toContainText('then add one under Settings → Sign-in & security.');
     await dialog.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
     await expect(dialog).toContainText('You are signed in as Device Passkey Visitor.');
     const signed = await page.request.get('/api/account').then((r) => r.json());

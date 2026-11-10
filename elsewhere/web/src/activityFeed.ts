@@ -1,6 +1,6 @@
 import type { WorldEvent } from '@elsewhere/character-interfaces';
 
-const routineTypes = new Set([
+export const routineTypes = new Set([
   'move',
   'arrival',
   'inspect',

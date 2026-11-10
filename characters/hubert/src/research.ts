@@ -166,6 +166,7 @@ export function startResearchEpisode(
     const episode = research.episodes.at(-1);
     if (episode?.sources.some((source) => source.id === input.sourceId)) {
       episode.status = 'reading';
+      episode.readingSourceId = input.sourceId;
       delete episode.outcome;
       delete episode.nextStep;
     }
@@ -204,6 +205,7 @@ function recordResearchResult(state: HubertState, result: ResearchResult, now: n
     .find((item) => item.sources.some((source) => source.id === result.sourceId));
   if (!episode) return;
   const source = episode.sources.find((item) => item.id === result.sourceId)!;
+  delete episode.readingSourceId;
   Object.assign(source, {
     url: result.url,
     title: result.title,
@@ -220,6 +222,7 @@ export function deferResearchEpisode(state: HubertState, sourceId?: string) {
   const episode = state.research?.episodes?.at(-1);
   if (!episode) return;
   episode.status = 'deferred';
+  delete episode.readingSourceId;
   episode.outcome = 'The research request was unavailable; no new result was recorded.';
   episode.nextStep = 'Research has been left for later.';
   const source = episode.sources.find((item) => item.id === sourceId);
@@ -258,5 +261,8 @@ export function publicResearch(state: HubertState): PublicResearchEpisode[] {
       })),
     ...(episode.outcome ? { outcome: episode.outcome.slice(0, 360) } : {}),
     ...(episode.nextStep ? { nextStep: episode.nextStep.slice(0, 360) } : {}),
+    ...(episode.status === 'reading' && episode.readingSourceId
+      ? { readingSourceId: episode.readingSourceId }
+      : {}),
   }));
 }

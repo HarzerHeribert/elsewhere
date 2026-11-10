@@ -5,9 +5,17 @@ import { applyInterestChoice } from '../characters/hubert/src/interestChoices';
 import { InvalidDecisionError } from '@elsewhere/character-runtime';
 import { BrokerModelError } from '../packages/adapters/src/models/broker';
 import { displayMemorySummary } from '../characters/hubert/src/memoryQuality';
-import { notebookInput } from '../characters/hubert/src/notebook';
+import { notebookInput, notebookTopics } from '../characters/hubert/src/notebook';
+import {
+  THOUGHTS_KEPT,
+  THOUGHTS_PER_DAY,
+  THOUGHT_INTERVAL_MS,
+  thoughtInput,
+  thoughtMoment,
+} from '../characters/hubert/src/thoughts';
 import {
   validatePublicExpression,
+  validatePublicThought,
   type ExpressionProvider,
 } from '../packages/adapters/src/models/expression';
 import { randomUUID, createHash } from 'node:crypto';
@@ -282,6 +290,11 @@ export class ElsewhereController {
         enabled: Boolean(this.options.expressionProvider),
         entries: s.hubert.notebook?.entries ?? [],
         ...(this.publicDraft ? { draft: this.publicDraft } : {}),
+      },
+      thoughts: {
+        available: Boolean(this.options.expressionProvider),
+        enabled: Boolean(this.options.expressionProvider) && !s.hubert.thoughts?.disabled,
+        entries: s.hubert.thoughts?.entries ?? [],
       },
       events: s.world.events
         .slice(-35)
@@ -923,7 +936,80 @@ export class ElsewhereController {
     }
     await this.commit();
     await this.writeNotebook();
+    await this.shareThought();
     return this.getSnapshot();
+  }
+  /**
+   * A thought is authored in its own request from the public snapshot alone, exactly like a
+   * notebook note: the decision context, with its private messages and intent, is never an input.
+   */
+  private async shareThought() {
+    const provider = this.options.expressionProvider;
+    if (!provider || this.halted || this.state.runtime.paused) return;
+    if (this.state.hubert.thoughts?.disabled || provider.isAvailable?.() === false) return;
+    const snapshot = this.getSnapshot();
+    const placeId = observeWorld(
+      this.state.world,
+      'hubert',
+      this.state.runtime.simulatedAt,
+    ).placeId;
+    const moment = thoughtMoment(snapshot, placeId);
+    if (moment.resting) return;
+    const now = this.wallNow();
+    const day = new Date(now).toISOString().slice(0, 10);
+    const thoughts = (this.state.hubert.thoughts ??= { day, calls: 0, lastAtReal: 0, entries: [] });
+    const calls = day > thoughts.day ? 0 : thoughts.calls;
+    const maximum = this.options.modelMaximum ?? 100;
+    if (
+      thoughts.lastKey === moment.key ||
+      calls >= THOUGHTS_PER_DAY ||
+      (thoughts.lastAtReal > 0 && now - thoughts.lastAtReal < THOUGHT_INTERVAL_MS)
+    )
+      return;
+    // Thoughts never spend the last fifth of the day's calls; deciding what to do comes first.
+    const allowance = reserveModelCall(this.state.modelAllowance, now, Math.floor(maximum * 0.8));
+    if (!allowance) return;
+    this.state.modelAllowance = allowance;
+    thoughts.day = day;
+    thoughts.calls = calls + 1;
+    thoughts.lastAtReal = now;
+    thoughts.lastKey = moment.key;
+    await this.commit(); // One durable request reservation; an abandoned thought is never replayed.
+    this.modelDispatchActive = true;
+    try {
+      const text = validatePublicThought(await provider.express(thoughtInput(snapshot, placeId)));
+      if (text)
+        thoughts.entries = [
+          ...thoughts.entries,
+          {
+            id: 'thought-' + randomUUID(),
+            at: this.state.runtime.simulatedAt,
+            text,
+            ...(moment.place ? { placeId: moment.place.id } : {}),
+          },
+        ].slice(-THOUGHTS_KEPT);
+    } catch {
+      if (this.halted) throw Error('Thought stopped after persistence failure.');
+      // A thought that fails or does not validate is simply not shared; the next waits its turn.
+    } finally {
+      this.modelDispatchActive = false;
+    }
+    await this.commit();
+  }
+  setThoughts(enabled: boolean) {
+    return this.serialize(async () => {
+      const day = new Date(this.wallNow()).toISOString().slice(0, 10);
+      const thoughts = (this.state.hubert.thoughts ??= {
+        day,
+        calls: 0,
+        lastAtReal: 0,
+        entries: [],
+      });
+      if (enabled) delete thoughts.disabled;
+      else thoughts.disabled = true;
+      await this.commit();
+      return this.getSnapshot();
+    });
   }
   private async writeNotebook() {
     const provider = this.options.expressionProvider;
@@ -1010,7 +1096,13 @@ export class ElsewhereController {
       if (text)
         book.entries = [
           ...book.entries,
-          { id, at: this.state.runtime.simulatedAt, text, sourceIds: input.facts.map((f) => f.id) },
+          {
+            id,
+            at: this.state.runtime.simulatedAt,
+            text,
+            sourceIds: input.facts.map((f) => f.id),
+            topics: notebookTopics(this.getSnapshot(), input.facts),
+          },
         ].slice(-32);
     } catch {
       if (this.halted) throw Error('Notebook stopped after persistence failure.');
@@ -1208,6 +1300,9 @@ export class ElsewhereController {
           entries: [],
           pending: undefined,
         };
+      // Shared thoughts belong to the life that was reset; the owner's switch and the day's count stay.
+      if (previous.thoughts)
+        this.state.hubert.thoughts = { ...structuredClone(previous.thoughts), entries: [] };
       this.publicDraft = undefined;
       this.state.world.version = Math.max(this.state.world.version, worldVersion + 1);
       for (const wish of this.state.hubert.wishes ?? []) {

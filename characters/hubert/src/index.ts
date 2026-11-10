@@ -2,6 +2,7 @@ import type { ActionChoice, PublicCreation } from '@elsewhere/character-interfac
 import { availableInterestChoices, type HubertInterestChoiceState } from './interestChoices';
 import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
 import type { HubertNotebookState } from './notebook';
+import type { HubertThoughtState } from './thoughts';
 import { HUBERT_IDENTITY, bodyLanguage } from './persona';
 import { hubertDreamActions, hubertDreamSources } from './dreams';
 import {
@@ -143,6 +144,7 @@ export interface HubertState {
   lastProposal?: { at: number; type: string; targetId?: string; adjustment: string };
   research?: HubertResearchState;
   notebook?: HubertNotebookState;
+  thoughts?: HubertThoughtState;
   interestChoices?: HubertInterestChoiceState;
   lastDecisionProblem?: { at: number; code: string; message: string; fields: string[] };
 }
