@@ -5,6 +5,7 @@ import { createGunzip, createBrotliDecompress } from 'node:zlib';
 import { Readable } from 'node:stream';
 import ipaddr from 'ipaddr.js';
 import { parseHTML } from 'linkedom';
+import { RESEARCH_EXCERPT_LIMIT } from '../../../characters/interfaces/src/research';
 
 export function publicWebUrl(value: string): URL {
   if (value.length > 2048 || /[\x00-\x20\x7f]/.test(value)) throw Error('Unsupported web address.');
@@ -36,7 +37,11 @@ const clean = (value: string, maximum: number) =>
     .slice(0, maximum);
 export function extractPage(body: string, contentType: string) {
   if (contentType.startsWith('text/plain'))
-    return { title: 'Web page', excerpt: clean(body, 4000), truncated: body.length > 4000 };
+    return {
+      title: 'Web page',
+      excerpt: clean(body, RESEARCH_EXCERPT_LIMIT),
+      truncated: body.length > RESEARCH_EXCERPT_LIMIT,
+    };
   const { document } = parseHTML(body.slice(0, 262144));
   const title = clean(document.querySelector('title')?.textContent ?? 'Web page', 180);
   for (const node of document.querySelectorAll(
@@ -48,8 +53,8 @@ export function extractPage(body: string, contentType: string) {
   const text = clean(main?.textContent ?? '', 100_000);
   return {
     title,
-    excerpt: text.slice(0, 4000),
-    truncated: body.length > 262144 || text.length > 4000,
+    excerpt: text.slice(0, RESEARCH_EXCERPT_LIMIT),
+    truncated: body.length > 262144 || text.length > RESEARCH_EXCERPT_LIMIT,
   };
 }
 

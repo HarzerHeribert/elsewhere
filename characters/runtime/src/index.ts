@@ -2,6 +2,8 @@
 export * from './progress';
 export * from './dreams';
 export * from './decision-errors';
+export * from './pursuits';
+export * from './public-text';
 import { ActionChoicesSchema, type ActionChoice } from '../../interfaces/src/commands';
 export type MemoryCueKind = 'place' | 'object' | 'entity' | 'person' | 'phrase';
 export interface MemoryCue {
