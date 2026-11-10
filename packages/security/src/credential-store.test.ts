@@ -200,6 +200,8 @@ it('delivers only the selected model to the API and strips sensitive settings fr
     MODEL_API_KEY: 'fixture-old-model',
     STRIPE_KEY: 'fixture-parent-stripe',
     RESEND_API_KEY: 'fixture-parent-resend',
+    CHARACTER_MAIL_API_KEY: 'fixture-character-mail',
+    CHARACTER_MAIL_RECEIVE_API_KEY: 'fixture-character-receive',
     ADMIN_TOKEN: 'fixture-parent-owner',
     BETTER_AUTH_SECRET: 'fixture-parent-auth',
     DATABASE_URL: 'fixture-parent-database',

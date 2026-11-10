@@ -1,0 +1,55 @@
+.character-mail fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 12px 0;
+  padding: 0;
+  border: 0;
+}
+.character-mail label,
+.modal .character-mail label {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.character-mail .mail-preference,
+.modal .character-mail .mail-preference {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 28px;
+  gap: 10px;
+}
+.character-mail input[type='checkbox'],
+.modal .character-mail input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  flex: 0 0 auto;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--ew-accent);
+}
+.character-mail :is(textarea, select) {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ew-line);
+  border-radius: var(--ew-radius-control);
+  background: var(--ew-surface);
+  color: var(--ew-text);
+  font: inherit;
+}
+.character-mail textarea {
+  resize: vertical;
+}
+.character-mail .mail-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.character-mail details {
+  margin-block: 16px;
+}
+.character-mail .memory-glimpse > small {
+  display: block;
+  margin-block: 6px;
+}

@@ -512,3 +512,47 @@ html.design-system-page,
     scroll-behavior: auto;
   }
 }
+
+.ds-world-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.ds-world-swatches article > div {
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--ew-ink) 12%, transparent);
+  margin-bottom: 8px;
+}
+.ds-world-swatches strong,
+.ds-world-swatches code,
+.ds-world-swatches small {
+  display: block;
+}
+.ds-world-swatches code {
+  font-size: 11px;
+}
+.ds-world-swatches small {
+  color: var(--ew-text-muted);
+}
+.ds-world-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 24px 0;
+}
+.ds-world-scale div {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.ds-world-scale dt {
+  color: var(--ew-text-muted);
+  font-size: 12px;
+}
+.ds-world-scale dd {
+  margin: 0;
+  font-family: var(--ew-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}

@@ -52,6 +52,18 @@ const definitions = [
       'pin_creation: choose a creationId from state.creations, and pinned true or false to curate your public Creations shelf. Only existing recorded links can be pinned; this does not create a project or publish new content.',
   },
   {
+    schema: z
+      .object({
+        type: z.literal('draft_mail'),
+        kind: z.enum(['maker', 'correspondence', 'newsletter']),
+        entryIds: z.array(targetId).min(1).max(8),
+        recipientUserId: targetId.optional(),
+      })
+      .strict(),
+    instruction:
+      'draft_mail: select kind maker, correspondence or newsletter, and 1–8 entryIds from mail.publicEntries. Only correspondence selects recipientUserId from mail.contacts. The host composes from your existing public authored entries; never invent an entry, recipient, delivery or permission. A draft may need owner review before sending.',
+  },
+  {
     schema: z.object({ type: z.literal('reflect') }).strict(),
     instruction: 'reflect: no additional fields.',
   },

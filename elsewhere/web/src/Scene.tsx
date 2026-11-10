@@ -10,7 +10,10 @@ import {
   stepLocalMovement,
   WORLD_PREDICTION_MS,
 } from './sceneMotion';
-import { WORLD_ASSETS, worldAssetLoader } from './worldAssets';
+import { worldAssetLoader } from './worldAssets';
+import { createCraftKit } from './craft';
+import { createWorldLook } from './worldLook';
+import { windUniforms } from './wind';
 import { createAtmosphere } from './atmosphere';
 import { buildVillageArchitecture, type VillageArchitecture } from './architecture';
 import { buildGardens } from './gardens';
@@ -79,13 +82,14 @@ export function Scene(props: Props) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.72;
+    // Several passes draw each frame; statistics are reset once per frame instead.
+    renderer.info.autoReset = false;
+    const look = createWorldLook(renderer);
+    renderer.domElement.dataset.look = look.enabled ? 'graded' : 'direct';
     host.appendChild(renderer.domElement);
     let disposed = false;
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0xaacac4, 58, 170);
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.08, 230);
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.08, 260);
     camera.position.set(39, 46, 53);
     const orbit = new OrbitControls(camera, renderer.domElement);
     orbit.target.set(0, 0, 0);
@@ -95,6 +99,14 @@ export function Scene(props: Props) {
     orbit.maxDistance = 125;
     orbit.maxPolarAngle = Math.PI * 0.48;
     orbit.minPolarAngle = 0.1;
+    // Development-only handle for inspecting the scene from authored viewpoints.
+    if (import.meta.env.DEV)
+      (window as unknown as Record<string, unknown>).__elsewhereView = {
+        camera,
+        orbit,
+        scene,
+        renderer,
+      };
     const resources = new ResourceScope();
     const assetLoaded = new Set<string>(),
       assetFailed = new Set<string>(),
@@ -132,6 +144,7 @@ export function Scene(props: Props) {
     const wildlife = createWildlife(scene, attachAsset);
     const primitives = createScenePrimitives({ scene, resources, surfaces });
     const { material, surface, box, cylinder, sphere } = primitives;
+    const craft = createCraftKit(surfaces, resources);
 
     function label(text: string, x: number, z: number) {
       const canvas = document.createElement('canvas');
@@ -166,16 +179,19 @@ export function Scene(props: Props) {
       buildMeadowBoundary(b, scene, surfaces);
       forest = buildForest(w, scene, attachAsset, surfaces);
       const entryGate = new THREE.Group();
-      entryGate.position.set(b.maxX - 0.3, 0, 7);
+      entryGate.position.set(b.maxX, 0, 7);
       entryGate.rotation.y = Math.PI / 2;
       scene.add(entryGate);
-      attachAsset(entryGate, WORLD_ASSETS.gate, 1.15);
+      craft.fieldGate(entryGate, 2);
+      craft.merge(entryGate);
       for (const place of w.places) {
         if (!place.entryPoint || place.id === 'meadow') continue;
         const post = new THREE.Group();
         post.position.set(place.entryPoint.x + 1.4, 0, place.entryPoint.z + 0.8);
         scene.add(post);
-        attachAsset(post, WORLD_ASSETS.sign, 1.1);
+        post.rotation.y = Math.atan2(-place.entryPoint.x, -place.entryPoint.z) * 0.35;
+        craft.signpost(post);
+        craft.merge(post);
       }
       // The terrain and location labels follow the authoritative world's actual bounds.
       for (const place of w.places) {
@@ -202,7 +218,7 @@ export function Scene(props: Props) {
         scene.add(floor);
       }
       // Every visible wall matches the server collision rectangles.
-      architecture = buildVillageArchitecture(w, scene, attachAsset, surfaces);
+      architecture = buildVillageArchitecture(w, scene, attachAsset, surfaces, craft);
       gardens = buildGardens(w, scene, attachAsset);
       occluders.push(...architecture.occluders);
       for (const obstacle of w.obstacles) {
@@ -474,6 +490,8 @@ export function Scene(props: Props) {
     }
     const resize = () => {
       renderer.setSize(host.clientWidth, host.clientHeight);
+      const buffer = renderer.getDrawingBufferSize(new THREE.Vector2());
+      look.setSize(buffer.x, buffer.y);
       camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
       camera.updateProjectionMatrix();
     };
@@ -523,6 +541,7 @@ export function Scene(props: Props) {
             surfaces,
             resources,
             primitives,
+            craft,
           });
           scene.add(model.root);
           objectModels.set(object.id, model);
@@ -842,7 +861,9 @@ export function Scene(props: Props) {
       viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       viewFrustum.setFromProjectionMatrix(viewProjection);
       attachAsset.updateVisibility(camera.position, viewFrustum);
-      renderer.render(scene, camera);
+      if (!reducedMotion.matches) windUniforms.uWindTime.value = now / 1000;
+      renderer.info.reset();
+      look.render(scene, camera);
       if (now - lastDiagnostics > 750) {
         renderer.domElement.dataset.renderStats = JSON.stringify({
           buildings: architecture?.roofs.filter((roof) => roof.visible).length ?? 0,
@@ -888,6 +909,7 @@ export function Scene(props: Props) {
       attachAsset.dispose();
       atmosphere.dispose();
       scene.clear();
+      look.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     };

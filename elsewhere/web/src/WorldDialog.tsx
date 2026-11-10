@@ -123,8 +123,9 @@ export function WorldDialog({
           <details className="about-credits">
             <summary>Asset credits</summary>
             <p>
-              3D assets by Kenney and textures by Poly Haven, distributed under CC0. Lettering uses
-              Averia Serif Libre under the SIL Open Font License.
+              Trees, plants, surface scans and sky by Poly Haven and a bird from AssetQuest,
+              distributed under CC0. Lettering uses Averia Serif Libre under the SIL Open Font
+              License.
             </p>
           </details>
         </>

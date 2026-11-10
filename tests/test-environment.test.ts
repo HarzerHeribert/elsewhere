@@ -40,6 +40,11 @@ it('isolates both inherited configuration and an operator dotenv file in actual 
         TAVILY_FUTURE_TOKEN: 'operator-future-key',
         SEARXNG_BASE_URL: 'https://operator-search.invalid',
         SEARXNG_API_KEY: 'operator-searxng-key',
+        CHARACTER_MAIL_API_KEY: 'operator-character-mail-key',
+        CHARACTER_MAIL_RECEIVE_API_KEY: 'operator-character-receiving-key',
+        CHARACTER_MAIL_WEBHOOK_SECRET: 'operator-webhook-secret',
+        CHARACTER_MAIL_UNSUBSCRIBE_SECRET: 'operator-unsubscribe-secret',
+        RESEND_API_KEY: 'operator-resend-key',
         AUTH_EMAIL_API_KEY: 'operator-mail-key',
         AUTH_EMAIL_FROM: 'operator@example.com',
         API_PROXY_SECRET: 'operator-ingress-key',
@@ -53,7 +58,7 @@ it('isolates both inherited configuration and an operator dotenv file in actual 
         '-e',
         `
       await import(${JSON.stringify(dotenv)});
-      const names=['NODE_ENV','DATABASE_URL','AUTH_DATABASE_URL','BETTER_AUTH_URL','AUTH_ADMIN_USER_IDS','MODEL_PROVIDER','MODEL_API_KEY','AUTH_EMAIL_API_KEY','AUTH_EMAIL_FROM','API_PROXY_SECRET','DATA_DIR',...Object.keys(process.env).filter(name=>/^(RESEARCH_|TAVILY_|SEARXNG_)/.test(name))];
+      const names=['NODE_ENV','DATABASE_URL','AUTH_DATABASE_URL','BETTER_AUTH_URL','AUTH_ADMIN_USER_IDS','MODEL_PROVIDER','MODEL_API_KEY','AUTH_EMAIL_API_KEY','AUTH_EMAIL_FROM','API_PROXY_SECRET','DATA_DIR',...Object.keys(process.env).filter(name=>/^(CHARACTER_MAIL_|RESEND_|RESEARCH_|TAVILY_|SEARXNG_)/.test(name))];
       process.stdout.write(JSON.stringify(Object.fromEntries(names.map(name=>[name,process.env[name]]))));
     `,
       ],
@@ -77,7 +82,9 @@ it('isolates both inherited configuration and an operator dotenv file in actual 
     expect(environment.MODEL_ROUTING_JSON).toBeUndefined();
     expect(environment.MODEL_CF_INFERENCE_KEY).toBeUndefined();
     expect(
-      Object.keys(environment).filter((name) => /^(RESEARCH_|TAVILY_|SEARXNG_)/.test(name)),
+      Object.keys(environment).filter((name) =>
+        /^(CHARACTER_MAIL_|RESEND_|RESEARCH_|TAVILY_|SEARXNG_)/.test(name),
+      ),
     ).toEqual([]);
     expect(environment.BETTER_AUTH_SECRET.length).toBeGreaterThanOrEqual(32);
     expect(environment.BETTER_AUTH_SECRET).not.toBe(environment.ADMIN_TOKEN);

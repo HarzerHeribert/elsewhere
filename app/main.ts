@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { createCharacterMail } from './character-mail';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { closeApiServer, createApiServer } from '@elsewhere/server';
@@ -30,7 +31,9 @@ const lifetime = new AbortController();
 let ready = false;
 let auth: Awaited<ReturnType<typeof createLocalAuth>> | undefined;
 let controller: ElsewhereController | undefined;
+let characterMail: Awaited<ReturnType<typeof createCharacterMail>> | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
+let mailTimer: ReturnType<typeof setInterval> | undefined;
 let startup: Promise<void> = Promise.resolve();
 let stopping: Promise<void> | undefined;
 let postgres: PostgresSnapshotStore<ControllerState> | undefined;
@@ -75,6 +78,16 @@ const server = createApiServer({
     : [config.WEB_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'],
   proxySecret: config.production ? process.env.API_PROXY_SECRET : undefined,
   isReady: () => ready,
+  characterMail: {
+    getPublic: (id) => characterMail?.service.getPublic(id) ?? null,
+    getAccount: (id, managed) =>
+      characterMail?.service.getAccount(id, managed) ?? Promise.resolve([]),
+    setPreferences: (id, user, prefs) => characterMail!.service.setPreferences(id, user, prefs),
+    compose: (id, input, source) => characterMail!.service.compose(id, input, source),
+    approve: (id, draft, ownerId) => characterMail!.service.approve(id, draft, ownerId),
+    unsubscribe: (value) => characterMail!.service.unsubscribe(value),
+  },
+  handleMailWebhook: (raw, headers) => characterMail!.handleWebhook(raw, headers),
   getSnapshot: () => controller!.getSnapshot(),
   getCharacterIssues: () => controller!.getCharacterIssues(),
   retryCharacterProvider: () => controller!.retryCharacterProvider(),
@@ -111,11 +124,21 @@ async function initialize() {
     }),
   );
   if (lifetime.signal.aborted) return;
+  characterMail = await createCharacterMail(process.env, {
+    dataDirectory: directory,
+    ownerUserId: config.HUBERT_OWNER_USER_ID,
+    publicOrigin: config.WEB_ORIGIN,
+    databaseUrl: process.env.DATABASE_URL,
+    lookupUser: (id) => auth!.lookupMailUser(id),
+    lookupUserByEmail: (email) => auth!.lookupMailUserByEmail(email),
+  });
+  if (lifetime.signal.aborted) return;
   const providers = runtimeProviders(config, process.env, {
     onUsage: (input, output) => controller?.addUsage(input, output),
     budgetFor: (routing) => controller!.modelBudget(routing),
   });
   controller = await new ElsewhereController(store, {
+    mail: characterMail.service,
     simulationStepMs: config.TICK_INTERVAL_MS * config.SIMULATION_RATE,
     decisionIntervalMs: config.DECISION_INTERVAL_MS,
     simulationRate: config.SIMULATION_RATE,
@@ -158,6 +181,27 @@ function startClock() {
         ticking = false;
       });
   }, config.TICK_INTERVAL_MS);
+  let mailing = false;
+  let nextMailAttempt = 0;
+  mailTimer = setInterval(() => {
+    if (mailing || !ready || !characterMail || Date.now() < nextMailAttempt) return;
+    mailing = true;
+    characterMail.service
+      .dispatch()
+      .catch(() => {
+        if (!characterMail?.service.getPublic('hubert')?.sendingAvailable) {
+          console.error('Character mail stopped. Check its private connection and storage.');
+          clearInterval(mailTimer);
+        } else {
+          // Recipient lookups can fail transiently without invalidating the durable mail ledger.
+          nextMailAttempt = Date.now() + 30_000;
+          console.error('Character mail is temporarily unavailable; delivery will be rechecked.');
+        }
+      })
+      .finally(() => {
+        mailing = false;
+      });
+  }, 2000);
 }
 
 function shutdown(code = 0): Promise<void> {
@@ -165,9 +209,12 @@ function shutdown(code = 0): Promise<void> {
   ready = false;
   lifetime.abort();
   clearInterval(timer);
+  clearInterval(mailTimer);
   stopping = (async () => {
     await closeApiServer(server);
     await startup.catch(() => undefined);
+    await controller?.drain();
+    await characterMail?.service.close();
     if (controller) await controller.close();
     else await store.close();
     await auth?.close();

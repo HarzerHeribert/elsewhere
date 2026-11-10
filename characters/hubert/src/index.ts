@@ -63,6 +63,7 @@ import {
   type ProgressLedger,
   type ProgressGuidance,
   type DecisionContext,
+  type JsonObject,
   type DecisionProvider,
   type EpisodicMemory,
   type MemoryCue,
@@ -1022,11 +1023,13 @@ export function workingContext(
   nowReal = observation.observedAt,
   researchEnabled = false,
   creations: readonly PublicCreation[] = [],
+  mail: JsonObject = { available: false },
 ): DecisionContext {
   return buildWorkingContext({
     identity: HUBERT_IDENTITY,
     state: {
       ...planningSummary(state, observation, nowReal),
+      mail,
       creations: creations
         .filter((creation) => creation.characterId === state.id)
         .slice(-32)
@@ -1105,11 +1108,12 @@ export async function chooseActionWithProvider(
   nowReal = now,
   researchEnabled = false,
   creations: readonly PublicCreation[] = [],
+  mail: JsonObject = { available: false },
 ): Promise<HubertDecision> {
   const state = advanceHubert(input, now);
   rememberObservation(state, observation, now);
   const result = await provider.propose(
-    workingContext(state, observation, nowReal, researchEnabled, creations),
+    workingContext(state, observation, nowReal, researchEnabled, creations, mail),
   );
   const parsed = CharacterCommandSchema.safeParse(result);
   if (!parsed.success)

@@ -663,16 +663,6 @@ test('real branched trees, scanned planting, PBR architecture and the HDR enviro
     '/assets/polyhaven/models/fern_02/model-high.glb',
     '/assets/polyhaven/models/shrub_02/model-high.glb',
     '/assets/polyhaven/models/rock_07/model-high.glb',
-    '/assets/kenney/furniture/bench.glb',
-    '/assets/kenney/furniture/desk.glb',
-    '/assets/kenney/furniture/table.glb',
-    '/assets/kenney/furniture/bookcaseOpen.glb',
-    '/assets/kenney/furniture/bookcaseClosed.glb',
-    '/assets/kenney/furniture/pottedPlant.glb',
-    '/assets/kenney/furniture/lampRoundFloor.glb',
-    '/assets/kenney/town/lantern.glb',
-    '/assets/kenney/nature/flower_redA.glb',
-    '/assets/kenney/nature/flower_yellowA.glb',
   ];
   const requiredTextures = [
     ...['leafy_grass', 'grass_path_2'].flatMap((name) =>
@@ -1199,7 +1189,7 @@ for (const failure of ['HTML', '503'] as const) {
     await expect(panel(page).getByRole('group', { name: 'About Hubert' })).toBeVisible();
     await expect(panel(page).getByText('0 visitors exploring', { exact: true })).not.toBeVisible();
     await closePanel(page);
-    await expect(scene).toHaveAttribute('data-assets-loaded', /kenney\/furniture\/bench\.glb/, {
+    await expect(scene).toHaveAttribute('data-assets-loaded', /rock_07\/model-high\.glb/, {
       timeout: 25000,
     });
     await expect(scene).toHaveAttribute('data-textures-loaded', /roof_tiles_14_diff_2k\.jpg/, {

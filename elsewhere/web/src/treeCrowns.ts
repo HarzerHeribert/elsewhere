@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { AssetInstance } from './worldAssets';
 import type { createEnvironmentMaterials } from './materials';
+import { applyWind } from './wind';
 
 // Centres of foliage clusters on the two shipped Poly Haven meshes, normalized by tree height.
 // Keeping the scan's asymmetric growth puts leaves over its forks and leaves the trunk visible.
@@ -119,6 +120,11 @@ export function addTreeCrowns(
   );
   leaf.alphaToCoverage = true;
   leaf.vertexColors = true;
+  applyWind(leaf, {
+    weight: 'clamp(length(position) * 0.8, 0.0, 1.0)',
+    strength: 0.05,
+    key: 'crown',
+  });
   const centres = orchard ? apple : broadleaf;
   const canopy = new THREE.InstancedMesh(geometry, leaf, centres.length * trees.length);
   const fruits = orchard

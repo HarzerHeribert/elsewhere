@@ -4,6 +4,7 @@ import type { WorldObject } from '@elsewhere/character-interfaces';
 import { createInitialWorld } from '../../server/src/world';
 import { createEnvironmentMaterials } from './materials';
 import { createScenePrimitives } from './scenePrimitives';
+import { createCraftKit } from './craft';
 import { ResourceScope } from './sceneResources';
 import type { AttachWorldAsset } from './worldAssets';
 import { createWorldObjectModel, WORLD_OBJECT_MODEL_DEFINITIONS } from './worldObjectModels';
@@ -31,6 +32,7 @@ function setup() {
     surfaces,
     assets,
     primitives,
+    craft: createCraftKit(surfaces, resources),
     dispose() {
       resources.dispose();
       surfaces.dispose();
@@ -73,6 +75,8 @@ describe('world object model builders', () => {
       object('standing-stones'),
       object('windchime'),
       object('weather-station'),
+      object('reading-table', 'table'),
+      object('sundial'),
       object('future-object'),
     ];
     expect(
@@ -83,7 +87,7 @@ describe('world object model builders', () => {
           ),
         ),
       ).size,
-    ).toBe(17);
+    ).toBe(19);
     for (const value of examples) {
       const model = createWorldObjectModel(value, dependencies);
       dependencies.scene.add(model.root);
@@ -99,10 +103,38 @@ describe('world object model builders', () => {
     }
     expect(dependencies.assets).toHaveBeenCalledWith(
       expect.any(THREE.Group),
-      '/assets/kenney/furniture/desk.glb',
-      1.15,
-      expect.any(THREE.Group),
+      '/assets/polyhaven/models/rock_07/model-high.glb',
+      expect.objectContaining({ height: 1.6 }),
     );
+    // No authored object borrows a model from outside the world's own kit and scans.
+    for (const [, path] of vi.mocked(dependencies.assets).mock.calls)
+      expect(path).toMatch(/^\/assets\/polyhaven\//);
+    dependencies.dispose();
+  });
+
+  it('stands every canonical object on the ground or on the surface beneath it', () => {
+    const dependencies = setup(),
+      world = createInitialWorld(1);
+    for (const value of world.objects) {
+      if (value.kind === 'tree' || value.kind === 'stones') continue; // scanned, loaded later
+      const model = createWorldObjectModel(value, dependencies);
+      model.selectionRing.removeFromParent();
+      const base = new THREE.Box3().setFromObject(model.root).min.y;
+      // Interior floorboards lie 5.5 cm above the terrain; nothing may hover beyond that.
+      expect(Math.abs(base - (value.elevation ?? 0)), value.id).toBeLessThan(0.07);
+      model.dispose();
+    }
+    // The artifact's resting height is the top of the workbench's display riser.
+    const workbench = world.objects.find((value) => value.id === 'workbench')!,
+      artifact = world.objects.find((value) => value.id === 'artifact')!;
+    const bench = createWorldObjectModel(workbench, dependencies);
+    bench.root.updateMatrixWorld(true);
+    const hit = new THREE.Raycaster(
+      new THREE.Vector3(artifact.position.x, 5, artifact.position.z),
+      new THREE.Vector3(0, -1, 0),
+    ).intersectObject(bench.root, true)[0];
+    expect(hit?.point.y).toBeCloseTo(artifact.elevation!, 2);
+    bench.dispose();
     dependencies.dispose();
   });
 
@@ -111,13 +143,14 @@ describe('world object model builders', () => {
       world = createInitialWorld(1);
     const garden = world.objects.find((value) => value.id === 'garden')!;
     const model = createWorldObjectModel(garden, dependencies);
-    const bed = model.root.children[0] as THREE.Mesh<THREE.BoxGeometry>;
-    expect(bed.geometry.parameters.width).toBe(garden.footprint!.maxX - garden.footprint!.minX);
-    expect(bed.geometry.parameters.depth).toBe(garden.footprint!.maxZ - garden.footprint!.minZ);
-    expect(bed.geometry.parameters.height).toBe(garden.height);
+    const bed = new THREE.Box3().setFromObject(model.root).getSize(new THREE.Vector3());
+    expect(bed.x).toBeCloseTo(garden.footprint!.maxX - garden.footprint!.minX);
+    expect(bed.z).toBeCloseTo(garden.footprint!.maxZ - garden.footprint!.minZ);
+    expect(bed.y).toBeGreaterThanOrEqual(garden.height);
+    expect(bed.y).toBeLessThan(garden.height + 0.2);
     const artifact = world.objects.find((value) => value.id === 'artifact')!;
     const artifactModel = createWorldObjectModel(artifact, dependencies);
-    const gem = artifactModel.root.children[0]!;
+    const gem = artifactModel.root.children.find((child) => child.userData.separate)!;
     expect(gem.getWorldPosition(new THREE.Vector3()).y).toBeCloseTo(artifact.observationHeight!);
     model.dispose();
     artifactModel.dispose();

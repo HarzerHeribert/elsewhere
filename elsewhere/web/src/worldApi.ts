@@ -151,5 +151,28 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
     requiresEmailVerification: value.requiresEmailVerification === true,
     managedCharacterIds,
     characterIssues,
+    ...(value.user && value.characterMailUnavailable === true
+      ? { characterMailUnavailable: true }
+      : {}),
+    characterMail:
+      value.user && Array.isArray(value.characterMail)
+        ? value.characterMail
+            .filter(
+              (mail) =>
+                !!mail &&
+                typeof mail.characterId === 'string' &&
+                typeof mail.address === 'string' &&
+                typeof mail.name === 'string' &&
+                ['pending', 'enabled'].includes(mail.receiving) &&
+                typeof mail.canSubscribe === 'boolean' &&
+                typeof mail.preferences?.newsletter === 'boolean' &&
+                typeof mail.preferences?.correspondence === 'boolean',
+            )
+            .slice(0, 32)
+            .map((mail) => ({
+              ...mail,
+              ...(managedCharacterIds.includes(mail.characterId) ? {} : { owner: undefined }),
+            }))
+        : [],
   };
 }

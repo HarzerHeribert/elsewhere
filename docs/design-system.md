@@ -20,6 +20,10 @@ For Elsewhere this means: keep the world visible; reveal one focused task at a t
 | Interactive reference   | `elsewhere/web/src/design-system/`                      | `/design-system.html`                              |
 | Logo source             | `scripts/generate-wordmark.py` and `assets/brand/type/` | Filled SVG wordmark outlines and local font        |
 | Character / doorway     | `elsewhere/web/src/brandArtwork.ts`                     | UI and exported assets                             |
+| World language          | `elsewhere/web/src/worldStyle.ts`                       | 3D scene, crafted objects, light, the specimen     |
+| Crafted objects         | `elsewhere/web/src/craft.ts`, `worldObjectModels.ts`    | Furniture, lanterns, signs, tools, instruments     |
+| Planting and breeze     | `elsewhere/web/src/flora.ts`, `wind.ts`                 | Flowers, ground cover, meadow grass, leaves        |
+| Light                   | `elsewhere/web/src/worldLook.ts`, `atmosphere.ts`       | Sun, sky fill, contact shadow, glow, grade         |
 
 Import the styles in this order: `styles.css` (tokens and components), then `ui/application.css`, then `ui/world-layout.css` for the world application. New components should consume `--ew-*` tokens rather than add palette literals or private motion timings. The application mapping styles shared content; world-layout.css owns the application arrangement and responsive breakpoints. All product CSS colors use semantic roles; the map, message feed, wishes, controls, account forms, and activity views share the palette. Primary and secondary actions use the shared Button component.
 
@@ -80,6 +84,27 @@ The specimen’s note form is local-only and explicitly says so. It must not sen
 The world opens directly, without a welcome card. The top bar contains the identity, world status, and account. Desktop navigation uses labeled rows at the left; a separate camera dock groups Overview, Walk, the resident viewpoint, reset, and fullscreen. Walk enters the world without requiring an account.
 
 At 800 px and below, labeled navigation moves to the bottom and camera modes stay directly below the header. Panels use the available width between these controls. At 360 px and below, navigation uses two rows so labels keep their reading size. Navigation and camera targets are at least 44 × 44 px; camera labels stay visible. Secondary reset and fullscreen controls remain available in Controls on phones. Offline notices have a reserved space above panels. Movement controls stay out of the way while a panel is open.
+
+## The world
+
+The 3D world follows one design language, defined in `worldStyle.ts` and shown under “World” in `/design-system.html`. It is separate from the interface palette: the interface stays ink, paper and terracotta; the world keeps natural colour.
+
+**Materials.** Every authored surface is one of:
+
+- the three scanned building surfaces: fieldstone, weathered plank and roof tile;
+- a wood tone of that same plank scan (`oak` for tops, shelves and seats; `walnut` for legs, frames and posts; `weathered` for fences, gate, crates and beds; `cladding` for the workshop walls);
+- a paint from `WORLD_PALETTE` (forest, mint, cream, clay carry shutters, awnings, furniture and signs);
+- brass, iron or glass. Lamplight is the only emissive colour.
+
+Do not import a model that brings its own palette or shading style. Scanned trees, ferns, shrubs and rocks are the organic layer; everything made by a hand in the world is built with the craft kit (`createCraftKit`): softly bevelled boards with metre-scaled grain running along their length, turned rods, struts. Flowers, ground cover and grass are hand-shaped in `flora.ts` from the planting colours.
+
+**Scale and placement.** A resident is about 1.7 m tall. Use `WORLD_SCALE`: seats 0.45 m, tables 0.76 m, the workbench 0.95 m, lanterns at 2.2 m. Nothing floats: an object stands on the ground, on the floor, or on a surface that is visibly there (the artifact rests on the workbench’s riser; lanterns hang from brackets or the ridge). Furnishings stand against wall faces, never inside them. `worldObjectModels.test.ts` checks that every canonical object reaches the ground or its stated elevation.
+
+**Light.** One stable afternoon (`WORLD_LIGHT`): a warm sun, a cool sky fill and matching haze. `worldLook.ts` renders the scene in HDR, adds contact shadow from depth, a soft glow on lamplit and sunlit highlights, and one filmic grade with cool shadows and warm highlights. Software and WebGL1 renderers draw directly with the same exposure; the canvas reports `data-look="graded"` or `"direct"`. Do not add per-object lights or post effects; change the tokens.
+
+**Movement.** Grass, flowers and tree leaves share one breeze (`wind.ts`); the pond drifts with it. Reduced motion stills it.
+
+To add an object: add a builder to `WORLD_OBJECT_MODEL_DEFINITIONS` that takes the kit from its context, uses `WORLD_SCALE`, and starts at y = 0. Built-in models are merged to one mesh per material; mark animated parts with `separate`.
 
 ## Motion
 

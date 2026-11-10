@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const descriptions = {
   model: 'Cloud model — used only when you explicitly run pnpm dev:configured.',
   stripe: 'Stripe sandbox — saved for the future adapter; no payment endpoint is connected.',
-  email: 'Resend — saved for the future adapter; no email will be sent.',
+  email: 'Resend — saved locally; live character delivery is configured separately.',
 };
 
 async function main() {

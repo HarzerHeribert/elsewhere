@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { VillageScenery } from './scenery';
-import type { AttachWorldAsset } from './worldAssets';
+import { WORLD_ASSETS, type AttachWorldAsset } from './worldAssets';
+import { woodTint, type CraftKit } from './craft';
+import { WORLD_PALETTE, WORLD_SCALE } from './worldStyle';
 import { ENVIRONMENT_MATERIALS, type createEnvironmentMaterials } from './materials';
 import { ResourceScope } from './sceneResources';
 
-const town = (name: string) => `/assets/kenney/town/${name}.glb`;
-const furniture = (name: string) => `/assets/kenney/furniture/${name}.glb`;
 export interface VillageArchitecture {
   roofs: THREE.Group[];
   occluders: THREE.Object3D[];
@@ -39,6 +39,7 @@ export function buildVillageArchitecture(
   scene: THREE.Scene,
   attach: AttachWorldAsset,
   surfaces: ReturnType<typeof createEnvironmentMaterials>,
+  craft: CraftKit,
 ): VillageArchitecture {
   const root = new THREE.Group();
   root.name = 'Village architecture';
@@ -47,7 +48,12 @@ export function buildVillageArchitecture(
   const roofs: THREE.Group[] = [],
     occluders: THREE.Object3D[] = [];
   const renderedObstacleIds = new Set<string>();
-  const timber = surfaces.material('timber', { normalStrength: 0.9 });
+  // Cladding and trim are two tones of the one plank scan that all joinery shares.
+  const cladding = surfaces.material('timber', {
+    normalStrength: 0.9,
+    tint: woodTint('cladding'),
+  });
+  const timber = surfaces.material('timber', { normalStrength: 0.7, tint: woodTint('walnut') });
   const stone = surfaces.material('stone', { normalStrength: 1.15 });
   const mint = new THREE.MeshStandardMaterial({ color: 0x739989, roughness: 0.78 });
   const cream = new THREE.MeshStandardMaterial({ color: 0xf0dfb8, roughness: 0.88 });
@@ -90,28 +96,14 @@ export function buildVillageArchitecture(
     m.position.set(x, y + h / 2, z);
     return m;
   }
-  function asset(
-    path: string,
-    x: number,
-    y: number,
-    z: number,
-    height: number,
-    rotation = 0,
-    width?: number,
-    depth?: number,
-  ) {
-    const group = new THREE.Group();
-    group.position.set(x, y, z);
-    group.rotation.y = rotation;
-    root.add(group);
-    attach(group, path, { height, width, depth });
-    return group;
-  }
   let seed = 8192;
   const random = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
+  const furnishings = new THREE.Group();
+  furnishings.name = 'Village furnishings';
+  root.add(furnishings);
   const stoneTransforms: THREE.Matrix4[] = [];
   const dummy = new THREE.Object3D();
   function block(x: number, y: number, z: number, w: number, h: number, d: number, rotation = 0) {
@@ -181,7 +173,7 @@ export function buildVillageArchitecture(
       for (let v = 0; v < uv.count; v++)
         uv.setX(v, uv.getX(v) + (alongX ? cx + offset : -cz - offset) / (workshop ? 2 : 2));
       geometry.translate(0, 0, -thickness / 2);
-      mesh(geometry, workshop ? timber : stone, group);
+      mesh(geometry, workshop ? cladding : stone, group);
       if (workshop) beam(span, 0.5, 0.4, 0, 0, 0, stone, group);
       if (window) {
         for (const x of [-0.52, 0.52]) beam(0.095, 1.34, 0.46, x, 0.88, 0, timber, group);
@@ -399,16 +391,28 @@ export function buildVillageArchitecture(
     for (const z of [b.doorZ - b.gap / 2 - 0.15, b.doorZ + b.gap / 2 + 0.15])
       beam(0.25, b.height + 0.08, 0.25, b.doorX, 0, z);
     beam(0.28, 0.18, b.gap + 0.55, b.doorX, b.height - 0.16, b.doorZ);
-    for (const z of [b.doorZ - b.gap / 2 - 0.45, b.doorZ + b.gap / 2 + 0.45])
-      asset(town('lantern'), b.doorX + 0.35, 1.85, z, 0.55);
-    asset(town('lantern'), b.x, 2.2, b.z, 0.55);
+    // Bracket lanterns flank each door; one larger lantern hangs from the ridge inside.
+    for (const z of [b.doorZ - b.gap / 2 - 0.75, b.doorZ + b.gap / 2 + 0.75])
+      craft.wallLantern(furnishings, b.doorX + 0.2, WORLD_SCALE.lantern, z);
+    const pendant = new THREE.Group();
+    roof.add(pendant);
+    craft.strut(
+      pendant,
+      craft.metal(WORLD_PALETTE.iron, 0.6),
+      [0, rise - 0.06, 0],
+      [0, -0.32, 0],
+      0.007,
+      5,
+    );
+    craft.lantern(pendant, 0, -0.32, 0, 1.7);
+    craft.merge(pendant);
     const light = new THREE.PointLight(
       0xffdfa8,
       b.id === 'workshop' ? 12 : 18,
       b.id === 'workshop' ? 10 : 16,
       2,
     );
-    light.position.set(b.x, 2.55, b.z);
+    light.position.set(b.x, 2.1, b.z);
     root.add(light);
   }
   // Photographic, alpha-cut leaves grow along thin climbing stems on the facades.
@@ -470,14 +474,28 @@ export function buildVillageArchitecture(
   leafMesh.receiveShadow = true;
   leafMesh.computeBoundingSphere();
   root.add(leafMesh);
-  asset(furniture('bookcaseClosed'), -27.95, 0, -19, 2.35, Math.PI / 2);
-  asset(furniture('bookcaseOpen'), -27.95, 0, -15, 2.35, Math.PI / 2);
-  asset(furniture('pottedPlant'), -27.95, 0, -22.1, 1.25);
-  asset(furniture('lampRoundFloor'), -27.95, 0, -12, 2.05);
-  asset(furniture('books'), -18, 1, -14, 0.22);
-  asset(furniture('cardboardBoxClosed'), -9, 0, -5.3, 0.65);
-  asset(furniture('pottedPlant'), -9, 0, 4.3, 1.15);
-  asset(furniture('radio'), -6.6, 1.2, -2, 0.32);
+  // Furnishings stand on the floor against the inner wall faces, never inside them.
+  for (const z of [-19.4, -14.6]) {
+    const shelves = craft.bookcase(furnishings, 2.6, 2.15, 0.34);
+    shelves.position.set(-27.62, 0.055, z);
+    shelves.rotation.y = Math.PI / 2;
+  }
+  craft.floorLamp(furnishings, -27.2, -11.75);
+  for (const [x, z, height] of [
+    [-27.25, -22.3, 0.36],
+    [-8.3, 4.3, 0.32],
+    [-1.75, 4.3, 0.28],
+  ] as const) {
+    const soil = craft.pot(furnishings, x, z, height);
+    const plant = new THREE.Group();
+    plant.position.set(x, soil, z);
+    furnishings.add(plant);
+    attach(plant, WORLD_ASSETS.fern, { height: height * 1.7 });
+  }
+  craft.crate(furnishings, -8.25, -5.2, 0.2);
+  craft.crate(furnishings, -7.55, -5.25, -0.15);
+  craft.crate(furnishings, -8.2, -5.22, 0.45).position.y = 0.42;
+  craft.merge(furnishings);
   const canopy = new THREE.Group();
   canopy.name = 'Lookout vine arbor';
   canopy.userData.placeId = 'lookout';

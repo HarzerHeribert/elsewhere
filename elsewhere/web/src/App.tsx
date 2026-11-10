@@ -483,6 +483,17 @@ export function App() {
             {panel === 'character' && character && (
               <CharacterPanel
                 character={character}
+                mail={snapshot?.mail}
+                accountMail={accountSession.characterMail.find(
+                  (mail) => mail.characterId === character.id,
+                )}
+                signedIn={!!account}
+                emailVerified={account?.emailVerified ?? false}
+                mailPending={accountSession.pending}
+                onSignIn={() => setAccountOpen(true)}
+                onMailPreferences={(preferences) =>
+                  accountSession.updateMailPreferences(character.id, preferences)
+                }
                 recalledMemory={snapshot?.recalledMemory}
                 artifacts={snapshot?.artifacts}
                 creations={snapshot?.creations}

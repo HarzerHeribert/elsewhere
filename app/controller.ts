@@ -1,3 +1,4 @@
+import type { CharacterMailService } from '../packages/mail/src/service';
 import { addCreation, publicCreations, setCreationPinned } from '../packages/creations/src/index';
 import type { CreateCreationInput } from '../characters/interfaces/src/creations';
 import { applyInterestChoice } from '../characters/hubert/src/interestChoices';
@@ -48,6 +49,7 @@ import {
   completeDreamConsolidation,
   pruneDreamState,
   type DecisionProvider,
+  type JsonObject,
 } from '@elsewhere/character-runtime';
 import {
   hubertDreamActions,
@@ -120,6 +122,7 @@ export interface ControllerState {
   artifactSamples?: WeatherSample[];
 }
 export interface ControllerOptions {
+  mail?: CharacterMailService;
   now?: () => number;
   simulationStepMs?: number;
   decisionIntervalMs?: number;
@@ -260,6 +263,9 @@ export class ElsewhereController {
       },
       character: publicCharacter(s.hubert),
       research: publicResearch(s.hubert),
+      ...(this.options.mail?.getPublic(s.hubert.id)
+        ? { mail: this.options.mail.getPublic(s.hubert.id)! }
+        : {}),
       creations: publicCreations(s.creations ?? [], s.hubert.id),
       notebook: {
         enabled: Boolean(this.options.expressionProvider),
@@ -396,6 +402,20 @@ export class ElsewhereController {
       await this.commit();
       return { accepted: true };
     });
+  }
+  private async mailPlanningContext(): Promise<JsonObject> {
+    if (!this.options.mail) return { available: false };
+    try {
+      return {
+        ...(await this.options.mail.getPlanning(this.state.hubert.id)),
+        publicEntries: (this.state.hubert.notebook?.entries ?? [])
+          .slice(-16)
+          .map(({ id, text }) => ({ id, text })),
+      } as JsonObject;
+    } catch {
+      // Optional correspondence cannot turn a recipient lookup outage into a model failure.
+      return { available: false };
+    }
   }
   private reportProviderIssue(
     kind: ProviderIssue['kind'],
@@ -571,6 +591,7 @@ export class ElsewhereController {
       if (!provider) this.reportProviderIssue('unconfigured');
       else if (provider.isAvailable?.() === false) this.reportProviderIssue('unavailable');
       else {
+        const mailContext = await this.mailPlanningContext();
         const managed = provider.managesAllowance === true;
         const allowance = managed
           ? s.modelAllowance
@@ -589,6 +610,7 @@ export class ElsewhereController {
               this.wallNow(),
               Boolean(this.options.research),
               s.creations ?? [],
+              mailContext,
             );
             this.resolveProviderIssue('decision');
             s.runtime.invalidDecisionCount = 0;
@@ -646,7 +668,49 @@ export class ElsewhereController {
       const policy = authorizeCommand(decision.action);
       delete s.runtime.activityUntil;
       if (policy.allowed) {
-        if (policy.command.type === 'pin_creation') {
+        if (policy.command.type === 'draft_mail') {
+          const command = policy.command;
+          try {
+            const entries = [...new Set(command.entryIds)].map((id) =>
+              s.hubert.notebook?.entries.find((entry) => entry.id === id),
+            );
+            if (!this.options.mail || entries.some((entry) => !entry))
+              throw Error('Mail sources unavailable.');
+            const name = publicCharacter(s.hubert).name;
+            const draft = await this.options.mail.compose(
+              s.hubert.id,
+              {
+                kind: command.kind,
+                ...(command.recipientUserId ? { recipientUserId: command.recipientUserId } : {}),
+                subject:
+                  command.kind === 'newsletter' ? `${name}’s field notes` : `A note from ${name}`,
+                text: entries.map((entry) => entry!.text).join('\n\n'),
+              },
+              'character',
+            );
+            s.hubert.lastOutcome = {
+              id: draft.id,
+              at: now,
+              action: command.type,
+              status: 'completed',
+              summary:
+                draft.status === 'awaiting_approval'
+                  ? 'A letter draft is awaiting owner review. No delivery has been claimed.'
+                  : 'A letter draft was recorded for distribution. Delivery status is tracked separately.',
+            };
+            s.hubert.activity = { kind: command.type, label: 'Writing a letter', startedAt: now };
+          } catch {
+            s.hubert.lastOutcome = {
+              id: randomUUID(),
+              at: now,
+              action: command.type,
+              status: 'rejected',
+              summary:
+                'The letter could not be drafted. Check available public entries, contact consent and mail connection.',
+            };
+          }
+          s.runtime.activityUntil = now + 120_000;
+        } else if (policy.command.type === 'pin_creation') {
           const command = policy.command;
           try {
             const before = s.creations?.find(
@@ -1144,6 +1208,10 @@ export class ElsewhereController {
       contentType: 'image/svg+xml',
       body: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340"><rect width="720" height="340" fill="#f6f2e9"/><text x="40" y="45" font-family="Georgia,serif" font-size="26" fill="#254a40">A small study of the weather</text><text x="40" y="73" font-family="sans-serif" font-size="13" fill="#52665b">Hubert · Elsewhere · local simulated observations</text><path d="M50 100V270H670" fill="none" stroke="#9eaa99"/><path d="${path}" fill="none" stroke="#477762" stroke-width="3"/><text x="50" y="306" font-family="sans-serif" font-size="12" fill="#52665b">${points.length} simulated temperature samples. This is not real-world weather data.</text></svg>`,
     };
+  }
+  /** Host shutdown drains accepted decisions before closing their external service ports. */
+  async drain(): Promise<void> {
+    await this.lane;
   }
   close(): Promise<void> {
     this.closing = true;

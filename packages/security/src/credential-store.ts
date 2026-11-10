@@ -245,7 +245,7 @@ export function configuredDevelopmentEnvironments(
   const web = Object.fromEntries(
     Object.entries(parent).filter(
       ([key]) =>
-        !/^(MODEL_|CHATGPT_|OPENAI_|INFERENCE_|OLLAMA_|STRIPE_|RESEND_|TELEGRAM_|GITHUB_|GH_|BETTER_AUTH_|AUTH_|DATABASE_URL$|ADMIN_TOKEN$)/.test(
+        !/^(MODEL_|CHATGPT_|OPENAI_|INFERENCE_|OLLAMA_|STRIPE_|CHARACTER_MAIL_|RESEND_|TELEGRAM_|GITHUB_|GH_|BETTER_AUTH_|AUTH_|DATABASE_URL$|ADMIN_TOKEN$)/.test(
           key,
         ),
     ),
