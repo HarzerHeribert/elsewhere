@@ -34,6 +34,7 @@ export interface PursuitState {
 export const PURSUIT_LIMITS = {
   items: 12,
   entries: 40,
+  entrySlack: 8,
   questions: 8,
   reading: 2,
   readingText: 12000,
@@ -141,6 +142,11 @@ function cleanEntry(entry: PursuitEntry): PursuitEntry {
     ? { ...entry, text: cut(entry.text, PURSUIT_LIMITS.note), sourceIds: [...entry.sourceIds] }
     : { ...entry };
 }
+const trimmed = <T>(entries: T[]): T[] =>
+  entries.length > PURSUIT_LIMITS.entries + PURSUIT_LIMITS.entrySlack
+    ? entries.slice(-PURSUIT_LIMITS.entries)
+    : entries;
+
 export function recordPursuitEntry(
   state: PursuitState,
   pursuitId: string,
@@ -149,7 +155,8 @@ export function recordPursuitEntry(
 ): PursuitState {
   return update(state, pursuitId, (item) => ({
     ...item,
-    entries: [...item.entries, cleanEntry(entry)].slice(-PURSUIT_LIMITS.entries),
+    // Trimmed in steps, not every time, so consecutive decision contexts share a long prefix.
+    entries: trimmed([...item.entries, cleanEntry(entry)]),
     lastAt: now,
   }));
 }

@@ -36,7 +36,7 @@ const schema = z.object({
     .min(1)
     .max(1_000_000_000)
     .default(100_000),
-  MODEL_MAX_INPUT_TOKENS_PER_REQUEST: z.coerce.number().int().min(1).max(128_000).default(32_000),
+  MODEL_MAX_INPUT_TOKENS_PER_REQUEST: z.coerce.number().int().min(1).max(128_000).default(128_000),
   MODEL_OUTPUT_TOKEN_RESERVE: z.coerce.number().int().min(1).max(1_000_000).default(2_000),
   MODEL_MAX_UNKNOWN_USAGE_CALLS_PER_DAY: z.coerce.number().int().min(1).max(100).default(20),
   MODEL_REQUEST_BODY_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).default(5000),

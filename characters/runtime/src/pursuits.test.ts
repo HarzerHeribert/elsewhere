@@ -127,12 +127,12 @@ describe('entries', () => {
   it('appends entries, updates lastAt and keeps the newest within the limit', () => {
     let state = open(createPursuitState(), 'a');
     const copy = frozen(state);
-    for (let i = 0; i < PURSUIT_LIMITS.entries + 5; i++)
+    for (let i = 0; i < PURSUIT_LIMITS.entries + PURSUIT_LIMITS.entrySlack + 1; i++)
       state = recordPursuitEntry(state, 'a', note(`n${i}`), 50 + i);
     const item = state.items[0];
     expect(item.entries).toHaveLength(PURSUIT_LIMITS.entries);
-    expect(item.entries[0].id).toBe('n5');
-    expect(item.lastAt).toBe(50 + PURSUIT_LIMITS.entries + 4);
+    expect(item.entries[0].id).toBe(`n${PURSUIT_LIMITS.entrySlack + 1}`);
+    expect(item.lastAt).toBe(50 + PURSUIT_LIMITS.entries + PURSUIT_LIMITS.entrySlack);
     expect(copy.items[0].entries).toEqual([]);
   });
   it('cuts note text and throws on unknown ids', () => {
