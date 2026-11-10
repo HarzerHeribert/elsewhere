@@ -6,8 +6,9 @@ export const DEFAULT_INFERENCE_TOKEN_BUDGET = Object.freeze({
   maxOutputTokensPerDay: 100_000,
   maxInputTokensPerRequest: 32_000,
   outputTokenReserve: 2_000,
-  // Ordinary provider errors end without a usage report. Their retained reservations stay
-  // charged against the token caps above, so this count only stops a runaway of such calls.
+  // A timeout or a broken stream ends without a usage report (a request the provider refuses
+  // outright reports zero instead). Their retained reservations stay charged against the
+  // token caps above, so this count only stops a runaway of such calls.
   maxUnknownUsageCallsPerDay: 20,
 });
 export const InferenceTokenBudgetSchema = z.object({
