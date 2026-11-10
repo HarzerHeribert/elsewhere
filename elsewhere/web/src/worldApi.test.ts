@@ -59,6 +59,35 @@ describe('API request recovery', () => {
       passkeyVerifiedRecently: false,
     });
   });
+  it('exposes only configured social providers and keeps linked identities private to the account', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: null,
+            socialProviders: ['github', 'google', 'repo', 'github', null],
+            linkedSocialProviders: ['github'],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'owner' },
+            socialProviders: ['github'],
+            linkedSocialProviders: ['github', 'google', 'private-token', 'github'],
+          }),
+        ),
+    );
+    const guest = await getAccount(new AbortController().signal);
+    expect(guest.socialProviders).toEqual(['github', 'google']);
+    expect(guest.linkedSocialProviders).toBeUndefined();
+    const owner = await getAccount(new AbortController().signal);
+    expect(owner.socialProviders).toEqual(['github']);
+    expect(owner.linkedSocialProviders).toEqual(['github']);
+  });
   it('keeps character management independent from the signed-in platform admin role', async () => {
     const fetcher = vi
       .fn()

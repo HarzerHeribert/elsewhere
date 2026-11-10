@@ -1,12 +1,4 @@
-import { createAuthClient } from 'better-auth/client';
-import { passkeyClient } from '@better-auth/passkey/client';
-
-// Same-origin cookies are the credential. A successful ceremony is followed by /api/account.
-const client = createAuthClient({
-  basePath: '/api/auth',
-  fetchOptions: { credentials: 'same-origin', timeout: 10000, retry: 0 },
-  plugins: [passkeyClient()],
-});
+import { authClient as client } from './authClient';
 
 export interface AccountPasskey {
   id: string;

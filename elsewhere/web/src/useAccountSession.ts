@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountResponse } from '@elsewhere/character-interfaces';
 import { getAccount, requestJson } from './worldApi';
 import {
+  socialAuthorizationUrl,
+  socialReturnMessage,
+  type SocialSignInProvider,
+} from './socialAuth';
+import {
   addAccountPasskey,
   browserSupportsPasskeys,
   listAccountPasskeys,
@@ -23,6 +28,8 @@ export function useAccountSession() {
   const [passkeyListError, setPasskeyListError] = useState('');
   const [passkeyStatus, setPasskeyStatus] = useState('');
   const [passkeyRevision, setPasskeyRevision] = useState(0);
+  const [returnedFromSocial, setReturnedFromSocial] = useState(false);
+  const [socialAuthReturnMessage, setSocialAuthReturnMessage] = useState('');
   const active = useRef(false),
     generation = useRef(0),
     request = useRef<AbortController | null>(null),
@@ -55,6 +62,19 @@ export function useAccountSession() {
 
   useEffect(() => {
     active.current = true;
+    const socialReturn = new URLSearchParams(location.search);
+    if (socialReturn.get('auth-callback') === '1') {
+      setReturnedFromSocial(true);
+      setSocialAuthReturnMessage(socialReturnMessage(socialReturn.get('error')));
+      for (const key of ['auth-callback', 'error', 'error_description']) socialReturn.delete(key);
+      history.replaceState(
+        null,
+        '',
+        location.pathname +
+          (socialReturn.size ? '?' + socialReturn.toString() : '') +
+          location.hash,
+      );
+    }
     const readPrivateLink = () => {
       const fragment = new URLSearchParams(location.hash.slice(1));
       const token = fragment.get('sign-in');
@@ -149,6 +169,7 @@ export function useAccountSession() {
         )
           throw new Error('Your passkey verification could not be confirmed. Please try again.');
         setVerificationEmail('');
+        setSocialAuthReturnMessage('');
         setSignInLinkEmail('');
         setPasskeyRevision((revision) => revision + 1);
         setPasskeyStatus(
@@ -225,6 +246,49 @@ export function useAccountSession() {
     [begin, current, session?.passkeyAuthEnabled, session?.user?.id],
   );
 
+  const beginSocial = useCallback(
+    async (provider: SocialSignInProvider, mode: 'signin' | 'link') => {
+      if (mutating.current || !session?.socialProviders?.includes(provider)) return false;
+      if (mode === 'link' && !session.user) return false;
+      if (
+        mode === 'link' &&
+        session.ownerControlsRequirePasskey === true &&
+        session.ownerControlsUnlocked !== true
+      ) {
+        setError('Verify a passkey before linking another sign-in account.');
+        return false;
+      }
+      mutating.current = true;
+      const { version, controller } = begin();
+      setPending(true);
+      setError('');
+      setSocialAuthReturnMessage('');
+      try {
+        const target = await socialAuthorizationUrl(provider, mode, controller.signal);
+        if (!current(version)) return false;
+        location.assign(target);
+        return true;
+      } catch (reason) {
+        if (current(version))
+          setError(
+            reason instanceof Error ? reason.message : 'The provider sign-in could not be started.',
+          );
+        return false;
+      } finally {
+        mutating.current = false;
+        if (current(version)) setPending(false);
+      }
+    },
+    [
+      begin,
+      current,
+      session?.socialProviders,
+      session?.user?.id,
+      session?.ownerControlsRequirePasskey,
+      session?.ownerControlsUnlocked,
+    ],
+  );
+
   const signInWithOperatorLink = useCallback(async () => {
     if (mutating.current || !operatorSignInToken) return false;
     mutating.current = true;
@@ -268,6 +332,7 @@ export function useAccountSession() {
       setPending(true);
       setError('');
       setVerificationEmail('');
+      setSocialAuthReturnMessage('');
       try {
         await requestJson(
           '/api/auth/' + (mode === 'signup' ? 'sign-up/email' : 'sign-in/email'),
@@ -321,6 +386,7 @@ export function useAccountSession() {
       setVerificationEmail('');
       setSignInLinkEmail('');
       setPasskeyStatus('');
+      setSocialAuthReturnMessage('');
       return true;
     } catch (reason) {
       if (current(version))
@@ -338,6 +404,7 @@ export function useAccountSession() {
       const { version, controller } = begin();
       setPending(true);
       setError('');
+      setSocialAuthReturnMessage('');
       try {
         await requestJson('/api/auth/sign-in/magic-link', {
           method: 'POST',
@@ -397,6 +464,14 @@ export function useAccountSession() {
       (issue) => issue.resolvedAt === undefined && !issue.retrying,
     ),
     retryCharacterProvider,
+    returnedFromSocial,
+    socialAuthReturnMessage,
+    dismissSocialReturn: () => {
+      setReturnedFromSocial(false);
+      setSocialAuthReturnMessage('');
+    },
+    beginSocialSignIn: (provider: SocialSignInProvider) => beginSocial(provider, 'signin'),
+    linkSocialSignIn: (provider: SocialSignInProvider) => beginSocial(provider, 'link'),
     passkeysSupported,
     passkeys,
     passkeysLoading,

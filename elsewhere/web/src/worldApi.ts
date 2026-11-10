@@ -114,6 +114,15 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
         )
         .slice(-16)
     : [];
+  const socialProviders = Array.isArray(value.socialProviders)
+    ? [
+        ...new Set(
+          value.socialProviders.filter(
+            (provider) => provider === 'github' || provider === 'google',
+          ),
+        ),
+      ]
+    : [];
   return {
     user: value.user ?? null,
     enabled: value.enabled,
@@ -128,6 +137,16 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
       : {}),
     ...(value.user && typeof value.passkeyVerifiedRecently === 'boolean'
       ? { passkeyVerifiedRecently: value.passkeyVerifiedRecently }
+      : {}),
+    ...(Array.isArray(value.socialProviders) ? { socialProviders } : {}),
+    ...(value.user && Array.isArray(value.linkedSocialProviders)
+      ? {
+          linkedSocialProviders: [
+            ...new Set(
+              value.linkedSocialProviders.filter((provider) => socialProviders.includes(provider)),
+            ),
+          ],
+        }
       : {}),
     requiresEmailVerification: value.requiresEmailVerification === true,
     managedCharacterIds,

@@ -2,6 +2,7 @@ import type { PublicCreation } from '@elsewhere/character-interfaces';
 import { CreationManager } from './CreationManager';
 import { CharacterProviderNotices } from './CharacterProviderNotices';
 import { PasskeySettings, PasskeySignIn } from './PasskeySettings';
+import { SocialSignIn, SocialSignInSettings } from './SocialSignIn';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
 import { Button } from './ui/Button';
@@ -137,6 +138,7 @@ export function AccountDialog({
             </div>
           </dl>
           <PasskeySettings session={session} />
+          <SocialSignInSettings session={session} />
           {!ownerControlsLocked &&
             capabilities?.managedCharacterIds.map((characterId) => (
               <CreationManager
@@ -181,7 +183,8 @@ export function AccountDialog({
       ) : !capabilities.enabled ||
         (!capabilities.passwordAuthEnabled &&
           !capabilities.emailLinkAuthEnabled &&
-          !capabilities.passkeyAuthEnabled) ? (
+          !capabilities.passkeyAuthEnabled &&
+          !capabilities.socialProviders?.length) ? (
         <p>Account sign-in is unavailable on this instance. You can keep exploring as a guest.</p>
       ) : verificationEmail ? (
         <>
@@ -209,12 +212,14 @@ export function AccountDialog({
             Use another email
           </Button>
         </>
-      ) : capabilities.passkeyAuthEnabled &&
-        !capabilities.passwordAuthEnabled &&
-        !capabilities.emailLinkAuthEnabled ? (
-        <PasskeySignIn session={session} />
+      ) : !capabilities.passwordAuthEnabled && !capabilities.emailLinkAuthEnabled ? (
+        <>
+          <SocialSignIn session={session} />
+          <PasskeySignIn session={session} />
+        </>
       ) : mode === 'signin' && capabilities.emailLinkAuthEnabled && !usePassword ? (
         <>
+          <SocialSignIn session={session} />
           <PasskeySignIn session={session} />
           <p>Receive a one-use sign-in link for your existing Elsewhere account.</p>
           <form
@@ -253,6 +258,7 @@ export function AccountDialog({
         </>
       ) : (
         <>
+          <SocialSignIn session={session} />
           {mode === 'signin' && <PasskeySignIn session={session} />}
           <p>
             Keep exploring as a guest, or create a visitor account. Sign-up never grants world
@@ -339,7 +345,7 @@ export function AccountDialog({
         </Button>
       )}
       <p role="alert" className="auth-error">
-        {error}
+        {error || session.socialAuthReturnMessage}
       </p>
     </Modal>
   );
