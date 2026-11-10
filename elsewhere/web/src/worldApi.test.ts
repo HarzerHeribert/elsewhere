@@ -6,6 +6,88 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('API request recovery', () => {
+  it('admits only explicit passkey capabilities and authenticated owner assurance flags', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: null,
+            passkeyAuthEnabled: true,
+            ownerControlsRequirePasskey: true,
+            ownerControlsUnlocked: true,
+            passkeyVerifiedRecently: true,
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'owner' },
+            passkeyAuthEnabled: 'true',
+            ownerControlsRequirePasskey: 'false',
+            ownerControlsUnlocked: 1,
+            passkeyVerifiedRecently: 'yes',
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'owner' },
+            passkeyAuthEnabled: true,
+            ownerControlsRequirePasskey: true,
+            ownerControlsUnlocked: false,
+            passkeyVerifiedRecently: false,
+          }),
+        ),
+    );
+    const anonymous = await getAccount(new AbortController().signal);
+    expect(anonymous.passkeyAuthEnabled).toBe(true);
+    expect(anonymous.ownerControlsRequirePasskey).toBeUndefined();
+    expect(anonymous.ownerControlsUnlocked).toBeUndefined();
+    expect(anonymous.passkeyVerifiedRecently).toBeUndefined();
+    const malformed = await getAccount(new AbortController().signal);
+    expect(malformed.passkeyAuthEnabled).toBeUndefined();
+    expect(malformed.ownerControlsRequirePasskey).toBeUndefined();
+    expect(malformed.ownerControlsUnlocked).toBeUndefined();
+    expect(malformed.passkeyVerifiedRecently).toBeUndefined();
+    expect(await getAccount(new AbortController().signal)).toMatchObject({
+      passkeyAuthEnabled: true,
+      ownerControlsRequirePasskey: true,
+      ownerControlsUnlocked: false,
+      passkeyVerifiedRecently: false,
+    });
+  });
+  it('exposes only configured social providers and keeps linked identities private to the account', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: null,
+            socialProviders: ['github', 'google', 'repo', 'github', null],
+            linkedSocialProviders: ['github'],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'owner' },
+            socialProviders: ['github'],
+            linkedSocialProviders: ['github', 'google', 'private-token', 'github'],
+          }),
+        ),
+    );
+    const guest = await getAccount(new AbortController().signal);
+    expect(guest.socialProviders).toEqual(['github', 'google']);
+    expect(guest.linkedSocialProviders).toBeUndefined();
+    const owner = await getAccount(new AbortController().signal);
+    expect(owner.socialProviders).toEqual(['github']);
+    expect(owner.linkedSocialProviders).toEqual(['github']);
+  });
   it('keeps character management independent from the signed-in platform admin role', async () => {
     const fetcher = vi
       .fn()

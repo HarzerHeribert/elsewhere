@@ -34,9 +34,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "smoke": "tsx scripts/smoke.ts",
-    "build:world": "esbuild app/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.mjs --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:dotenv/config --external:zod",
-    "build:inference": "esbuild app/inference-main.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:dotenv/config --external:zod --outfile=dist/inference.mjs && esbuild scripts/inference-operator.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:dotenv/config --external:zod --outfile=dist/inference-operator.mjs",
-    "build:operator": "esbuild scripts/auth-operator.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:zod --outfile=dist/auth-operator.mjs",
+    "build:world": "esbuild app/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/server.mjs --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:@better-auth/passkey --external:dotenv/config --external:zod",
+    "build:inference": "esbuild app/inference-main.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:@better-auth/passkey --external:dotenv/config --external:zod --outfile=dist/inference.mjs && esbuild scripts/inference-operator.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:@better-auth/passkey --external:dotenv/config --external:zod --outfile=dist/inference-operator.mjs",
+    "build:operator": "esbuild scripts/auth-operator.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:better-sqlite3 --external:better-auth --external:better-auth/* --external:@better-auth/passkey --external:zod --outfile=dist/auth-operator.mjs",
     "start:inference": "node dist/inference.mjs",
     "dev:inference": "tsx app/inference-main.ts",
     "build:research": "esbuild app/research-main.ts --bundle --platform=node --format=esm --target=node22 --external:pg --external:linkedom --external:ipaddr.js --outfile=dist/research.mjs",
@@ -44,6 +44,7 @@
     "github:setup": "tsx scripts/github-setup.ts"
   },
   "dependencies": {
+    "@better-auth/passkey": "1.7.18",
     "@elsewhere/character-interfaces": "workspace:*",
     "@elsewhere/character-runtime": "workspace:*",
     "@elsewhere/hubert": "workspace:*",

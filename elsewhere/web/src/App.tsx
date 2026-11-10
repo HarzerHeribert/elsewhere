@@ -86,8 +86,9 @@ export function App() {
     [discovered, setDiscovered] = useState<string[]>([]);
   const [accountOpen, setAccountOpen] = useState(false);
   useEffect(() => {
-    if (accountSession.operatorSignInToken) setAccountOpen(true);
-  }, [accountSession.operatorSignInToken]);
+    if (accountSession.operatorSignInToken || accountSession.returnedFromSocial)
+      setAccountOpen(true);
+  }, [accountSession.operatorSignInToken, accountSession.returnedFromSocial]);
   const [controlCommand, setControlCommand] = useState<WorldControlCommand | null>(null);
   const main = useRef<HTMLElement>(null),
     controls = useRef<SceneControls | null>(null);
@@ -691,6 +692,7 @@ export function App() {
           }
           onClose={() => {
             accountSession.dismissOperatorSignIn();
+            accountSession.dismissSocialReturn();
             setAccountOpen(false);
           }}
         />

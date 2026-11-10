@@ -142,6 +142,76 @@ it('handles fragmented UTF-8 and CRLF SSE through a terminal completed event', a
   ).replace(/\n/g, '\r\n');
   expect(await readChatGPTStream(stream(wire, 1), () => undefined)).toBe(text);
 });
+it('keeps intermediate commentary separate from the final action in a multi-message response', async () => {
+  const commentary = 'I will choose a quiet activity.';
+  const action = '{"action":{"type":"rest","durationMs":30000}}';
+  const messages = [
+    {
+      type: 'message',
+      id: 'msg_commentary',
+      role: 'assistant',
+      phase: 'commentary',
+      content: [{ type: 'output_text', text: commentary }],
+    },
+    {
+      type: 'message',
+      id: 'msg_final',
+      role: 'assistant',
+      phase: 'final_answer',
+      content: [{ type: 'output_text', text: action }],
+    },
+  ];
+  const wire =
+    messages
+      .map(
+        (item, output_index) =>
+          frame({
+            type: 'response.output_item.added',
+            output_index,
+            item: { ...item, content: [] },
+          }) +
+          frame({
+            type: 'response.output_text.delta',
+            output_index,
+            item_id: item.id,
+            content_index: 0,
+            delta: item.content[0].text,
+          }) +
+          frame({ type: 'response.output_item.done', output_index, item }),
+      )
+      .join('') +
+    frame({
+      type: 'response.completed',
+      response: {
+        status: 'completed',
+        output: messages,
+        usage: { input_tokens: 123, output_tokens: 30 },
+      },
+    });
+  expect(await readChatGPTStream(stream(wire, 7), () => undefined)).toBe(action);
+});
+it('retains terminal usage when multiple final messages make the result ambiguous', async () => {
+  const usage = vi.fn();
+  const single = completed('{"action":{"type":"reflect"}}');
+  const terminal = {
+    ...single,
+    response: {
+      ...single.response,
+      output: [
+        { ...single.response.output[0], id: 'msg_first', phase: 'final_answer' },
+        { ...single.response.output[0], id: 'msg_second', phase: 'final_answer' },
+      ],
+    },
+  };
+  await expect(readChatGPTStream(stream(frame(terminal)), usage)).rejects.toThrow(
+    'invalid_completed_output',
+  );
+  expect(usage).toHaveBeenCalledWith({
+    inputTokens: 123,
+    outputTokens: 17,
+    cachedInputTokens: 60,
+  });
+});
 it('requires a valid completed SSE response even when a transport omits Content-Type', async () => {
   const response = stream(frame(completed('{"type":"reflect"}')));
   response.headers.delete('content-type');

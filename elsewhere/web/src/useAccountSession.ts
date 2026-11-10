@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountResponse } from '@elsewhere/character-interfaces';
 import { getAccount, requestJson } from './worldApi';
+import {
+  socialAuthorizationUrl,
+  socialReturnMessage,
+  type SocialSignInProvider,
+} from './socialAuth';
+import {
+  addAccountPasskey,
+  browserSupportsPasskeys,
+  listAccountPasskeys,
+  removeAccountPasskey,
+  signInWithPasskey,
+  type AccountPasskey,
+} from './passkeyAuth';
 
 export function useAccountSession() {
   const [session, setSession] = useState<AccountResponse | null>(null);
@@ -9,6 +22,14 @@ export function useAccountSession() {
   const [verificationEmail, setVerificationEmail] = useState('');
   const [signInLinkEmail, setSignInLinkEmail] = useState('');
   const [operatorSignInToken, setOperatorSignInToken] = useState('');
+  const [passkeysSupported, setPasskeysSupported] = useState(false);
+  const [passkeys, setPasskeys] = useState<AccountPasskey[]>([]);
+  const [passkeysLoading, setPasskeysLoading] = useState(false);
+  const [passkeyListError, setPasskeyListError] = useState('');
+  const [passkeyStatus, setPasskeyStatus] = useState('');
+  const [passkeyRevision, setPasskeyRevision] = useState(0);
+  const [returnedFromSocial, setReturnedFromSocial] = useState(false);
+  const [socialAuthReturnMessage, setSocialAuthReturnMessage] = useState('');
   const active = useRef(false),
     generation = useRef(0),
     request = useRef<AbortController | null>(null),
@@ -41,6 +62,19 @@ export function useAccountSession() {
 
   useEffect(() => {
     active.current = true;
+    const socialReturn = new URLSearchParams(location.search);
+    if (socialReturn.get('auth-callback') === '1') {
+      setReturnedFromSocial(true);
+      setSocialAuthReturnMessage(socialReturnMessage(socialReturn.get('error')));
+      for (const key of ['auth-callback', 'error', 'error_description']) socialReturn.delete(key);
+      history.replaceState(
+        null,
+        '',
+        location.pathname +
+          (socialReturn.size ? '?' + socialReturn.toString() : '') +
+          location.hash,
+      );
+    }
     const readPrivateLink = () => {
       const fragment = new URLSearchParams(location.hash.slice(1));
       const token = fragment.get('sign-in');
@@ -68,6 +102,192 @@ export function useAccountSession() {
       clearInterval(timer);
     };
   }, [refresh]);
+
+  useEffect(() => setPasskeysSupported(browserSupportsPasskeys()), []);
+  useEffect(() => setPasskeyStatus(''), [session?.user?.id]);
+  useEffect(() => {
+    const userId = session?.user?.id;
+    const controller = new AbortController();
+    let listening = true;
+    setPasskeys([]);
+    setPasskeyListError('');
+    if (!userId || !session.passkeyAuthEnabled) {
+      setPasskeysLoading(false);
+      return;
+    }
+    setPasskeysLoading(true);
+    void listAccountPasskeys(userId, controller.signal)
+      .then((value) => {
+        if (listening) setPasskeys(value);
+      })
+      .catch((reason) => {
+        if (listening)
+          setPasskeyListError(
+            reason instanceof Error ? reason.message : 'Your passkeys could not be loaded.',
+          );
+      })
+      .finally(() => {
+        if (listening) setPasskeysLoading(false);
+      });
+    return () => {
+      listening = false;
+      controller.abort();
+    };
+  }, [session?.user?.id, session?.passkeyAuthEnabled, passkeyRevision]);
+
+  const performPasskey = useCallback(
+    async (action: 'signin' | 'verify' | 'add' | 'remove', value = '') => {
+      if (mutating.current || !session?.passkeyAuthEnabled) return false;
+      if (action !== 'remove' && !browserSupportsPasskeys()) {
+        setError('Passkeys are not available in this browser. Use another sign-in method.');
+        return false;
+      }
+      const expectedUser = session.user?.id;
+      if (action !== 'signin' && !expectedUser) return false;
+      mutating.current = true;
+      const { version, controller } = begin();
+      setPending(true);
+      setError('');
+      setPasskeyStatus('');
+      try {
+        if (action === 'add')
+          await addAccountPasskey(value.trim().slice(0, 60) || 'My passkey', controller.signal);
+        else if (action === 'remove') await removeAccountPasskey(value, controller.signal);
+        else await signInWithPasskey(controller.signal);
+        const confirmed = await getAccount(controller.signal);
+        if (!current(version)) return false;
+        setSession(confirmed);
+        if (!confirmed.user)
+          throw new Error('Your session could not be confirmed. Please sign in again.');
+        if (action !== 'signin' && confirmed.user.id !== expectedUser)
+          throw new Error(
+            'That passkey did not verify the account you were managing. Please sign in to the intended account.',
+          );
+        if (
+          (action === 'verify' || action === 'signin') &&
+          confirmed.passkeyVerifiedRecently !== true
+        )
+          throw new Error('Your passkey verification could not be confirmed. Please try again.');
+        setVerificationEmail('');
+        setSocialAuthReturnMessage('');
+        setSignInLinkEmail('');
+        setPasskeyRevision((revision) => revision + 1);
+        setPasskeyStatus(
+          action === 'add'
+            ? 'Passkey added.'
+            : action === 'remove'
+              ? 'Passkey removed.'
+              : action === 'verify'
+                ? 'Passkey verified.'
+                : '',
+        );
+        return true;
+      } catch (reason) {
+        if (current(version))
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : 'The passkey request could not be completed.',
+          );
+        return false;
+      } finally {
+        mutating.current = false;
+        if (current(version)) setPending(false);
+      }
+    },
+    [begin, current, session?.passkeyAuthEnabled, session?.user?.id],
+  );
+
+  const setOwnerPasskeyRequired = useCallback(
+    async (required: boolean) => {
+      if (mutating.current || !session?.user || !session.passkeyAuthEnabled) return false;
+      const expectedUser = session.user.id;
+      mutating.current = true;
+      const { version, controller } = begin();
+      setPending(true);
+      setError('');
+      setPasskeyStatus('');
+      try {
+        await requestJson('/api/auth/security/owner-passkey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ required }),
+          signal: controller.signal,
+        });
+        const confirmed = await getAccount(controller.signal);
+        if (!current(version)) return false;
+        setSession(confirmed);
+        if (
+          confirmed.user?.id !== expectedUser ||
+          confirmed.ownerControlsRequirePasskey !== required
+        )
+          throw new Error(
+            'The account security change could not be confirmed. Refresh your account and try again.',
+          );
+        setPasskeyStatus(
+          required
+            ? 'Owner controls now require a verified passkey.'
+            : 'Passkey requirement for owner controls removed.',
+        );
+        return true;
+      } catch (reason) {
+        if (current(version))
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : 'The account security change could not be saved.',
+          );
+        return false;
+      } finally {
+        mutating.current = false;
+        if (current(version)) setPending(false);
+      }
+    },
+    [begin, current, session?.passkeyAuthEnabled, session?.user?.id],
+  );
+
+  const beginSocial = useCallback(
+    async (provider: SocialSignInProvider, mode: 'signin' | 'link') => {
+      if (mutating.current || !session?.socialProviders?.includes(provider)) return false;
+      if (mode === 'link' && !session.user) return false;
+      if (
+        mode === 'link' &&
+        session.ownerControlsRequirePasskey === true &&
+        session.ownerControlsUnlocked !== true
+      ) {
+        setError('Verify a passkey before linking another sign-in account.');
+        return false;
+      }
+      mutating.current = true;
+      const { version, controller } = begin();
+      setPending(true);
+      setError('');
+      setSocialAuthReturnMessage('');
+      try {
+        const target = await socialAuthorizationUrl(provider, mode, controller.signal);
+        if (!current(version)) return false;
+        location.assign(target);
+        return true;
+      } catch (reason) {
+        if (current(version))
+          setError(
+            reason instanceof Error ? reason.message : 'The provider sign-in could not be started.',
+          );
+        return false;
+      } finally {
+        mutating.current = false;
+        if (current(version)) setPending(false);
+      }
+    },
+    [
+      begin,
+      current,
+      session?.socialProviders,
+      session?.user?.id,
+      session?.ownerControlsRequirePasskey,
+      session?.ownerControlsUnlocked,
+    ],
+  );
 
   const signInWithOperatorLink = useCallback(async () => {
     if (mutating.current || !operatorSignInToken) return false;
@@ -112,6 +332,7 @@ export function useAccountSession() {
       setPending(true);
       setError('');
       setVerificationEmail('');
+      setSocialAuthReturnMessage('');
       try {
         await requestJson(
           '/api/auth/' + (mode === 'signup' ? 'sign-up/email' : 'sign-in/email'),
@@ -164,6 +385,8 @@ export function useAccountSession() {
       );
       setVerificationEmail('');
       setSignInLinkEmail('');
+      setPasskeyStatus('');
+      setSocialAuthReturnMessage('');
       return true;
     } catch (reason) {
       if (current(version))
@@ -181,6 +404,7 @@ export function useAccountSession() {
       const { version, controller } = begin();
       setPending(true);
       setError('');
+      setSocialAuthReturnMessage('');
       try {
         await requestJson('/api/auth/sign-in/magic-link', {
           method: 'POST',
@@ -240,6 +464,25 @@ export function useAccountSession() {
       (issue) => issue.resolvedAt === undefined && !issue.retrying,
     ),
     retryCharacterProvider,
+    returnedFromSocial,
+    socialAuthReturnMessage,
+    dismissSocialReturn: () => {
+      setReturnedFromSocial(false);
+      setSocialAuthReturnMessage('');
+    },
+    beginSocialSignIn: (provider: SocialSignInProvider) => beginSocial(provider, 'signin'),
+    linkSocialSignIn: (provider: SocialSignInProvider) => beginSocial(provider, 'link'),
+    passkeysSupported,
+    passkeys,
+    passkeysLoading,
+    passkeyListError,
+    passkeyStatus,
+    refreshPasskeys: () => setPasskeyRevision((revision) => revision + 1),
+    signInWithPasskey: () => performPasskey('signin'),
+    verifyPasskey: () => performPasskey('verify'),
+    addPasskey: (name: string) => performPasskey('add', name),
+    removePasskey: (id: string) => performPasskey('remove', id),
+    setOwnerPasskeyRequired,
     pending,
     error,
     verificationEmail,

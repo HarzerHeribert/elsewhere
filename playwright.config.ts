@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { isolatedAppEnvironment } from './scripts/test-environment';
 
 const testDataDir = join(tmpdir(), `elsewhere-e2e-run-${randomUUID()}`);
+const webOrigin = 'http://localhost:5175';
 const systemChrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 // Prefer the actual local GPU for the detailed 3D scene; CI can explicitly select software.
 const webglBackend =
@@ -32,7 +33,7 @@ export default defineConfig({
   outputDir: './test-results/e2e',
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:5175',
+    baseURL: webOrigin,
     actionTimeout: 10_000,
     viewport: { width: 1440, height: 1100 },
     trace: 'retain-on-failure',
@@ -49,15 +50,19 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'pnpm dev',
-    url: 'http://127.0.0.1:5175/api/health',
+    url: webOrigin + '/api/health',
     reuseExistingServer: false,
     timeout: 60_000,
     gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
-    env: isolatedAppEnvironment({
-      dataDirectory: testDataDir,
-      port: 4015,
-      webPort: 5175,
-      ownerToken: 'elsewhere-e2e-local-test-credential-only-2026',
-    }),
+    env: {
+      ...isolatedAppEnvironment({
+        dataDirectory: testDataDir,
+        port: 4015,
+        webPort: 5175,
+        ownerToken: 'elsewhere-e2e-local-test-credential-only-2026',
+      }),
+      WEB_ORIGIN: webOrigin,
+      BETTER_AUTH_URL: webOrigin,
+    },
   },
 });

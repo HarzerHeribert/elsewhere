@@ -4,6 +4,7 @@ import { ChatGPTError } from '../../../security/src/chatgpt-store';
 import { boundedChatGPTJson, chatGPTFailure, ChatGPTSession } from '../../../security/src/chatgpt';
 import { decisionMessages, reportedUsage } from './shared';
 import { parseResponsesAction, RESPONSES_ACTION_FORMAT } from './responses-action';
+import { ResponseTextChannels } from './response-text-channels';
 import {
   reflectionMessages,
   validateReflectionProposal,
@@ -51,8 +52,8 @@ export async function readChatGPTStream(
   const reader = response.body?.getReader();
   if (!reader) throw new ChatGPTError('empty_response');
   const decoder = new TextDecoder('utf-8', { fatal: true });
+  const channels = new ResponseTextChannels(onDelta);
   let buffer = '',
-    deltaText = '',
     bytes = 0;
   try {
     while (true) {
@@ -82,12 +83,7 @@ export async function readChatGPTStream(
           throw new ChatGPTError('invalid_stream_event');
         }
         if (!event) throw new ChatGPTError('invalid_stream_event');
-        if (event.type === 'response.output_text.delta') {
-          if (typeof event.delta !== 'string') throw new ChatGPTError('invalid_stream_event');
-          deltaText += event.delta;
-          if (Buffer.byteLength(deltaText) > 16000) throw new ChatGPTError('output_too_large');
-          if (event.delta) onDelta?.(event.delta);
-        }
+        channels.accept(event);
         if (
           event.type === 'response.completed' ||
           event.type === 'response.failed' ||
@@ -109,38 +105,9 @@ export async function readChatGPTStream(
               response.headers.get('x-request-id') ?? undefined,
             );
           if (event.type === 'response.incomplete') throw new ChatGPTError('response_incomplete');
-          if (!terminal || terminal.status !== 'completed' || !Array.isArray(terminal.output))
+          if (!terminal || terminal.status !== 'completed')
             throw new ChatGPTError('invalid_completed_response');
-          if (
-            terminal.output.some(
-              (item) => !['message', 'reasoning'].includes(String(envelope(item)?.type)),
-            )
-          )
-            throw new ChatGPTError('unexpected_output_capability');
-          const text = terminal.output
-            .flatMap((item) => {
-              const message = envelope(item);
-              if (
-                message?.type !== 'message' ||
-                message.role !== 'assistant' ||
-                !Array.isArray(message.content)
-              )
-                return [];
-              return message.content.flatMap((item) => {
-                const part = envelope(item);
-                return part?.type === 'output_text' && typeof part.text === 'string'
-                  ? [part.text]
-                  : [];
-              });
-            })
-            .join('');
-          if (
-            (!text && !onDelta) ||
-            Buffer.byteLength(text) > 16000 ||
-            (deltaText && text !== deltaText)
-          )
-            throw new ChatGPTError('invalid_completed_output');
-          return text;
+          return channels.complete(terminal.output);
         }
         if (event.type === 'error')
           throw chatGPTFailure(

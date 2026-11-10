@@ -94,9 +94,12 @@ test('owner sees a persistent provider notice, retries it, and inspects research
     path: info.outputPath('owner-provider-notice.png'),
     animations: 'disabled',
   });
-  await notices.getByRole('button', { name: 'Retry provider', exact: true }).click();
-  await expect(notices).toContainText('Hubert · Recovered');
-  await expect(notices.getByRole('button', { name: 'Retry provider', exact: true })).toHaveCount(0);
+  await notices.getByRole('button', { name: 'Retry Hubert', exact: true }).click();
+  await expect(notices).toContainText('No active character issues.');
+  await expect(notices.getByText('Hubert · Recovered', { exact: true })).not.toBeVisible();
+  await notices.locator('summary').filter({ hasText: 'Recovered issues' }).click();
+  await expect(notices.getByText('Hubert · Recovered', { exact: true })).toBeVisible();
+  await expect(notices.getByRole('button', { name: 'Retry Hubert', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Character needs attention', { exact: true })).toHaveCount(0);
   expect(retries).toBe(1);
   await dialog.getByRole('button', { name: 'Close account dialog', exact: true }).click();
@@ -135,5 +138,5 @@ test('world administration alone does not expose character provider notices or r
   await expect(page.getByRole('dialog')).toContainText('World admin');
   await expect(page.getByLabel('Character needs attention', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Character provider notices' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Retry provider', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Retry Hubert', exact: true })).toHaveCount(0);
 });

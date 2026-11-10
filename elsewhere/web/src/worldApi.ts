@@ -114,11 +114,40 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
         )
         .slice(-16)
     : [];
+  const socialProviders = Array.isArray(value.socialProviders)
+    ? [
+        ...new Set(
+          value.socialProviders.filter(
+            (provider) => provider === 'github' || provider === 'google',
+          ),
+        ),
+      ]
+    : [];
   return {
     user: value.user ?? null,
     enabled: value.enabled,
     passwordAuthEnabled: value.passwordAuthEnabled === true,
     ...(value.emailLinkAuthEnabled === true ? { emailLinkAuthEnabled: true } : {}),
+    ...(value.passkeyAuthEnabled === true ? { passkeyAuthEnabled: true } : {}),
+    ...(value.user && typeof value.ownerControlsRequirePasskey === 'boolean'
+      ? { ownerControlsRequirePasskey: value.ownerControlsRequirePasskey }
+      : {}),
+    ...(value.user && typeof value.ownerControlsUnlocked === 'boolean'
+      ? { ownerControlsUnlocked: value.ownerControlsUnlocked }
+      : {}),
+    ...(value.user && typeof value.passkeyVerifiedRecently === 'boolean'
+      ? { passkeyVerifiedRecently: value.passkeyVerifiedRecently }
+      : {}),
+    ...(Array.isArray(value.socialProviders) ? { socialProviders } : {}),
+    ...(value.user && Array.isArray(value.linkedSocialProviders)
+      ? {
+          linkedSocialProviders: [
+            ...new Set(
+              value.linkedSocialProviders.filter((provider) => socialProviders.includes(provider)),
+            ),
+          ],
+        }
+      : {}),
     requiresEmailVerification: value.requiresEmailVerification === true,
     managedCharacterIds,
     characterIssues,

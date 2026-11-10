@@ -1,0 +1,24 @@
+.character-provider-notices__diagnostic,
+.character-provider-notices__history {
+  margin-top: var(--ew-space-4);
+}
+.character-provider-notices summary {
+  cursor: pointer;
+  font-size: var(--ew-text-small);
+}
+.character-provider-notices__diagnostic p {
+  font-size: var(--ew-text-caption);
+  overflow-wrap: anywhere;
+}
+.character-provider-notices__retry {
+  display: grid;
+  gap: var(--ew-space-2);
+  margin-top: var(--ew-space-4);
+}
+.character-provider-notices__retry small {
+  color: var(--ew-text-muted);
+}
+.character-provider-notices__history {
+  border-top: 1px solid var(--ew-line);
+  padding-top: var(--ew-space-4);
+}

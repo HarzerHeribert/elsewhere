@@ -30,6 +30,15 @@ export interface ApiAuth {
   isWorldAdmin(req: IncomingMessage): Promise<boolean>;
   passwordAuthEnabled?: boolean;
   emailLinkAuthEnabled?: boolean;
+  passkeyAuthEnabled?: boolean;
+  socialProviders?: ReadonlyArray<'github' | 'google'>;
+  getLinkedSocialProviders?(req: IncomingMessage): Promise<Array<'github' | 'google'>>;
+  getSecurityState?(req: IncomingMessage): Promise<{
+    ownerControlsRequirePasskey: boolean;
+    ownerControlsUnlocked: boolean;
+    passkeyVerifiedRecently: boolean;
+  } | null>;
+  canUseOwnerControls?(req: IncomingMessage): Promise<boolean>;
   requiresEmailVerification?: boolean;
 }
 
@@ -469,6 +478,10 @@ export function createApiServer(deps: ApiDependencies) {
         return;
       }
       const owner = authenticated(req, deps.adminToken);
+      const requireControlAssurance = async () => {
+        if (!owner && deps.auth?.canUseOwnerControls && !(await deps.auth.canUseOwnerControls(req)))
+          throw new HttpError(403, 'Verify a passkey to unlock owner controls for five minutes.');
+      };
       const providerRetry =
         /^\/api\/characters\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/provider\/retry$/.exec(pathname);
       const creationRoute =
@@ -570,6 +583,8 @@ export function createApiServer(deps: ApiDependencies) {
           throw new HttpError(429, 'Please wait before trying authentication again.');
         if (!consume('auth', 600, Date.now(), globalLimits))
           throw new HttpError(429, 'Authentication capacity reached. Please retry shortly.');
+        // Better Auth reads only this server-owned address, never caller-supplied forwarding chains.
+        req.headers['x-elsewhere-auth-client-ip'] = clientAddress;
         await deps.auth.handle(req, res);
         return;
       }
@@ -593,7 +608,20 @@ export function createApiServer(deps: ApiDependencies) {
           enabled: true,
           passwordAuthEnabled: deps.auth.passwordAuthEnabled ?? true,
           ...(deps.auth.emailLinkAuthEnabled ? { emailLinkAuthEnabled: true } : {}),
+          ...(deps.auth.passkeyAuthEnabled ? { passkeyAuthEnabled: true } : {}),
           requiresEmailVerification: deps.auth.requiresEmailVerification ?? false,
+          ...(deps.auth.socialProviders?.length
+            ? {
+                socialProviders: [...deps.auth.socialProviders],
+                ...(account
+                  ? {
+                      linkedSocialProviders:
+                        (await deps.auth.getLinkedSocialProviders?.(req)) ?? [],
+                    }
+                  : {}),
+              }
+            : {}),
+          ...(account ? await deps.auth.getSecurityState?.(req) : {}),
           managedCharacterIds: managesCharacter ? [characterId] : [],
           ...(managesCharacter
             ? {
@@ -642,6 +670,7 @@ export function createApiServer(deps: ApiDependencies) {
           (await deps.canManageCharacter?.(account.id, characterId)) === true;
         if (!(await managesCharacter()))
           throw new HttpError(403, 'Character ownership is required.');
+        await requireControlAssurance();
         if (!origin || !origins.has(origin))
           throw new HttpError(
             403,
@@ -660,6 +689,7 @@ export function createApiServer(deps: ApiDependencies) {
         if (!input.success) throw new HttpError(400, 'Creation details are invalid.');
         if (!(await managesCharacter()))
           throw new HttpError(403, 'Character ownership is required.');
+        await requireControlAssurance();
         try {
           if (creationRoute[2]) {
             if (!deps.pinCreation) throw new HttpError(503, 'Creation pinning is unavailable.');
@@ -685,6 +715,7 @@ export function createApiServer(deps: ApiDependencies) {
           (await deps.canManageCharacter?.(account.id, characterId)) === true;
         if (!(await managesCharacter()))
           throw new HttpError(403, 'Character ownership is required.');
+        await requireControlAssurance();
         if (!origin || !origins.has(origin))
           throw new HttpError(
             403,
@@ -701,6 +732,7 @@ export function createApiServer(deps: ApiDependencies) {
           throw new HttpError(400, 'Provider retry body must be an empty object.');
         if (!(await managesCharacter()))
           throw new HttpError(403, 'Character ownership is required.');
+        await requireControlAssurance();
         if (!deps.retryCharacterProvider)
           throw new HttpError(503, 'Provider retry is unavailable.');
         await deps.retryCharacterProvider();
@@ -814,6 +846,7 @@ export function createApiServer(deps: ApiDependencies) {
             403,
             'A trusted origin is required for session-authenticated changes.',
           );
+        await requireControlAssurance();
         const wishRoute = /^\/api\/admin\/wishes\/([^/]+)$/.exec(pathname);
         if (wishRoute && deps.resolveWish) {
           if (!(await managesCharacter()))
@@ -838,6 +871,7 @@ export function createApiServer(deps: ApiDependencies) {
             throw new HttpError(400, 'Wish decision must be fulfill or decline.');
           if (!(await managesCharacter()))
             throw new HttpError(403, 'Character ownership is required.');
+          await requireControlAssurance();
           send(200, publicSnapshot(await deps.resolveWish(wishId, body.decision)));
           return;
         }
@@ -860,6 +894,7 @@ export function createApiServer(deps: ApiDependencies) {
           !(await managesCharacter())
         )
           throw new HttpError(403, 'Character ownership or world moderation is required.');
+        await requireControlAssurance();
         const result = await handlers[action]();
         if (action === 'reset') visitors.clear();
         send(200, publicSnapshot(result));

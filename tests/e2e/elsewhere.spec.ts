@@ -9,7 +9,7 @@ import { createInitialWorld } from '../../elsewhere/server/src/world';
 
 // Explicitly nonsecret and scoped to the isolated test database and local ports.
 const TEST_OWNER = 'elsewhere-e2e-local-test-credential-only-2026';
-const origin = 'http://127.0.0.1:5175';
+const origin = 'http://localhost:5175';
 test.use({ viewport: { width: 1440, height: 900 } });
 
 async function admin(request: APIRequestContext, action: string): Promise<PublicSnapshot> {

@@ -16,17 +16,25 @@ import { createLocalAuth, authOptionsFromEnvironment } from '../packages/auth/sr
 async function main() {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
-    options: { input: { type: 'string' }, output: { type: 'string' } },
+    options: {
+      input: { type: 'string' },
+      output: { type: 'string' },
+      'confirm-recovery': { type: 'boolean' },
+    },
   });
   const operation = positionals[0];
   if (
     positionals.length !== 1 ||
-    !['create', 'signin'].includes(operation) ||
+    !['create', 'signin', 'recover-passkeys'].includes(operation) ||
     !values.input ||
     !values.output
   )
     throw new Error(
-      'Use auth:operator create|signin --input <private-identity.json> --output <new-private-signin.json>.',
+      'Use auth:operator create|signin|recover-passkeys --input <private-identity.json> --output <new-private-signin.json>.',
+    );
+  if (operation === 'recover-passkeys' && values['confirm-recovery'] !== true)
+    throw new Error(
+      'Private passkey recovery requires --confirm-recovery and revokes this operator’s sessions and saved passkeys.',
     );
   const fd = openSync(
     resolve(values.input),
@@ -68,6 +76,7 @@ async function main() {
     auth = await createLocalAuth(authOptionsFromEnvironment(process.env));
     const userId =
       'email' in identity ? await auth.createOperatorAccount(identity) : identity.userId;
+    if (operation === 'recover-passkeys') await auth.recoverOwnerPasskeys(userId);
     const link = await auth.issueOperatorSignIn(userId);
     writeFileSync(
       out,
@@ -75,7 +84,7 @@ async function main() {
     );
     fsyncSync(out);
     console.log(
-      'Private operator sign-in record written. Email is unverified; character ownership is configured separately.',
+      'Private operator sign-in record written. Account identity and character ownership remain separate.',
     );
   } finally {
     closeSync(out);
