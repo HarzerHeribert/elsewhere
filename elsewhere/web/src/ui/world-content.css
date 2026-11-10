@@ -15,6 +15,36 @@
 .follow-link:hover {
   color: var(--ew-text);
 }
+/* The way back, in the same place on every panel */
+.panel-back {
+  flex: none;
+  align-self: flex-start;
+  margin: 10px 0 -12px 18px;
+  padding: 0 6px;
+  font-size: var(--ew-text-small);
+}
+.phone .panel-back {
+  margin-top: 0;
+}
+/* A name inside a sentence that leads to its own panel */
+.inline-link {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+}
+.inline-link:hover {
+  color: var(--ew-text);
+  text-decoration-color: currentColor;
+}
+.resident-here {
+  margin: -4px 0 12px;
+  color: var(--ew-accent-hover);
+}
 .back-link svg,
 .follow-link svg {
   width: 16px;
@@ -63,6 +93,17 @@
   border-bottom: 1px solid var(--ew-line);
   overflow-x: auto;
   scrollbar-width: none;
+  /* Stays its own height above any page, and in reach while that page is scrolled. */
+  flex: none;
+  position: sticky;
+  top: -20px;
+  z-index: 3;
+  background: var(--ew-surface);
+}
+.phone .page-tabs {
+  top: -4px;
+  margin: -4px -20px 16px;
+  padding: 0 20px;
 }
 .page-tabs button {
   flex: none;

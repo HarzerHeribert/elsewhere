@@ -91,19 +91,27 @@ export function PlacePanel({
   discovered,
   onWalk,
   onSelectObject,
-  onBack,
+  resident,
+  onResident,
 }: {
   place: Place;
   objects: PublicWorldObject[];
   discovered: boolean;
   onWalk?: (position: Position) => Promise<void>;
   onSelectObject: (id: string) => void;
-  onBack: () => void;
+  /** The name of a resident who is in this place right now. */
+  resident?: string;
+  onResident?: () => void;
 }) {
   return (
     <>
       <span className="tag">{discovered ? 'In your field journal' : 'Somewhere new'}</span>
       <p className="large-copy">{place.description}</p>
+      {resident && onResident && (
+        <button className="follow-link resident-here" onClick={onResident}>
+          {resident} is here right now <Icon name="arrow" />
+        </button>
+      )}
       <Button
         className="full-width"
         disabled={!onWalk}
@@ -131,9 +139,6 @@ export function PlacePanel({
             ))}
         </div>
       </div>
-      <Button variant="quiet" onClick={onBack}>
-        ← Back to the map
-      </Button>
     </>
   );
 }
@@ -141,20 +146,15 @@ export function PlacePanel({
 export function ObjectPanel({
   entity,
   object,
-  onBack,
 }: {
   entity?: PublicWorldEntity;
   object?: PublicWorldObject;
-  onBack: () => void;
 }) {
   return (
     <>
       {entity && (
         <>
           <EntityDetails entity={entity} />
-          <Button variant="quiet" aria-label="Close wildlife details" onClick={onBack}>
-            ← Back to exploring
-          </Button>
         </>
       )}
       {object && (
@@ -170,9 +170,6 @@ export function ObjectPanel({
           <p className="muted-copy">
             You can look around freely. Hubert decides how he spends his own time.
           </p>
-          <Button variant="quiet" aria-label="Close object details" onClick={onBack}>
-            ← Back to exploring
-          </Button>
         </>
       )}
     </>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CharacterMailPreferences } from '../CharacterMail';
 import type {
   AccountCharacterMail,
@@ -55,6 +55,7 @@ export function CharacterPanel({
   onMessage,
   onViewpoint,
   onWishes,
+  onDay,
 }: {
   character: PublicSnapshot['character'];
   tab?: CharacterTab;
@@ -83,6 +84,8 @@ export function CharacterPanel({
   onMessage: () => void;
   onViewpoint: () => void;
   onWishes: () => void;
+  /** When given, the page links to the full account of the day. */
+  onDay?: () => void;
 }) {
   const toWall = useWallTime();
   const [ownTab, setOwnTab] = useState<CharacterTab>('now');
@@ -91,6 +94,19 @@ export function CharacterPanel({
     setOwnTab(next);
     onTabChange?.(next);
   };
+  // A newly chosen page starts at its top, with its tab in view on a narrow panel.
+  const pages = useRef<HTMLDivElement>(null);
+  const shownTab = useRef(tab);
+  useEffect(() => {
+    if (shownTab.current === tab) return;
+    shownTab.current = tab;
+    const bar = pages.current;
+    const scroller = bar?.closest('.panel-scroll');
+    if (scroller) scroller.scrollTop = 0;
+    const active = bar?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (active && bar)
+      bar.scrollLeft = Math.max(0, active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2);
+  }, [tab]);
   const latest = research?.at(-1);
   const live = researchInProgress(latest) ? latest : undefined;
   const opened = research?.find((episode) => episode.id === researchId);
@@ -117,7 +133,7 @@ export function CharacterPanel({
   const attention = [...character.interests].sort((a, b) => b.strength - a.strength).slice(0, 3);
   return (
     <>
-      <div className="page-tabs" role="group" aria-label={character.name + '’s pages'}>
+      <div className="page-tabs" role="group" aria-label={character.name + '’s pages'} ref={pages}>
         {tabs.map((item) => (
           <button key={item.id} aria-pressed={tab === item.id} onClick={() => choose(item.id)}>
             {item.id === 'now' && <i />}
@@ -131,6 +147,14 @@ export function CharacterPanel({
             {thoughts?.enabled
               ? 'What I’m doing, thinking and writing, as it happens. I share these thoughts myself; the rest stays my own.'
               : 'What I’m doing and writing, as it happens. My thoughts stay my own until I write them down.'}
+            {onDay && (
+              <>
+                {' '}
+                <button className="inline-link" onClick={onDay}>
+                  See my whole day
+                </button>
+              </>
+            )}
           </p>
           {earlier.map((item, index) =>
             item.note ? (
@@ -172,8 +196,8 @@ export function CharacterPanel({
                 <button
                   className="follow-link"
                   onClick={() => {
-                    onResearch(live.id);
                     choose('research');
+                    onResearch(live.id);
                   }}
                 >
                   Follow along <Icon name="arrow" />
@@ -219,7 +243,7 @@ export function CharacterPanel({
       )}
       {tab === 'research' &&
         (opened ? (
-          <ResearchStory episode={opened} backLabel="My research" onBack={() => onResearch(null)} />
+          <ResearchStory episode={opened} />
         ) : (
           <ResearchList episodes={research ?? []} onOpen={onResearch} />
         ))}

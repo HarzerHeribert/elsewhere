@@ -94,23 +94,12 @@ export function ResearchList({
   );
 }
 
-export function ResearchStory({
-  episode,
-  backLabel,
-  onBack,
-}: {
-  episode: PublicResearchEpisode;
-  backLabel: string;
-  onBack: () => void;
-}) {
+/** One piece of research in full. The panel around it carries the way back to its list. */
+export function ResearchStory({ episode }: { episode: PublicResearchEpisode }) {
   const live = researchInProgress(episode);
   return (
     <article className="research-story" aria-label={'Research: ' + episode.topic}>
       <div className="story-top">
-        <button className="back-link" onClick={onBack}>
-          <Icon name="chevron-left" />
-          {backLabel}
-        </button>
         <span className={'research-flag' + (live ? ' live' : '')}>{researchStatus(episode)}</span>
       </div>
       <p className="eyebrow">{live ? 'I’m looking into' : 'I looked into'}</p>
