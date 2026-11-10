@@ -243,7 +243,7 @@ export class ChatGPTClient {
       // Name what was caught (a timeout, a dropped connection, a programming error) for the
       // service log; the name is an identifier, never message text.
       if (!(error instanceof ChatGPTError) && error instanceof Error && !failure.providerError)
-        failure.providerError = error.name.replace(/[^\w.-]/g, '').slice(0, 60) || undefined;
+        failure.providerError = caughtName(error);
       // A request stopped before it was sent (no usable model or session) used nothing either.
       if (!sent) this.options.onUsageDetails?.(NOTHING_USED);
       // A quota/policy failure stops future autonomous requests until an operator resumes.
@@ -252,6 +252,19 @@ export class ChatGPTClient {
       throw failure;
     }
   }
+}
+
+/** "TimeoutError" with cause code "UND_ERR_SOCKET" becomes "timeout_error_und_err_socket". */
+function caughtName(error: Error): string | undefined {
+  const cause = (error as { cause?: { code?: unknown } }).cause?.code;
+  const name = [error.name, typeof cause === 'string' ? cause : '']
+    .filter(Boolean)
+    .join('_')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 64);
+  return /^[a-z]/.test(name) ? name : undefined;
 }
 
 export class ChatGPTDecisionProvider implements DecisionProvider<CharacterDecision> {
