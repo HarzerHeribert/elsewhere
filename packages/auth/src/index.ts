@@ -160,6 +160,29 @@ export async function createLocalAuth(options: LocalAuthOptions) {
       accountLinking: { enabled: true, disableImplicitLinking: true, allowDifferentEmails: false },
     },
     databaseHooks: {
+      account: {
+        create: {
+          before: async (account, context) => {
+            const target = await (await auth.$context).internalAdapter.findUserById(account.userId);
+            if (!target || ('banned' in target && target.banned)) return false;
+            if (
+              !('ownerControlsRequirePasskey' in target) ||
+              target.ownerControlsRequirePasskey !== true
+            )
+              return { data: account };
+            // OAuth link state may outlive the policy/session that initiated it. Recheck
+            // the target's durable policy at credential creation, including no-cookie callbacks.
+            const headers = context?.request?.headers ?? context?.headers ?? new Headers();
+            const current = await auth.api.getSession({
+              headers,
+              query: { disableCookieCache: true },
+            });
+            if (!current || current.user.id !== account.userId || !freshPasskey(current.session))
+              return false;
+            return { data: account };
+          },
+        },
+      },
       session: {
         create: {
           before: async (session, context) => ({

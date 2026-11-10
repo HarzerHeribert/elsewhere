@@ -202,6 +202,126 @@ it('refuses implicit same-email linking but explicitly links the signed-in origi
       (db.prepare('SELECT COUNT(*) AS n FROM elsewhere_auth_user').get() as { n: number }).n,
     ).toBe(1);
     expect(JSON.stringify({ providers: f.auth.socialProviders, account })).not.toContain(access);
+    // An already linked identity can still sign in without a passkey; its owner controls stay locked.
+    db.prepare('UPDATE elsewhere_auth_user SET ownerControlsRequirePasskey=1 WHERE id=?').run(id);
+    const ordinary = await callback(
+      await f.post('sign-in/social', {
+        provider: 'github',
+        callbackURL: origin,
+        disableRedirect: true,
+      }),
+    );
+    expect(ordinary.status).toBe(302);
+    expect(ordinary.headers.get('location')).not.toContain('error=');
+    const ordinaryRequest = { headers: { cookie: cookie(ordinary) } } as IncomingMessage;
+    expect(await f.auth.getAccount(ordinaryRequest)).toMatchObject({ id, isWorldAdmin: true });
+    expect(await f.auth.getSecurityState(ordinaryRequest)).toMatchObject({
+      ownerControlsRequirePasskey: true,
+      ownerControlsUnlocked: false,
+    });
+  } finally {
+    db.close();
+  }
+});
+
+it('does not finish an old weak-session link after passkey protection is enabled, even when its session cookie is omitted', async () => {
+  const f = await fixture(),
+    id = await f.auth.createOperatorAccount({ name: 'Owner', email: 'owner@example.invalid' });
+  const db = new Database(join(f.dir, 'auth.sqlite'));
+  db.prepare('UPDATE elsewhere_auth_user SET emailVerified=1 WHERE id=?').run(id);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === 'https://github.com/login/oauth/access_token')
+        return new Response(
+          JSON.stringify({
+            access_token: 'fixture-pending-link-token',
+            token_type: 'bearer',
+            scope: 'read:user user:email',
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      if (url === 'https://api.github.com/user')
+        return new Response(
+          JSON.stringify({
+            id: 12345,
+            login: 'fixture-owner',
+            name: 'Owner',
+            email: 'owner@example.invalid',
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      if (url === 'https://api.github.com/user/emails')
+        return new Response(
+          JSON.stringify([{ email: 'owner@example.invalid', primary: true, verified: true }]),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      throw Error('Unexpected external request in pending-link fixture');
+    }),
+  );
+  try {
+    const link = await f.auth.issueOperatorSignIn(id),
+      token = new URLSearchParams(new URL(link.url).hash.slice(1)).get('sign-in');
+    const signed = await f.post('one-time-token/verify', { token }),
+      ownerCookie = cookie(signed);
+    const pending = await f.post(
+      'link-social',
+      { provider: 'github', callbackURL: origin },
+      ownerCookie,
+    );
+    expect(pending.status).toBe(200);
+    const authorization = new URL((await pending.json()).url);
+    // Another device enabled the durable requirement after this old weak link began.
+    db.prepare('UPDATE elsewhere_auth_user SET ownerControlsRequirePasskey=1 WHERE id=?').run(id);
+    const url = new URL(origin + '/api/auth/callback/github');
+    url.searchParams.set('code', 'isolated-pending-code');
+    url.searchParams.set('state', authorization.searchParams.get('state')!);
+    const callback = await f.auth.webHandler(
+      new Request(url, { headers: { cookie: cookie(pending) } }),
+    );
+    expect([302, 403]).toContain(callback.status);
+    expect(
+      (
+        db
+          .prepare("SELECT COUNT(*) AS n FROM elsewhere_auth_account WHERE providerId='github'")
+          .get() as { n: number }
+      ).n,
+    ).toBe(0);
+    expect(
+      (await f.auth.getSecurityState({ headers: { cookie: ownerCookie } } as IncomingMessage))
+        ?.ownerControlsRequirePasskey,
+    ).toBe(true);
+    // A new explicit link with a current, same-account verified passkey session is allowed.
+    db.prepare('UPDATE elsewhere_auth_session SET authMethod=?,authTime=? WHERE userId=?').run(
+      'passkey',
+      Date.now(),
+      id,
+    );
+    const fresh = await f.post(
+      'link-social',
+      { provider: 'github', callbackURL: origin },
+      ownerCookie,
+    );
+    expect(fresh.status).toBe(200);
+    const freshUrl = new URL(origin + '/api/auth/callback/github');
+    freshUrl.searchParams.set('code', 'isolated-fresh-code');
+    freshUrl.searchParams.set(
+      'state',
+      new URL((await fresh.json()).url).searchParams.get('state')!,
+    );
+    const linked = await f.auth.webHandler(
+      new Request(freshUrl, { headers: { cookie: ownerCookie + '; ' + cookie(fresh) } }),
+    );
+    expect(linked.status).toBe(302);
+    expect(linked.headers.get('location')).not.toContain('error=');
+    expect(
+      (
+        db
+          .prepare("SELECT COUNT(*) AS n FROM elsewhere_auth_account WHERE providerId='github'")
+          .get() as { n: number }
+      ).n,
+    ).toBe(1);
   } finally {
     db.close();
   }
