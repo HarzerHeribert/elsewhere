@@ -47,6 +47,8 @@ function formatObedientModel(seed: number) {
         else if (property.enum) command[key] = pick(property.enum);
         else if (property.items?.enum) command[key] = [pick(property.items.enum)];
         else if (property.type === 'boolean') command[key] = random() < 0.5;
+        else if (required && property.type === 'string')
+          command[key] = `a considered line number ${Math.floor(random() * 1000)}`;
         else if (property.type === 'integer') {
           if (required || random() < 0.5) command[key] = 1000 + Math.floor(random() * 120_000);
         } else if (key === 'position')
@@ -55,7 +57,7 @@ function formatObedientModel(seed: number) {
         else if (required) throw new Error(`The format left the field ${key} unconstrained.`);
       }
       chosen.set(String(command.type), (chosen.get(String(command.type)) ?? 0) + 1);
-      return command;
+      return { action: command, why: '' };
     },
   };
 }
@@ -69,7 +71,10 @@ const affordanceTrustingModel = {
       affordances: string[];
     }>;
     const creature = creatures.find((entity) => entity.affordances.includes('inspect'));
-    return creature ? { type: 'inspect', targetId: creature.id } : { type: 'reflect' };
+    return {
+      action: creature ? { type: 'inspect', targetId: creature.id } : { type: 'reflect' },
+      why: '',
+    };
   },
 };
 

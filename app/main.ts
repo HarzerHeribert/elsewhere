@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createCharacterMail } from './character-mail';
 import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { closeApiServer, createApiServer } from '@elsewhere/server';
 import { ElsewhereController, type ControllerState } from './controller';
@@ -46,6 +47,16 @@ const store: SnapshotStore<ControllerState> = process.env.DATABASE_URL
       },
     }))
   : new SqliteSnapshotStore<ControllerState>(resolve(directory, 'elsewhere.sqlite'));
+
+/** A saved life in an older shape is kept as JSON before a new one begins. */
+function archiveRetiredSnapshot(value: unknown, version: number) {
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  writeFileSync(
+    resolve(directory, `elsewhere-schema1-v${version}-${Date.now()}.json`),
+    JSON.stringify(value),
+    { mode: 0o600, flag: 'wx' },
+  );
+}
 
 const server = createApiServer({
   auth: {
@@ -100,7 +111,6 @@ const server = createApiServer({
   createCreation: (input) => controller!.createCreation(input),
   pinCreation: (id, pinned) => controller!.pinCreation(id, pinned),
   resolveWish: (id, decision) => controller!.resolveWish(id, decision),
-  setThoughts: (enabled) => controller!.setThoughts(enabled),
 });
 server.requestTimeout = 20_000;
 server.headersTimeout = 10_000;
@@ -148,6 +158,8 @@ async function initialize() {
     reflectionProvider: providers.reflection,
     expressionProvider: providers.expression,
     modelMaximum: config.MODEL_MAX_CALLS_PER_DAY,
+    modelHourlyMaximum: config.MODEL_MAX_CALLS_PER_HOUR,
+    archiveSnapshot: archiveRetiredSnapshot,
     research: config.RESEARCH_BROKER_URL
       ? new ResearchClient({
           url: config.RESEARCH_BROKER_URL,

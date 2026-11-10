@@ -67,7 +67,7 @@ afterEach(async () => {
 });
 async function start(overrides: Partial<InferenceBrokerOptions> = {}) {
   const decision = vi.fn(async (_context: DecisionContext, _signal: AbortSignal) => ({
-    value: { type: 'reflect' },
+    value: { action: { type: 'reflect' }, why: '' },
     usage: { inputTokens: 120, outputTokens: 20, cachedInputTokens: 60 },
   }));
   const reflection = vi.fn(async (_input: ReflectionInput, _signal: AbortSignal) => ({
@@ -127,7 +127,7 @@ describe('private character inference broker', () => {
       onUsageDetails: usage,
     });
     const provider = new BrokerDecisionProvider(client);
-    expect(await provider.propose(context)).toEqual({ type: 'reflect' });
+    expect(await provider.propose(context)).toEqual({ action: { type: 'reflect' }, why: '' });
     expect(fixture.decision).toHaveBeenCalledOnce();
     const actual = fixture.decision.mock.calls[0] as unknown as [DecisionContext, AbortSignal];
     expect(actual[0].identity).toBe('Hubert is a strange little creature interested in birds.');
@@ -283,7 +283,7 @@ describe('private character inference broker', () => {
       await new BrokerDecisionProvider(
         new BrokerModelClient({ baseUrl: first.baseUrl, token, expectedBinding: binding }),
       ).propose(context),
-    ).toEqual({ type: 'reflect' });
+    ).toEqual({ action: { type: 'reflect' }, why: '' });
     await stop(first.broker);
     const second = await start({
       store: new SqliteSnapshotStore<InferenceBrokerState>(file),
@@ -342,7 +342,7 @@ describe('private character inference broker', () => {
           { code: 'invalid_action', fields: ['durationMs'] },
         ),
       )
-      .mockResolvedValue({ value: { type: 'reflect' } });
+      .mockResolvedValue({ value: { action: { type: 'reflect' }, why: '' } });
     const f = await start({ decision });
     const client = new BrokerModelClient({ baseUrl: f.baseUrl, token, expectedBinding: binding });
     const provider = new BrokerDecisionProvider(client);
@@ -351,7 +351,7 @@ describe('private character inference broker', () => {
       fields: ['durationMs'],
     });
     expect(client.isAvailable()).toBe(true);
-    expect(await provider.propose(context)).toEqual({ type: 'reflect' });
+    expect(await provider.propose(context)).toEqual({ action: { type: 'reflect' }, why: '' });
     expect(f.broker.getState().allowance.calls).toBe(2);
     expect(f.broker.getState().allowance.inputTokens).toBe(20);
   });
@@ -419,7 +419,7 @@ describe('private character inference broker', () => {
       await new Promise<void>((resolve) => {
         release = resolve;
       });
-      return { value: { type: 'reflect' } };
+      return { value: { action: { type: 'reflect' }, why: '' } };
     });
     const f = await start({ decision });
     const { identity: _, ...data } = context;
@@ -439,7 +439,7 @@ describe('private character inference broker', () => {
       await new Promise<void>((resolve) => {
         release = resolve;
       });
-      return { value: { type: 'reflect' } };
+      return { value: { action: { type: 'reflect' }, why: '' } };
     });
     const f = await start({ decision, timeoutMs: 1000 });
     const { identity: _, ...data } = context;
@@ -478,7 +478,10 @@ describe('private character inference broker', () => {
         outputTokens: kind === 'output' ? 100001 : 20,
         cachedInputTokens: 0,
       };
-      const decision = vi.fn(async () => ({ value: { type: 'reflect' }, usage }));
+      const decision = vi.fn(async () => ({
+        value: { action: { type: 'reflect' }, why: '' },
+        usage,
+      }));
       const options = {
         store,
         decision,

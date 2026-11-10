@@ -5,6 +5,7 @@ export * from './decision-errors';
 export * from './pursuits';
 export * from './public-text';
 import { ActionChoicesSchema, type ActionChoice } from '../../interfaces/src/commands';
+import { PURSUIT_LIMITS } from './pursuits';
 export type MemoryCueKind = 'place' | 'object' | 'entity' | 'person' | 'phrase';
 export interface MemoryCue {
   kind: MemoryCueKind;
@@ -131,15 +132,24 @@ export interface DecisionProvider<T = unknown> {
 /** Compact whole data entries rather than cutting serialized JSON in the middle of a fact. */
 function boundData(input: JsonObject, maximum: number): JsonObject {
   const isIdentifier = (key: string) => /^(id|.*Ids?)$/.test(key);
-  const copyValue = (value: JsonValue | undefined, identifier = false): JsonValue | undefined => {
-    if (typeof value === 'string') return identifier ? value : value.slice(0, 1000);
+  // Pages the character is reading keep their text; shrinking below still halves them first.
+  const copyValue = (
+    value: JsonValue | undefined,
+    identifier = false,
+    reading = false,
+  ): JsonValue | undefined => {
+    if (typeof value === 'string')
+      return identifier ? value : value.slice(0, reading ? PURSUIT_LIMITS.readingText : 1000);
     if (Array.isArray(value))
-      return value.slice(0, 32).map((item) => copyValue(item, identifier) ?? null);
+      return value.slice(0, 32).map((item) => copyValue(item, identifier, reading) ?? null);
     if (value && typeof value === 'object')
       return Object.fromEntries(
         Object.entries(value)
           .slice(0, 32)
-          .map(([key, item]) => [key, copyValue(item, isIdentifier(key))]),
+          .map(([key, item]) => [
+            key,
+            copyValue(item, isIdentifier(key), reading || key === 'reading'),
+          ]),
       );
     return value;
   };

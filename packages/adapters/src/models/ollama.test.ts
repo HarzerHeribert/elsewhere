@@ -15,7 +15,7 @@ describe('native local Ollama adapter', () => {
       async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
         new Response(
           JSON.stringify({
-            message: { content: '{"type":"reflect"}' },
+            message: { content: '{"action":{"type":"reflect"},"why":"a quiet think"}' },
             prompt_eval_count: 120,
             eval_count: 8,
           }),
@@ -25,13 +25,18 @@ describe('native local Ollama adapter', () => {
       fetcher: fetcher as typeof fetch,
       onUsage: usage,
     });
-    expect(await provider.propose(context)).toEqual({ type: 'reflect' });
+    expect(await provider.propose(context)).toEqual({
+      action: { type: 'reflect' },
+      why: 'a quiet think',
+    });
     const init = fetcher.mock.calls[0]?.[1];
     const sent = JSON.parse(String(init?.body));
     expect(sent.think).toBe(false);
     expect(sent.stream).toBe(false);
+    expect(sent.format.required).toEqual(['action', 'why']);
+    expect(sent.options.num_predict).toBe(500);
     expect(
-      sent.format.anyOf.every(
+      sent.format.properties.action.anyOf.every(
         (action: { additionalProperties: boolean }) => action.additionalProperties === false,
       ),
     ).toBe(true);

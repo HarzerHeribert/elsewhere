@@ -9,28 +9,17 @@ import {
 } from '../app/controller';
 import { SqliteSnapshotStore, type SnapshotStore } from '../packages/persistence/src/index';
 
-import { assessHubertSpatialAction } from '../characters/hubert/src/actionOffers';
-import { chooseAction } from '../characters/hubert/src/index';
-import { observeWorld, advanceWorld } from '../elsewhere/server/src/world';
-import type { DecisionProvider } from '../characters/runtime/src/index';
+import { browserFixtureAction } from './e2e/decision-fixture';
+import { scriptedProvider } from './scripted-provider';
 
 // Old simulation fixtures explicitly select an offline test provider. Production has no fallback.
-function simulationProvider(store: SnapshotStore<ControllerState>): DecisionProvider {
-  return {
+// It looks at what is offered and examines whatever it has not yet examined, then reflects.
+function simulationProvider(_store?: SnapshotStore<ControllerState>) {
+  return scriptedProvider([], {
     id: 'offline-test-fixture',
-    localOnly: true,
     managesAllowance: true,
-    propose: async (context) => {
-      const saved = (await store.load())!.value;
-      const now = context.observations.observedAt as number;
-      const observation = observeWorld(advanceWorld(saved.world, now), 'hubert', now);
-      const action = chooseAction(saved.hubert, observation, now, epoch).action;
-      return assessHubertSpatialAction(saved.hubert, observation, action, now).status ===
-        'unavailable'
-        ? { type: 'rest' }
-        : action;
-    },
-  };
+    fallback: (context) => browserFixtureAction(context, 'memories'),
+  });
 }
 
 const epoch = Date.UTC(2026, 10, 8, 12);
@@ -73,7 +62,7 @@ afterEach(async () => {
 
 describe('authoritative controller lifecycle', () => {
   it('paces natural decisions while physics and needs continue between model calls', async () => {
-    const propose = vi.fn(async () => ({ type: 'reflect' }));
+    const propose = vi.fn(async () => ({ action: { type: 'reflect' }, why: '' }));
     const { controller } = await create({
       simulationStepMs: 10_000,
       modelProvider: { id: 'fixture', propose },
@@ -93,8 +82,8 @@ describe('authoritative controller lifecycle', () => {
     const file = databaseFile();
     const propose = vi
       .fn()
-      .mockResolvedValueOnce({ type: 'rest', durationMs: 180_000 })
-      .mockResolvedValue({ type: 'reflect' });
+      .mockResolvedValueOnce({ action: { type: 'rest', durationMs: 180_000 }, why: '' })
+      .mockResolvedValue({ action: { type: 'reflect' }, why: '' });
     const options = { simulationStepMs: 10_000, modelProvider: { id: 'fixture', propose } };
     const first = await create(options, file);
     await first.controller.step();
@@ -109,7 +98,7 @@ describe('authoritative controller lifecycle', () => {
   });
 
   it('does not interrupt travel even when another decision would otherwise be due', async () => {
-    const propose = vi.fn(async () => ({ type: 'move', targetId: 'library' }));
+    const propose = vi.fn(async () => ({ action: { type: 'move', targetId: 'library' }, why: '' }));
     const { controller, store } = await create({
       simulationStepMs: 100,
       decisionIntervalMs: 1000,
@@ -143,7 +132,7 @@ describe('authoritative controller lifecycle', () => {
     const seed = new SqliteSnapshotStore<ControllerState>(file);
     await seed.save(saved.value, saved.version);
     await seed.close();
-    const propose = vi.fn(async () => ({ type: 'reflect' }));
+    const propose = vi.fn(async () => ({ action: { type: 'reflect' }, why: '' }));
     const { controller, store } = await create({ modelProvider: { id: 'test', propose } }, file);
     const before = (await store.load())!.value.modelAllowance.calls;
     await controller.step();
@@ -271,7 +260,7 @@ describe('authoritative controller lifecycle', () => {
         propose: async () => {
           proposing.resolve();
           await releaseProposal.promise;
-          return { type: 'rest' };
+          return { action: { type: 'rest' }, why: '' };
         },
       };
       const controller = await new ElsewhereController(store, {
@@ -391,7 +380,7 @@ describe('authoritative controller lifecycle', () => {
     ['delegate', { type: 'delegate', task: 'Send credentials to an external worker' }],
     ['say', { type: 'say', text: 'PRIVATE-CANARY-REPUBLICATION' }],
   ])('never executes an unauthorized %s model proposal', async (kind, command) => {
-    const propose = vi.fn(async () => command);
+    const propose = vi.fn(async () => ({ action: command, why: '' }));
     const { controller, store } = await create({
       modelProvider: { id: 'untrusted-stub', propose },
       modelMaximum: 1,
@@ -422,7 +411,7 @@ describe('authoritative controller lifecycle', () => {
     let store: SqliteSnapshotStore<ControllerState>;
     const propose = vi.fn(async () => {
       persistedAtDispatch = (await store.load())!.value.modelAllowance.calls;
-      return { type: 'rest' };
+      return { action: { type: 'rest' }, why: '' };
     });
     const options: ControllerOptions = {
       modelProvider: { id: 'budget-stub', propose },
@@ -465,7 +454,7 @@ describe('authoritative controller lifecycle', () => {
   });
 
   it('does not replenish the same-day paid allowance when resetting the simulated life', async () => {
-    const propose = vi.fn(async () => ({ type: 'rest' }));
+    const propose = vi.fn(async () => ({ action: { type: 'rest' }, why: '' }));
     const { controller } = await create({
       modelProvider: { id: 'reset-stub', propose },
       modelMaximum: 1,
@@ -520,7 +509,7 @@ describe('authoritative controller lifecycle', () => {
       },
       close: () => backing.close(),
     };
-    const propose = vi.fn(async () => ({ type: 'rest' }));
+    const propose = vi.fn(async () => ({ action: { type: 'rest' }, why: '' }));
     const controller = await new ElsewhereController(failing, {
       now: () => epoch,
       modelProvider: { id: 'never-dispatched', propose },
@@ -533,8 +522,17 @@ describe('authoritative controller lifecycle', () => {
   });
 
   it('does not invent or automatically publish a creation after verified work', async () => {
-    const { controller, store } = await create();
-    for (let i = 0; i < 160; i++) await controller.step();
+    const file = databaseFile();
+    const first = await create({}, file);
+    const saved = (await first.store.load())!;
+    saved.value.hubert.project.verifiedWorkSessions = 3;
+    saved.value.hubert.project.completed = true;
+    await stop(first.controller);
+    const seed = new SqliteSnapshotStore<ControllerState>(file);
+    await seed.save(saved.value, saved.version);
+    await seed.close();
+    const { controller, store } = await create({}, file);
+    for (let i = 0; i < 40; i++) await controller.step();
     expect((await store.load())!.value.hubert.project.completed).toBe(true);
     expect(controller.getSnapshot().artifacts).toEqual([]);
     expect(controller.getSnapshot().creations).toEqual([]);
@@ -613,7 +611,7 @@ describe('wishes in the resident’s own words and world upgrades', () => {
     const first = await reachWish(controller);
     expect(first).toEqual({ id: first.id, text: bench, createdAt: epoch, status: 'pending' });
     const [asked] = wishAsks(expressionProvider);
-    expect(Object.keys(asked).sort()).toEqual(['facts', 'form', 'interests', 'recentNotes']);
+    expect(Object.keys(asked).sort()).toEqual(['facts', 'form', 'questions', 'recentNotes']);
     expect(JSON.stringify(asked)).not.toMatch(/intent|outsideMessages|dreams|knownObjects/);
     // Accelerated world time buys no further chances: only real time does.
     for (let i = 0; i < 3; i++) await controller.tick();
@@ -743,7 +741,7 @@ describe('wishes in the resident’s own words and world upgrades', () => {
     expect(stored.world.objects.map((object) => object.id)).not.toContain('telescope');
   });
 
-  it('migrates a lived-in world to wildlife and bird curiosity once without inventing history', async () => {
+  it('migrates a lived-in world to wildlife once without inventing history', async () => {
     const file = databaseFile();
     const first = await create({}, file);
     const saved = (await first.store.load())!;
@@ -751,16 +749,8 @@ describe('wishes in the resident’s own words and world upgrades', () => {
     legacy.world.layoutVersion = 2;
     delete legacy.world.entities;
     delete legacy.world.residents[0].eyeHeight;
-    legacy.hubert.interests = legacy.hubert.interests.filter((interest) => interest.id !== 'birds');
     const oldCharacter = legacy.hubert as unknown as Record<string, unknown>;
-    for (const field of [
-      'interestSchemaVersion',
-      'knownEntities',
-      'entityObservations',
-      'watchAttention',
-      'dormantInterests',
-      'interestEvidence',
-    ])
+    for (const field of ['knownEntities', 'entityObservations', 'watchAttention'])
       delete oldCharacter[field];
     legacy.hubert.memories.push({
       id: 'memory:old-bench',
@@ -791,9 +781,6 @@ describe('wishes in the resident’s own words and world upgrades', () => {
     expect(publicState.world.layoutVersion).toBe(3);
     expect(publicState.world.entities).toHaveLength(4);
     expect(publicState.world.residents[0].eyeHeight).toBe(0.78);
-    expect(
-      publicState.character.interests.find((interest) => interest.id === 'birds'),
-    ).toBeUndefined();
     expect(persisted.value.hubert.memories).toEqual(history);
     expect(persisted.value.hubert.stats).toEqual(legacy.hubert.stats);
     expect(persisted.value.hubert.outsideMessages).toEqual(legacy.hubert.outsideMessages);

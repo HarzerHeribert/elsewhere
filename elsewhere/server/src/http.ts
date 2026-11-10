@@ -16,7 +16,10 @@ import {
   PROTOCOL_VERSION,
   VisitorMessageSchema,
   type AccountSummary,
+  type PublicPursuit,
+  type PublicPursuitEntry,
   type PublicSnapshot,
+  type PublicTrailEntry,
   type ProviderIssue,
 } from '@elsewhere/character-interfaces';
 import { publicWorld } from './world.js';
@@ -95,9 +98,75 @@ export interface ApiDependencies {
   ): Promise<{ accepted: boolean }>;
   getArtifact?(id: string): { contentType: string; body: string } | null;
   resolveWish?(id: string, decision: 'fulfill' | 'decline'): Promise<PublicSnapshot>;
-  /** Owner switch for the character's shared thoughts. */
-  setThoughts?(enabled: boolean): Promise<PublicSnapshot>;
 }
+
+const httpsUrl = (value: string | undefined): string | undefined => {
+  try {
+    const url = new URL(value ?? '');
+    return url.protocol === 'https:' && !url.username && !url.password && value!.length <= 2048
+      ? value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
+const publicPursuitEntry = (entry: PublicPursuitEntry): PublicPursuitEntry => {
+  const base = { id: String(entry.id).slice(0, 128), at: entry.at };
+  switch (entry.kind) {
+    case 'search':
+      return {
+        ...base,
+        kind: 'search',
+        query: entry.query.slice(0, 240),
+        sourceCount: entry.sourceCount,
+      };
+    case 'read':
+      return {
+        ...base,
+        kind: 'read',
+        sourceId: entry.sourceId.slice(0, 128),
+        url: httpsUrl(entry.url) ?? '',
+        title: entry.title.slice(0, 180),
+      };
+    case 'note':
+      return {
+        ...base,
+        kind: 'note',
+        text: entry.text.slice(0, 600),
+        surprised: entry.surprised === true,
+        sourceIds: entry.sourceIds.slice(0, 8).map((id) => id.slice(0, 128)),
+      };
+    case 'made':
+      return {
+        ...base,
+        kind: 'made',
+        creationId: entry.creationId.slice(0, 128),
+        path: entry.path.slice(0, 240),
+        url: httpsUrl(entry.url) ?? '',
+      };
+  }
+};
+const publicPursuit = (pursuit: PublicPursuit): PublicPursuit => ({
+  id: pursuit.id,
+  question: pursuit.question.slice(0, 240),
+  why: pursuit.why.slice(0, 240),
+  status: pursuit.status,
+  openedAt: pursuit.openedAt,
+  lastAt: pursuit.lastAt,
+  questions: pursuit.questions.slice(0, 8).map((question) => question.slice(0, 240)),
+  ...(pursuit.setAsideReason ? { setAsideReason: pursuit.setAsideReason.slice(0, 240) } : {}),
+  entries: pursuit.entries.slice(-40).map(publicPursuitEntry),
+});
+const publicTrailEntry = (entry: PublicTrailEntry): PublicTrailEntry => ({
+  id: entry.id,
+  at: entry.at,
+  kind: entry.kind,
+  ...(entry.why ? { why: entry.why.slice(0, 200) } : {}),
+  ...(entry.pursuitId ? { pursuitId: entry.pursuitId } : {}),
+  ...(entry.text ? { text: entry.text.slice(0, 600) } : {}),
+  ...(httpsUrl(entry.url) ? { url: entry.url } : {}),
+  ...(entry.placeId ? { placeId: entry.placeId } : {}),
+});
 
 /** Explicitly project public fields: never serialize a controller or private character state. */
 export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
@@ -130,90 +199,8 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
         }
       : {}),
     creations: publicCreations(snapshot.creations ?? [], character.id),
-    ...(snapshot.notebook
-      ? {
-          notebook: {
-            enabled: snapshot.notebook.enabled === true,
-            entries: snapshot.notebook.entries
-              .slice(-32)
-              .map(({ id, at, text, sourceIds, topics }) => ({
-                id,
-                at,
-                text: text.slice(0, 360),
-                sourceIds: sourceIds.slice(0, 3),
-                ...(topics?.length
-                  ? {
-                      topics: topics
-                        .filter(
-                          (topic) => topic.kind !== 'reading' || topic.id.startsWith('https://'),
-                        )
-                        .slice(0, 4)
-                        .map(({ kind, id, label }) => ({ kind, id, label: label.slice(0, 80) })),
-                    }
-                  : {}),
-              })),
-            ...(snapshot.notebook.draft
-              ? {
-                  draft: {
-                    id: snapshot.notebook.draft.id,
-                    at: snapshot.notebook.draft.at,
-                    text: snapshot.notebook.draft.text.slice(0, 360),
-                  },
-                }
-              : {}),
-          },
-        }
-      : {}),
-    ...(snapshot.thoughts
-      ? {
-          thoughts: {
-            available: snapshot.thoughts.available === true,
-            enabled: snapshot.thoughts.enabled === true,
-            entries: snapshot.thoughts.entries.slice(-48).map(({ id, at, text, placeId }) => ({
-              id,
-              at,
-              text: text.slice(0, 200),
-              ...(placeId ? { placeId } : {}),
-            })),
-          },
-        }
-      : {}),
-    ...(snapshot.research
-      ? {
-          research: snapshot.research.slice(-8).map((episode) => ({
-            id: episode.id,
-            at: episode.at,
-            topic: episode.topic.slice(0, 180),
-            query: episode.query.slice(0, 240),
-            context: episode.context.slice(0, 360),
-            status: episode.status,
-            sources: episode.sources
-              .filter((source) => {
-                try {
-                  const url = new URL(source.url);
-                  return url.protocol === 'https:' && !url.username && !url.password;
-                } catch {
-                  return false;
-                }
-              })
-              .slice(0, 5)
-              .map((source) => ({
-                id: source.id,
-                url: source.url,
-                title: source.title.slice(0, 180),
-                snippet: source.snippet.slice(0, 600),
-                status: source.status,
-                ...(source.excerpt ? { excerpt: source.excerpt.slice(0, 4000) } : {}),
-                ...(source.retrievedAt !== undefined ? { retrievedAt: source.retrievedAt } : {}),
-              })),
-            ...(episode.outcome ? { outcome: episode.outcome.slice(0, 360) } : {}),
-            ...(episode.nextStep ? { nextStep: episode.nextStep.slice(0, 360) } : {}),
-            ...(episode.status === 'reading' && episode.readingSourceId
-              ? { readingSourceId: episode.readingSourceId }
-              : {}),
-          })),
-        }
-      : {}),
+    pursuits: (snapshot.pursuits ?? []).slice(0, 12).map(publicPursuit),
+    trail: (snapshot.trail ?? []).slice(-120).map(publicTrailEntry),
     character: {
       id: character.id,
       name: character.name,
@@ -224,12 +211,6 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
       socialAppetite: character.socialAppetite,
       activity: character.activity,
       status: character.status,
-      interests: character.interests.map(({ id, name, strength, encounters }) => ({
-        id,
-        name,
-        strength,
-        encounters,
-      })),
     },
     events: snapshot.events.map(
       ({ id, at, type, message, characterId, objectId, entityId, placeId }) => ({
@@ -1108,16 +1089,9 @@ export function createApiServer(deps: ApiDependencies) {
           pause: deps.pause.bind(deps),
           resume: deps.resume.bind(deps),
           reset: deps.reset.bind(deps),
-          ...(deps.setThoughts
-            ? {
-                'thoughts-on': () => deps.setThoughts!(true),
-                'thoughts-off': () => deps.setThoughts!(false),
-              }
-            : {}),
         };
         if (!Object.hasOwn(handlers, action)) throw new HttpError(404, 'Unknown owner action.');
-        const isCharacterAction =
-          action === 'tick' || action === 'reset' || action.startsWith('thoughts-');
+        const isCharacterAction = action === 'tick' || action === 'reset';
         if (isCharacterAction && !(await managesCharacter()))
           throw new HttpError(403, 'Character ownership is required.');
         const body = await readJson(req, bodyTimeoutMs);

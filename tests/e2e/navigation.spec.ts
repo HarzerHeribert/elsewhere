@@ -12,12 +12,10 @@ test.use({ timezoneId: 'Europe/Berlin', locale: 'en-GB' });
 //   ├─ Residents ─ Hubert ┬ Right now ──→ Messages · Activity · the place he is in
 //   │                     ├ My notebook
 //   │                     ├ My memories
-//   │                     ├ My research ─ one piece of research
 //   │                     └ About me ───→ Wishes
 //   ├─ Map ─ a place ─ an object        (a place ──→ the resident who is there)
 //   ├─ Messages
-//   ├─ Activity ─ a day ┬ one piece of research
-//   │                   └──→ a place · Hubert's page · Hubert's memories
+//   ├─ Activity ─ a day ──→ a place · Hubert's page · Hubert's memories
 //   ├─ Wishes
 //   └─ Settings ─ a section             (closing returns to the panel it was opened over)
 //
@@ -31,13 +29,6 @@ const long = (text: string) => (text + ' ').repeat(6).trim();
 function fixture(): PublicSnapshot {
   const world = publicWorld(createInitialWorld(started));
   const place = world.places.find((item) => item.id !== 'meadow')!;
-  const source = {
-    id: 'source-a',
-    url: 'https://example.org/a',
-    title: 'Reed beds',
-    snippet: 'About reed beds.',
-    status: 'read' as const,
-  };
   return {
     world,
     character: publicCharacter(createInitialHubert(started)),
@@ -71,44 +62,42 @@ function fixture(): PublicSnapshot {
       modelCalls: 0,
       simulationRate: 1,
     },
-    notebook: {
-      enabled: true,
-      entries: Array.from({ length: 24 }, (_, i) => ({
-        id: 'note-' + i,
-        at: now - (24 - i) * 2 * hour,
-        text: long('Note ' + i + ' about how the rows of the orchard line up.'),
-        sourceIds: ['memory:one'],
-      })),
-    },
-    thoughts: {
-      available: true,
-      enabled: true,
+    // Live-sized: several pursuits, each with many notes and open questions.
+    pursuits: Array.from({ length: 6 }, (_, p) => ({
+      id: 'pursuit-' + p,
+      question: long('Why do the reeds lean, and which way (' + p + ')?'),
+      why: long('I keep walking past them.'),
+      status: p === 0 ? ('active' as const) : p === 5 ? ('set-aside' as const) : ('open' as const),
+      openedAt: now - (60 - p) * hour,
+      lastAt: now - p * hour,
+      questions: Array.from({ length: 4 }, (_, q) => long('Open question ' + q + '?')),
+      ...(p === 5 ? { setAsideReason: 'It stopped giving me anything.' } : {}),
       entries: [
-        { id: 't1', at: now - 25 * hour, text: 'Yesterday felt slow.', placeId: place.id },
-        { id: 't2', at: now - 40 * minute, text: 'It is quiet here.', placeId: place.id },
-        { id: 't3', at: now - 4 * minute, text: 'Why do the reeds lean?', placeId: place.id },
+        {
+          kind: 'search' as const,
+          id: 's' + p,
+          at: now - p * hour,
+          query: 'reed lean',
+          sourceCount: 3,
+        },
+        ...Array.from({ length: 6 }, (_, n) => ({
+          kind: 'note' as const,
+          id: 'note-' + p + '-' + n,
+          at: now - (p * 6 + n) * hour,
+          text: long('Note ' + n + ' about how the rows of the orchard line up.'),
+          surprised: n === 0,
+          sourceIds: [],
+        })),
       ],
-    },
-    research: [
-      {
-        id: 'older',
-        at: now - 25 * hour,
-        topic: 'Pond skaters',
-        query: 'pond skaters surface tension',
-        context: 'Following up on insects on the pond.',
-        status: 'read',
-        sources: [source],
-      },
-      {
-        id: 'newer',
-        at: now - 50 * minute,
-        topic: 'Common reed',
-        query: 'common reed wind lean',
-        context: 'Following up on reeds encountered in Elsewhere.',
-        status: 'read',
-        sources: [source],
-      },
-    ],
+    })),
+    trail: Array.from({ length: 40 }, (_, i) => ({
+      id: 'step-' + i,
+      at: now - (40 - i) * 30 * minute,
+      kind: (['pursue', 'search', 'read', 'note', 'move'] as const)[i % 5],
+      why: i % 2 ? long('Because it matters.') : undefined,
+      text: long('Step ' + i + ' of the trail.'),
+      placeId: place.id,
+    })),
   };
 }
 const panel = (page: Page) => page.getByLabel('World panel', { exact: true });
@@ -158,7 +147,6 @@ test('a resident’s pages stay in reach from each other, however long the page'
   const order = [
     'My notebook',
     'My memories',
-    'My research',
     'About me',
     'Right now',
     'About me',
@@ -222,16 +210,6 @@ test('every link out of a panel leads back to exactly where it was followed from
   await back(page, 'Hubert');
   await expect(title(page)).toHaveText('Hubert');
 
-  // Hubert · My research ⇄ one piece of research, returning to the same spot in the list
-  await tab(page, 'My research').click();
-  await panel(page)
-    .getByRole('button', { name: /Pond skaters/ })
-    .click();
-  await expect(panel(page).getByRole('article', { name: 'Research: Pond skaters' })).toBeVisible();
-  await back(page, 'My research');
-  await expect(panel(page).getByRole('button', { name: /Common reed/ })).toBeVisible();
-  await expect(tab(page, 'My research')).toHaveAttribute('aria-pressed', 'true');
-
   // Map ⇄ a place ⇄ an object
   await menu(page, 'Map');
   await panel(page).locator('.place-list button').first().click();
@@ -248,9 +226,9 @@ test('every link out of a panel leads back to exactly where it was followed from
   const day = panel(page).locator('.day-nav strong');
   await expect(day).toContainText('today');
   await panel(page)
-    .getByRole('button', { name: /^Thoughts/ })
+    .getByRole('button', { name: /^My trail/ })
     .click();
-  await page.screenshot({ path: info.outputPath('activity-thoughts.png') });
+  await page.screenshot({ path: info.outputPath('activity-trail.png') });
   await panel(page)
     .locator('.story-item')
     .getByRole('button', { name: place.name })
@@ -258,7 +236,7 @@ test('every link out of a panel leads back to exactly where it was followed from
     .click();
   await expect(title(page)).toHaveText(place.name);
   await back(page, 'Activity');
-  await expect(panel(page).getByRole('button', { name: /^Thoughts/ })).toHaveAttribute(
+  await expect(panel(page).getByRole('button', { name: /^My trail/ })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -266,13 +244,7 @@ test('every link out of a panel leads back to exactly where it was followed from
   await panel(page).locator('.day-nav button').first().click();
   await expect(day).not.toContainText('today');
   const yesterday = await day.innerText();
-  await panel(page)
-    .getByRole('button', { name: /Pond skaters/ })
-    .click();
-  await expect(panel(page).getByRole('article', { name: 'Research: Pond skaters' })).toBeVisible();
   await page.screenshot({ path: info.outputPath('story.png') });
-  await back(page, 'All activity');
-  await expect(day).toHaveText(yesterday);
   await panel(page).locator('.day-nav button').last().click();
   await expect(day).toContainText('today');
   await panel(page).getByRole('button', { name: 'Highlights', exact: true }).click();
@@ -303,7 +275,7 @@ test('on a phone every page is in reach and More is a step back, not a dead end'
   await page.setViewportSize({ width: 390, height: 844 });
   await mount(page);
   await openHubert(page);
-  for (const name of ['About me', 'My notebook', 'My research', 'Right now', 'My memories']) {
+  for (const name of ['About me', 'My notebook', 'Right now', 'My memories']) {
     await tab(page, name).click({ timeout: 3_000 });
     await expect(tab(page, name)).toHaveAttribute('aria-pressed', 'true');
     await expect(tab(page, name)).toBeInViewport({ ratio: 1 });

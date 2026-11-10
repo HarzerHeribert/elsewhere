@@ -1,6 +1,5 @@
-import { z } from 'zod';
 import {
-  CharacterCommandSchema,
+  CharacterDecisionSchema,
   narrowActionFormat,
   type ActionChoice,
 } from '@elsewhere/character-interfaces';
@@ -31,19 +30,20 @@ function completeAlternatives(format: ObjectFormat): ObjectFormat[] {
   });
 }
 
-/** OpenAI disallows root anyOf. Only this transport uses a one-property envelope;
+/** OpenAI disallows root anyOf. The decision envelope carries the action and a public why;
  * the command inside remains the shared, provider-agnostic action vocabulary.
  * With this turn's choices, generation itself is limited to admissible actions and targets. */
 export function responsesActionFormat(choices?: readonly ActionChoice[]) {
   return {
     type: 'json_schema',
-    name: 'character_action_v1',
+    name: 'character_decision_v1',
     strict: true,
     schema: {
       type: 'object',
       additionalProperties: false,
-      required: ['action'],
+      required: ['action', 'why'],
       properties: {
+        why: { type: 'string', maxLength: 200 },
         action: {
           anyOf: narrowActionFormat(choices).anyOf.flatMap((format) =>
             completeAlternatives(format as ObjectFormat),
@@ -55,8 +55,6 @@ export function responsesActionFormat(choices?: readonly ActionChoice[]) {
 }
 export const RESPONSES_ACTION_FORMAT = responsesActionFormat();
 
-const responseSchema = z.object({ action: CharacterCommandSchema }).strict();
-
 /** No repair, text extraction, generated fallback, or promotion of partial deltas. */
 export function parseResponsesAction(content: string) {
   let value: unknown;
@@ -65,8 +63,8 @@ export function parseResponsesAction(content: string) {
   } catch {
     throw new InvalidDecisionError('invalid_json');
   }
-  const parsed = responseSchema.safeParse(value);
+  const parsed = CharacterDecisionSchema.safeParse(value);
   if (!parsed.success)
     throw new InvalidDecisionError('invalid_action', invalidDecisionFields(parsed.error));
-  return parsed.data.action;
+  return parsed.data;
 }

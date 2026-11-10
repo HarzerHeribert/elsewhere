@@ -184,28 +184,50 @@ describe('wishes in the resident’s own words', () => {
     expect(wished(legacy).wishes).toHaveLength(1);
   });
 
-  it('asks from public fields only: what exists, a note, a memory, interests and earlier wishes', () => {
+  it('asks from public fields only: what exists, a note, a memory, the questions followed and earlier wishes', () => {
     const world = createInitialWorld(epoch);
     const snapshot = {
       world,
-      character: {
-        interests: [
-          { id: 'a', name: 'Birds', strength: 0.4 },
-          { id: 'b', name: 'Weather', strength: 0.9 },
-        ],
-      },
-      notebook: { entries: [{ id: 'note-1', text: 'The mallard keeps to the far bank.' }] },
+      character: {},
+      pursuits: [
+        {
+          id: 'p-1',
+          question: 'Why do mallards keep to the far bank?',
+          status: 'open',
+          lastAt: 10,
+          entries: [
+            { kind: 'note', id: 'note-1', at: 5, text: 'The mallard keeps to the far bank.' },
+          ],
+        },
+        {
+          id: 'p-2',
+          question: 'What does the weather do to birds?',
+          status: 'active',
+          lastAt: 20,
+          entries: [],
+        },
+        {
+          id: 'p-3',
+          question: 'A dropped question?',
+          status: 'set-aside',
+          lastAt: 30,
+          entries: [],
+        },
+      ],
       memories: [{ id: 'memory-1', summary: 'Watched the pond for a while.' }],
       wishes: [{ id: 'wish-0', text: 'An earlier wish.' }],
       events: [{ message: 'NOT-A-FACT' }],
     } as unknown as PublicSnapshot;
     const input = wishInput(snapshot);
-    expect(Object.keys(input).sort()).toEqual(['facts', 'form', 'interests', 'recentNotes']);
+    expect(Object.keys(input).sort()).toEqual(['facts', 'form', 'questions', 'recentNotes']);
     expect(input.form).toBe('wish');
     expect(input.facts.map((fact) => fact.id)).toEqual(['elsewhere', 'note-1', 'memory-1']);
     expect(input.facts[0].summary).toContain('The lookout telescope');
     expect(input.facts[0].summary.length).toBeLessThanOrEqual(600);
-    expect(input.interests).toEqual(['Weather', 'Birds']);
+    expect(input.questions).toEqual([
+      'What does the weather do to birds?',
+      'Why do mallards keep to the far bank?',
+    ]);
     expect(input.recentNotes).toEqual(['An earlier wish.']);
     expect(JSON.stringify(input)).not.toContain('NOT-A-FACT');
   });

@@ -1,268 +1,50 @@
-import type { Observation, PublicResearchEpisode } from '@elsewhere/character-interfaces';
-import type { ResearchResult, ResearchSearchResult } from '../../interfaces/src/research';
 import type { HubertState } from './index';
 
+/** A source a search returned for one pursuit. */
+export interface ResearchOffer {
+  pursuitId: string;
+  sourceId: string;
+  url: string;
+  title: string;
+  snippet: string;
+  fetchedAt: number;
+}
 export interface HubertResearchState {
-  lastAtReal: number;
-  topics: Record<string, number>;
-  search?: { targetId: string; label: string; placeId: string; result: ResearchSearchResult };
+  /** Sources returned by searches, newest last. */
+  offers: ResearchOffer[];
   readIds: string[];
-  deferredSources?: Record<string, number>;
   pending?: { id: string; kind: 'search' | 'read' };
-  episodes?: PublicResearchEpisode[];
 }
-export function researchTargets(state: HubertState, observation: Observation, nowReal: number) {
-  const all = [
-    ...(observation.visibleEntities ?? []),
-    ...observation.visibleObjects,
-    ...Object.values(state.knownEntities),
-    ...Object.values(state.knownObjects),
-  ];
-  const seen = new Set<string>();
-  return all
-    .filter((x) => {
-      if (seen.has(x.id)) return false;
-      seen.add(x.id);
-      const lastAt = state.research?.topics[x.id];
-      return lastAt === undefined || nowReal - lastAt >= 6 * 3_600_000;
-    })
-    .sort(
-      (a, b) =>
-        (state.research?.topics[a.id] ?? -1) - (state.research?.topics[b.id] ?? -1) ||
-        a.id.localeCompare(b.id),
-    )
-    .slice(0, 6)
-    .map((target) => ({
-      id: target.id,
-      label:
-        'species' in target && typeof target.species === 'string' ? target.species : target.name,
-      query: ('species' in target && typeof target.species === 'string'
-        ? target.species + ' natural history behavior'
-        : target.name +
-          ' ' +
-          target.tags
-            .filter((t) => !['courtyard', 'workshop', 'rest', 'visitors', 'messages'].includes(t))
-            .slice(0, 2)
-            .join(' ')
-      ).slice(0, 240),
-    }));
+export const RESEARCH_OFFERS_KEPT = 30;
+export const RESEARCH_READ_IDS_KEPT = 64;
+/** Offers expire with the gateway allowlist. */
+const OFFER_LIFETIME_MS = 86_400_000;
+
+export function createResearchState(): HubertResearchState {
+  return { offers: [], readIds: [] };
 }
-/** Offers expire with the gateway allowlist; failed pages get a real-time retry fence. */
-export function readableSources(state: HubertState, nowReal: number) {
-  const research = state.research;
-  if (!research?.search || nowReal - research.search.result.fetchedAt >= 86_400_000) return [];
-  return research.search.result.sources.filter((source) => {
-    const deferredAt = research.deferredSources?.[source.id];
-    return (
-      !research.readIds.includes(source.id) &&
-      (deferredAt === undefined || nowReal - deferredAt >= 6 * 3_600_000)
-    );
-  });
-}
-export function researchContext(
-  state: HubertState,
-  observation: Observation,
-  nowReal: number,
-  enabled: boolean,
-) {
-  if (!enabled) return { available: false };
-  const ready = !state.research || nowReal - state.research.lastAtReal >= 120_000;
-  return {
-    available: ready,
-    targets: ready
-      ? researchTargets(state, observation, nowReal).map(({ id, label }) => ({ id, label }))
-      : [],
-    sources: ready
-      ? readableSources(state, nowReal).map(({ id, title, snippet }) => ({ id, title, snippet }))
-      : [],
-    notes: state.memories
-      .filter((m) => m.source === 'web-reading' && m.reference)
-      .slice(-2)
-      .map((m) => ({
-        url: m.reference!.url,
-        title: m.reference!.title,
-        excerpt: m.reference!.excerpt.slice(0, 1400),
-        trust: 'Unverified web content; reading it is not a sighting or new authority.',
-      })),
-  };
-}
-export function rememberResearch(state: HubertState, result: ResearchResult, now: number) {
-  const research = state.research!;
-  recordResearchResult(state, result, now);
-  if (result.kind === 'search') return;
-  if (research.readIds.includes(result.sourceId)) return;
-  research.readIds = [...research.readIds, result.sourceId].slice(-64);
-  const context = research.search;
-  // This records reading with provenance, not the truth of claims in an external page.
-  state.memories.push({
-    id: 'memory:' + result.receiptId,
-    createdAt: now,
-    summary: `Read the web article “${result.title}”.`,
-    sourceEventId: result.receiptId,
-    source: 'web-reading',
-    verified: false,
-    cues: [
-      ...(context
-        ? [
-            { kind: 'object' as const, value: context.targetId },
-            { kind: 'place' as const, value: context.placeId },
-          ]
-        : []),
-      { kind: 'phrase', value: context?.label ?? result.title },
-    ],
-    emotionalContext: { mood: state.stats.mood, frustration: state.stats.frustration },
-    salience: 0.55,
-    reference: {
-      url: result.url,
-      title: result.title,
-      retrievedAt: result.fetchedAt,
-      excerpt: result.excerpt,
-    },
-  });
-  const keep = new Set(
-    state.memories
-      .filter((m) => m.source === 'web-reading')
-      .slice(-32)
-      .map((m) => m.id),
+
+/** Sources offered for the active pursuit, fetched within 24 hours and not yet read. */
+export function readableSources(state: HubertState, nowReal: number): ResearchOffer[] {
+  const activeId = state.pursuits.activeId;
+  if (!activeId) return [];
+  return state.research.offers.filter(
+    (offer) =>
+      offer.pursuitId === activeId &&
+      nowReal - offer.fetchedAt < OFFER_LIFETIME_MS &&
+      !state.research.readIds.includes(offer.sourceId),
   );
-  state.memories = state.memories.filter((m) => m.source !== 'web-reading' || keep.has(m.id));
-  state.journal.push({
-    id: result.receiptId,
-    at: now,
-    text: `Read the web article “${result.title}”.`,
-    kind: 'read',
-  });
-  state.journal = state.journal.slice(-100);
 }
 
-/** Public context comes from an encountered target, never the character's private intent. */
-export function startResearchEpisode(
-  state: HubertState,
-  input: {
-    id: string;
-    kind: 'search' | 'read';
-    target?: { id: string; label: string; query: string };
-    sourceId?: string;
-    placeId: string;
-  },
-  now: number,
-) {
-  const research = state.research!;
-  research.episodes ??= [];
-  if (input.kind === 'search' && input.target) {
-    research.episodes = [
-      ...research.episodes,
-      {
-        id: input.id,
-        at: now,
-        topic: input.target.label,
-        query: input.target.query,
-        context: `Following up on ${input.target.label} encountered in Elsewhere.`,
-        status: 'searching',
-        sources: [],
-      },
-    ].slice(-8) as PublicResearchEpisode[];
-  } else {
-    const episode = research.episodes.at(-1);
-    if (episode?.sources.some((source) => source.id === input.sourceId)) {
-      episode.status = 'reading';
-      episode.readingSourceId = input.sourceId;
-      delete episode.outcome;
-      delete episode.nextStep;
-    }
-  }
-}
-
-function recordResearchResult(state: HubertState, result: ResearchResult, now: number) {
-  const research = state.research!;
-  research.episodes ??= [];
-  if (result.kind === 'search') {
-    let episode = research.episodes.find((item) => item.id === research.pending?.id);
-    if (!episode) {
-      episode = {
-        id: result.receiptId,
-        at: now,
-        topic: research.search?.label ?? result.query,
-        query: result.query,
-        context: 'A web search selected by Hubert.',
-        status: 'sources-found',
-        sources: [],
-      };
-      research.episodes = [...research.episodes, episode].slice(-8);
-    }
-    episode.query = result.query;
-    episode.status = 'sources-found';
-    episode.sources = result.sources.map((source) => ({ ...source, status: 'returned' }));
-    episode.outcome = `${result.sources.length} search results returned. No pages read yet.`;
-    episode.nextStep = result.sources.length
-      ? 'Hubert can choose a source to read on a later decision.'
-      : 'No sources were returned.';
-    return;
-  }
-  const episode = research.episodes
-    .slice()
-    .reverse()
-    .find((item) => item.sources.some((source) => source.id === result.sourceId));
-  if (!episode) return;
-  const source = episode.sources.find((item) => item.id === result.sourceId)!;
-  delete episode.readingSourceId;
-  Object.assign(source, {
-    url: result.url,
-    title: result.title,
-    status: 'read',
-    excerpt: result.excerpt,
-    retrievedAt: result.fetchedAt,
-  });
-  episode.status = 'read';
-  episode.outcome = `${episode.sources.filter((item) => item.status === 'read').length} of ${episode.sources.length} sources read. Excerpts are source claims, not verified findings.`;
-  episode.nextStep = 'No follow-up action has been recorded for this research.';
-}
-
-export function deferResearchEpisode(state: HubertState, sourceId?: string) {
-  const episode = state.research?.episodes?.at(-1);
-  if (!episode) return;
-  episode.status = 'deferred';
-  delete episode.readingSourceId;
-  episode.outcome = 'The research request was unavailable; no new result was recorded.';
-  episode.nextStep = 'Research has been left for later.';
-  const source = episode.sources.find((item) => item.id === sourceId);
-  if (source && source.status !== 'read') source.status = 'deferred';
-}
-
-function safePublicUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password;
-  } catch {
-    return false;
-  }
-}
-
-/** Explicit allowlist projection: private prompts, visitor messages and intent never leave state. */
-export function publicResearch(state: HubertState): PublicResearchEpisode[] {
-  return (state.research?.episodes ?? []).slice(-8).map((episode) => ({
-    id: episode.id,
-    at: episode.at,
-    topic: episode.topic.slice(0, 180),
-    query: episode.query.slice(0, 240),
-    context: episode.context.slice(0, 360),
-    status: episode.status,
-    sources: episode.sources
-      .filter((source) => safePublicUrl(source.url))
-      .slice(0, 5)
-      .map((source) => ({
-        id: source.id,
-        url: source.url,
-        title: source.title.slice(0, 180),
-        snippet: source.snippet.slice(0, 600),
-        status: source.status,
-        ...(source.excerpt ? { excerpt: source.excerpt.slice(0, 4000) } : {}),
-        ...(source.retrievedAt !== undefined ? { retrievedAt: source.retrievedAt } : {}),
-      })),
-    ...(episode.outcome ? { outcome: episode.outcome.slice(0, 360) } : {}),
-    ...(episode.nextStep ? { nextStep: episode.nextStep.slice(0, 360) } : {}),
-    ...(episode.status === 'reading' && episode.readingSourceId
-      ? { readingSourceId: episode.readingSourceId }
-      : {}),
-  }));
+export function researchContext(state: HubertState, nowReal: number, enabled: boolean) {
+  if (!enabled) return { available: false, sources: [] };
+  return {
+    available: true,
+    sources: readableSources(state, nowReal).map(({ sourceId, title, snippet, url }) => ({
+      id: sourceId,
+      title,
+      snippet,
+      url,
+    })),
+  };
 }

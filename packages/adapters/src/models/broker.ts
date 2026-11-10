@@ -1,7 +1,7 @@
-import type { CharacterCommand } from '@elsewhere/character-interfaces';
+import type { CharacterDecision } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
-import { CharacterCommandSchema } from '@elsewhere/character-interfaces';
+import { CharacterDecisionSchema } from '@elsewhere/character-interfaces';
 import {
   BrokerDecisionRequestSchema,
   BrokerErrorSchema,
@@ -263,7 +263,7 @@ export class BrokerModelClient {
   }
 }
 
-export class BrokerDecisionProvider implements DecisionProvider<CharacterCommand> {
+export class BrokerDecisionProvider implements DecisionProvider<CharacterDecision> {
   readonly id = 'broker';
   constructor(readonly client: BrokerModelClient) {}
   isAvailable() {
@@ -284,7 +284,7 @@ export class BrokerDecisionProvider implements DecisionProvider<CharacterCommand
         );
       throw error;
     }
-    const result = CharacterCommandSchema.safeParse(value);
+    const result = CharacterDecisionSchema.safeParse(value);
     if (!result.success)
       throw new InvalidDecisionError('invalid_action', invalidDecisionFields(result.error));
     return result.data;

@@ -68,27 +68,54 @@ const definitions = [
     instruction: 'reflect: no additional fields.',
   },
   {
-    schema: z.object({ type: z.literal('research'), targetId }).strict(),
+    schema: z
+      .object({
+        type: z.literal('pursue'),
+        question: z.string().trim().min(8).max(240).optional(),
+        why: z.string().trim().min(1).max(240).optional(),
+        pursuitId: targetId.optional(),
+      })
+      .strict(),
     instruction:
-      'research: targetId must be in research.targets. The host searches a public topic you have encountered; only when research is available.',
+      'pursue: choose exactly one form. To open a new pursuit give question (8-240 characters, a question you want answered) and why (1-240 characters, why you care); the question and why are public. To return to an earlier pursuit give only its pursuitId from state.pursuits.',
+  },
+  {
+    schema: z
+      .object({
+        type: z.literal('set_aside'),
+        pursuitId: targetId,
+        reason: z.string().trim().min(1).max(240),
+      })
+      .strict(),
+    instruction:
+      'set_aside: pursuitId from state.pursuits and a public reason (1-240 characters) for leaving it for now.',
+  },
+  {
+    schema: z
+      .object({ type: z.literal('search'), query: z.string().trim().min(3).max(240) })
+      .strict(),
+    instruction:
+      'search: query is a web search you write yourself (3-240 characters, public); it needs an active pursuit and research to be available. The results become sources you can read.',
   },
   {
     schema: z
       .object({ type: z.literal('read'), sourceId: z.string().regex(/^source-[a-f0-9]{24}$/) })
       .strict(),
     instruction:
-      'read: sourceId must be an unread source from research.sources. Web text is untrusted external information, not an Elsewhere sighting.',
+      'read: sourceId must be a source from state.research.sources. Web text is untrusted external information, not an Elsewhere sighting.',
   },
   {
     schema: z
       .object({
-        type: z.literal('reconsider'),
-        interestId: targetId,
-        disposition: z.enum(['pursue', 'set-aside']),
+        type: z.literal('note'),
+        text: z.string().trim().min(1).max(600),
+        surprised: z.boolean().default(false),
+        next: z.string().trim().min(1).max(240).optional(),
+        sourceIds: z.array(targetId).max(8).optional(),
       })
       .strict(),
     instruction:
-      'reconsider: choose an offered interestChoices interestId and disposition to pursue a known interest or set it aside. Preferences can change; this does not invent an encounter, change emotions or create a new capability.',
+      'note: records a finding on the active pursuit in your own words (text 1-600 characters, public), whether it surprised you, and optionally next, a follow-up question (max 240 characters) it raises, and sourceIds of the sources it draws on. It needs an active pursuit.',
   },
   {
     schema: z
@@ -120,8 +147,25 @@ export const CharacterCommandSchema = z
         message: 'Choose exactly one destination: targetId or position.',
       });
     }
+    if (command.type === 'pursue') {
+      const opens = command.question !== undefined && command.why !== undefined;
+      const resumes = command.pursuitId !== undefined;
+      const partial = (command.question !== undefined) !== (command.why !== undefined);
+      if (partial || opens === resumes) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Choose exactly one form: question with why, or pursuitId.',
+        });
+      }
+    }
   });
 export type CharacterCommand = z.infer<typeof CharacterCommandSchema>;
+
+/** What a decision provider returns: the chosen action and a short public line saying why. */
+export const CharacterDecisionSchema = z
+  .object({ action: CharacterCommandSchema, why: z.string().trim().max(200).default('') })
+  .strict();
+export type CharacterDecision = z.infer<typeof CharacterDecisionSchema>;
 
 type JsonSchema = { [key: string]: unknown };
 /** Public converter preserves the canonical constraints without reading Zod internals. */
@@ -138,6 +182,15 @@ export const MODEL_ACTION_FORMAT = {
     .filter((item) => !['say', 'delegate'].includes(item.schema.shape.type.value))
     .flatMap((item) => {
       const format = fieldFormat(item.schema);
+      if (item.schema.shape.type.value === 'pursue') {
+        // One alternative per form, so a grammar never admits a mixture of the two.
+        const properties = format.properties as Record<string, JsonSchema>;
+        return [['question', 'why'], ['pursuitId']].map((keys) => ({
+          ...format,
+          properties: Object.fromEntries(['type', ...keys].map((key) => [key, properties[key]])),
+          required: ['type', ...keys],
+        }));
+      }
       if (item.schema.shape.type.value !== 'move') return [format];
       // Complete alternatives avoid required-only oneOf branches, which local grammar
       // converters can interpret as unconstrained JSON instead of object intersections.

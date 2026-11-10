@@ -59,6 +59,7 @@ function recorders() {
         state,
         action,
         explanation,
+        why: '',
       }),
     ),
     recordWatchIntent: vi.fn(),
@@ -216,13 +217,13 @@ describe('current opportunities and grounded follow-through', () => {
     expect(handlers.chooseVisibleEntity).not.toHaveBeenCalled();
   });
 
-  it('does not label a research capability available merely because its topic is a known object', () => {
+  it('does not label a web search a world opportunity merely because its query names a known object', () => {
     const { state, observation } = setup();
     for (let index = 0; index < 4; index++) {
       state.turn++;
       trackHubertIntent(
         state,
-        { type: 'research', targetId: 'workbench' },
+        { type: 'search', query: 'workbench' },
         epoch + index * 1000,
         observation,
       );

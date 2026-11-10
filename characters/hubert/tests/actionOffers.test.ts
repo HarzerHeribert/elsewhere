@@ -183,7 +183,7 @@ describe('grounded Hubert action offers', () => {
       assessHubertSpatialAction(
         f.state,
         observation,
-        { type: 'research', targetId: sundial.id },
+        { type: 'search', query: 'sundial history' },
         f.now,
       ).status,
     ).toBe('not-spatial');

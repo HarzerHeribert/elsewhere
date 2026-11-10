@@ -1,52 +1,41 @@
 import { useCallback, useMemo } from 'react';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import {
-  currentThought,
   dayStories,
   filterStory,
-  researchInProgress,
   type DayStory,
   type StoryFilter,
   type StoryItem,
 } from '../activityStory';
+import { trailLabel } from '../trailLabels';
 import { calendarDay, formatDay, formatTime } from '../formatTime';
 import { useWallTime } from '../worldClock';
 import { useRemembered } from '../useRemembered';
 import { Icon } from '../Icon';
-import { NotebookDraft } from './NotebookPanel';
-import { ResearchSteps, ResearchStory, researchStatus } from './ResearchDetails';
 
 const filters: Array<{ id: StoryFilter; label: string; kind?: StoryItem['kind'] }> = [
   { id: 'highlights', label: 'Highlights' },
-  { id: 'thoughts', label: 'Thoughts', kind: 'thought' },
-  { id: 'research', label: 'Research', kind: 'research' },
+  { id: 'trail', label: 'My trail', kind: 'step' },
   { id: 'made', label: 'Made', kind: 'made' },
-  { id: 'notes', label: 'Notes', kind: 'note' },
   { id: 'all', label: 'All' },
 ];
 
 export function ActivityPanel({
   events,
   memories,
-  notebook,
-  research = [],
-  thoughts,
+  trail = [],
   notices,
   activity,
   now,
   places = [],
   initialFilter = 'highlights',
-  researchId,
-  onResearch = () => undefined,
   onMemories,
   onPlace,
   onResident,
 }: {
   events: PublicSnapshot['events'];
   memories: PublicSnapshot['memories'];
-  notebook?: PublicSnapshot['notebook'];
-  research?: PublicSnapshot['research'];
-  thoughts?: PublicSnapshot['thoughts'];
+  trail?: PublicSnapshot['trail'];
   notices: ReadonlyArray<{ id: string; title: string; text: string }>;
   /** What the resident is doing at this moment, in the world's words. */
   activity?: string;
@@ -54,8 +43,6 @@ export function ActivityPanel({
   now: number;
   places?: ReadonlyArray<{ id: string; name: string }>;
   initialFilter?: StoryFilter;
-  researchId?: string | null;
-  onResearch?: (id: string | null) => void;
   onMemories?: () => void;
   /** When given, a place named in the day opens that place. */
   onPlace?: (placeId: string) => void;
@@ -71,12 +58,10 @@ export function ActivityPanel({
       dayStories({
         events,
         memories,
-        notes: notebook?.entries ?? [],
-        research,
-        thoughts: thoughts?.entries,
+        trail,
         dayOf,
       }),
-    [events, memories, notebook?.entries, research, thoughts?.entries, dayOf],
+    [events, memories, trail, dayOf],
   );
   const today = dayOf(now);
   const days = [...new Set([today, ...stories.map((story) => story.day)])].sort((a, b) => a - b);
@@ -94,14 +79,7 @@ export function ActivityPanel({
       ? story.items.filter((item) => item.kind === 'memory').length -
         items.filter((item) => item.kind === 'memory').length
       : 0;
-  const opened = research.find((episode) => episode.id === researchId);
-  if (opened) return <ResearchStory episode={opened} />;
-  const latest = research.at(-1);
-  const live = researchInProgress(latest) ? latest : undefined;
-  const thinking = currentThought(thoughts?.entries, now);
-  const filterList = filters.filter(
-    (item) => item.id !== 'thoughts' || thoughts?.enabled || thoughts?.entries.length,
-  );
+  const latest = trail.at(-1);
   const placeName = (id?: string) =>
     id ? (places.find((place) => place.id === id)?.name ?? id.replace(/-/g, ' ')) : undefined;
   const where = (id?: string) => {
@@ -146,7 +124,7 @@ export function ActivityPanel({
         </button>
       </div>
       <div className="story-filters" role="group" aria-label="Show from this day">
-        {filterList.map((item) => {
+        {filters.map((item) => {
           const count = item.kind
             ? story.items.filter((entry) => entry.kind === item.kind).length
             : 0;
@@ -164,42 +142,17 @@ export function ActivityPanel({
       </div>
       {day === today && (filter === 'highlights' || filter === 'all') && (
         <section className="now-card" aria-label="Right now">
-          {live ? (
-            <>
-              <p className="now-label">
-                <i />
-                Right now · I’m researching
-              </p>
-              <h3>{live.topic}</h3>
-              <ResearchSteps episode={live} />
-              <button className="follow-link" onClick={() => onResearch(live.id)}>
-                Follow along <Icon name="arrow" />
-              </button>
-            </>
-          ) : notebook?.draft ? (
-            <>
-              <p className="now-label">
-                <i />
-                Right now · I’m writing
-              </p>
-              <NotebookDraft draft={notebook.draft} className="on-dark" />
-            </>
-          ) : (
-            <>
-              <p className="now-label">
-                <i />
-                Right now
-              </p>
-              <h3>{activity ?? 'Spending time in Elsewhere'}</h3>
-            </>
-          )}
-          {thinking && (
+          <p className="now-label">
+            <i />
+            Right now
+          </p>
+          <h3>{activity ?? 'Spending time in Elsewhere'}</h3>
+          {latest?.why && (
             <p className="now-thought">
-              <Icon name="thought" />
-              <span>{thinking.text}</span>
+              <span>{latest.why}</span>
             </p>
           )}
-          {onResident && !live && (
+          {onResident && (
             <button className="follow-link" onClick={onResident}>
               Open my page <Icon name="arrow" />
             </button>
@@ -225,39 +178,27 @@ export function ActivityPanel({
           <li key={item.id} className={'story-item ' + item.kind}>
             <time>{formatTime(toWall(item.at))}</time>
             <div>
-              {item.kind === 'research' ? (
+              {item.kind === 'step' ? (
                 <>
                   <p className="story-label">
-                    <Icon name="search" />
-                    {researchInProgress(item.episode)
-                      ? 'I’m looking something up'
-                      : 'I looked something up'}
+                    <Icon name={item.entry.kind === 'note' ? 'pencil' : 'search'} />
+                    <span>
+                      {trailLabel(item.entry)}
+                      {where(item.entry.placeId)}
+                    </span>
                   </p>
-                  <button className="story-card" onClick={() => onResearch(item.episode.id)}>
-                    <strong>{item.episode.topic}</strong>
-                    <small>
-                      {researchStatus(item.episode)} ·{' '}
-                      {item.episode.sources.length === 1
-                        ? '1 source'
-                        : item.episode.sources.length + ' sources'}
-                    </small>
-                    <Icon name="chevron-right" />
-                  </button>
-                </>
-              ) : item.kind === 'note' ? (
-                <>
-                  <p className="story-label">
-                    <Icon name="pencil" />I wrote in my notebook
-                  </p>
-                  <blockquote>{item.entry.text}</blockquote>
-                </>
-              ) : item.kind === 'thought' ? (
-                <>
-                  <p className="story-label">
-                    <Icon name="thought" />
-                    <span>I thought{where(item.thought.placeId)}</span>
-                  </p>
-                  <p className="story-thought">{item.thought.text}</p>
+                  {item.entry.why && <p className="story-thought">{item.entry.why}</p>}
+                  {item.entry.text &&
+                    (item.entry.kind === 'note' ? (
+                      <blockquote>{item.entry.text}</blockquote>
+                    ) : (
+                      <p>{item.entry.text}</p>
+                    ))}
+                  {item.entry.kind === 'read' && item.entry.url?.startsWith('https://') && (
+                    <a href={item.entry.url} target="_blank" rel="noopener noreferrer">
+                      Open the page ↗
+                    </a>
+                  )}
                 </>
               ) : item.kind === 'memory' ? (
                 <>

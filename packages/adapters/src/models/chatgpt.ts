@@ -1,4 +1,4 @@
-import type { CharacterCommand } from '@elsewhere/character-interfaces';
+import type { CharacterDecision } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import { ChatGPTError } from '../../../security/src/chatgpt-store';
 import { boundedChatGPTJson, chatGPTFailure, ChatGPTSession } from '../../../security/src/chatgpt';
@@ -246,7 +246,7 @@ export class ChatGPTClient {
   }
 }
 
-export class ChatGPTDecisionProvider implements DecisionProvider<CharacterCommand> {
+export class ChatGPTDecisionProvider implements DecisionProvider<CharacterDecision> {
   readonly id = 'chatgpt';
   constructor(readonly client: ChatGPTClient) {}
   isAvailable() {

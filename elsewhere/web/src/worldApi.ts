@@ -109,8 +109,7 @@ export async function getAccount(signal: AbortSignal): Promise<AccountResponse> 
             Number.isFinite(issue.since) &&
             Number.isFinite(issue.lastAt) &&
             (issue.resolvedAt === undefined || Number.isFinite(issue.resolvedAt)) &&
-            (issue.workload === undefined ||
-              ['decision', 'notebook', 'reflection'].includes(issue.workload)),
+            (issue.workload === undefined || ['decision', 'reflection'].includes(issue.workload)),
         )
         .slice(-16)
     : [];

@@ -1,8 +1,8 @@
-import type { CharacterCommand } from '@elsewhere/character-interfaces';
+import type { CharacterDecision } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import {
   decisionMessages,
-  parseModelAction,
+  parseModelDecision,
   readModelPayload,
   reportedUsage,
   usageCount,
@@ -27,7 +27,7 @@ export interface CompatibleModelOptions {
 
 /** Optional server-side adapter for a chat-completions-compatible endpoint.
  * No credential discovery, arbitrary tools, retries or permission grants. */
-export class CompatibleDecisionProvider implements DecisionProvider<CharacterCommand> {
+export class CompatibleDecisionProvider implements DecisionProvider<CharacterDecision> {
   readonly id = 'compatible';
   private readonly endpoint: URL;
   constructor(private readonly options: CompatibleModelOptions) {
@@ -41,7 +41,7 @@ export class CompatibleDecisionProvider implements DecisionProvider<CharacterCom
       throw new Error('Compatible mode requires MODEL_NAME and MODEL_API_KEY.');
     this.endpoint = new URL('chat/completions', base);
   }
-  async propose(context: DecisionContext): Promise<CharacterCommand> {
+  async propose(context: DecisionContext): Promise<CharacterDecision> {
     const response = await (this.options.fetcher ?? fetch)(this.endpoint, {
       method: 'POST',
       headers: {
@@ -66,7 +66,7 @@ export class CompatibleDecisionProvider implements DecisionProvider<CharacterCom
       body: JSON.stringify({
         model: this.options.model,
         temperature: 0.5,
-        max_tokens: this.options.maxOutputTokens ?? 300,
+        max_tokens: this.options.maxOutputTokens ?? 600,
         ...(this.options.promptCacheKey ? { prompt_cache_key: this.options.promptCacheKey } : {}),
         messages: this.options.messages ?? decisionMessages(context),
       }),
@@ -90,6 +90,6 @@ export class CompatibleDecisionProvider implements DecisionProvider<CharacterCom
         payload.usage?.prompt_tokens_details?.cached_tokens ?? 0,
       ),
     );
-    return parseModelAction(payload.choices?.[0]?.message?.content);
+    return parseModelDecision(payload.choices?.[0]?.message?.content);
   }
 }

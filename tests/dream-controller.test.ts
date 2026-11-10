@@ -58,7 +58,7 @@ async function fixture(options: ControllerOptions = {}, failure?: 'reservation' 
       id: 'rest-fixture',
       localOnly: true,
       managesAllowance: true,
-      propose: async () => ({ type: 'rest' }),
+      propose: async () => ({ action: { type: 'rest' }, why: '' }),
     },
     ...options,
   }).init();
@@ -191,7 +191,7 @@ describe('dreaming in the authoritative life loop', () => {
         modelProvider: {
           id: 'rest-fixture',
           managesAllowance: true,
-          propose: async () => ({ type: 'rest' }),
+          propose: async () => ({ action: { type: 'rest' }, why: '' }),
         },
       },
     ).init();
@@ -206,7 +206,7 @@ describe('dreaming in the authoritative life loop', () => {
 
   it('keeps repeated-reflection guidance advisory and lets the model choose each action', async () => {
     const store = new SqliteSnapshotStore<ControllerState>(':memory:');
-    const propose = vi.fn(async () => ({ type: 'reflect' }));
+    const propose = vi.fn(async () => ({ action: { type: 'reflect' }, why: '' }));
     const controller = await new ElsewhereController(store, {
       now: () => epoch,
       modelProvider: { id: 'fixture', propose },

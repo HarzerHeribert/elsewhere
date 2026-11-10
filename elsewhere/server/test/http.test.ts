@@ -24,10 +24,11 @@ function fixture(): PublicSnapshot {
       socialAppetite: 30,
       activity: 'idle',
       status: 'Looking around',
-      interests: [],
     },
     events: [],
     memories: [],
+    pursuits: [],
+    trail: [],
     runtime: {
       mode: 'local',
       paused: false,
@@ -348,67 +349,74 @@ describe('local public/owner API separation', () => {
     expect(artifact.observationHeight).toBe(1.45);
   });
 
-  it('projects bounded research evidence while stripping private extras and unsafe source URLs', async () => {
+  it('projects pursuits and the trail field by field, bounded, without private extras or unsafe links', async () => {
     const { url, snapshot } = await start();
-    snapshot.research = Array.from({ length: 10 }, (_, i) => ({
-      id: `research-${i}`,
-      at: 1000,
-      topic: 'Copper fin',
-      query: 'weather vane fin clearance',
-      context: 'Hubert chose to investigate the mechanism.',
-      status: 'read' as const,
-      sources: [
-        ...[
-          'http://example.test/article',
-          'https://user:pass@example.test/article',
-          'javascript:alert(1)',
-          'not a URL',
-        ].map((url, j) => ({
-          id: `unsafe-${j}`,
-          url,
-          title: 'unsafe',
-          snippet: '',
-          status: 'returned' as const,
-        })),
-        ...Array.from({ length: 6 }, (_, j) => ({
-          id: `source-${j}`,
-          url: `https://example.test/article-${j}`,
-          title: 'Source title',
-          snippet: 'Source description',
-          status: 'read' as const,
-          excerpt: 'x'.repeat(4500),
-          retrievedAt: 1000,
-        })),
+    snapshot.pursuits = Array.from({ length: 14 }, (_, i) => ({
+      id: `pursuit-${i}`,
+      question: 'q'.repeat(300),
+      why: 'w'.repeat(300),
+      status: 'open' as const,
+      openedAt: 1000,
+      lastAt: 2000 + i,
+      questions: Array.from({ length: 10 }, (_, j) => `Follow ${j}?`),
+      entries: [
+        { kind: 'search' as const, id: 's', at: 1, query: 'heron fishing', sourceCount: 3 },
+        {
+          kind: 'read' as const,
+          id: 'r',
+          at: 2,
+          sourceId: 'source-1',
+          url: 'https://example.test/a',
+          title: 'T',
+        },
+        {
+          kind: 'read' as const,
+          id: 'r2',
+          at: 3,
+          sourceId: 'source-2',
+          url: 'javascript:alert(1)',
+          title: 'U',
+        },
+        {
+          kind: 'note' as const,
+          id: 'n',
+          at: 4,
+          text: 'n'.repeat(900),
+          surprised: true,
+          sourceIds: ['source-1'],
+        },
       ],
-      outcome: 'One source read.',
-      nextStep: 'No follow-up recorded.',
     }));
-    Object.assign(snapshot.research[9], {
-      privateIntent: 'PRIVATE-RESEARCH-INTENT',
-      rawPrompt: 'PRIVATE-RESEARCH-PROMPT',
-    });
-    Object.assign(snapshot.research[9].sources[4], {
-      privateCredential: 'PRIVATE-RESEARCH-CREDENTIAL',
-    });
-    const response = await fetch(`${url}/api/world`);
-    const text = await response.text();
-    expect(text).not.toContain('PRIVATE-RESEARCH-');
-    const research = (JSON.parse(text) as PublicSnapshot).research!;
-    expect(research).toHaveLength(8);
-    expect(research[0].id).toBe('research-2');
-    expect(research[7]).toMatchObject({
-      topic: 'Copper fin',
-      query: 'weather vane fin clearance',
-      context: 'Hubert chose to investigate the mechanism.',
-      status: 'read',
-      outcome: 'One source read.',
-      nextStep: 'No follow-up recorded.',
-    });
-    expect(research[7].sources).toHaveLength(5);
-    expect(
-      research[7].sources.every((source) => source.url.startsWith('https://example.test/')),
-    ).toBe(true);
-    expect(research[7].sources[0].excerpt).toHaveLength(4000);
+    Object.assign(snapshot.pursuits[13], { privateIntent: 'PRIVATE-PURSUIT-INTENT' });
+    Object.assign(snapshot.pursuits[13].entries[0], { rawPrompt: 'PRIVATE-PURSUIT-PROMPT' });
+    snapshot.trail = Array.from({ length: 130 }, (_, i) => ({
+      id: `trail-${i}`,
+      at: i,
+      kind: 'read' as const,
+      why: 'y'.repeat(300),
+      pursuitId: 'pursuit-1',
+      text: 'A page',
+      url: i === 129 ? 'http://example.test/plain' : 'https://example.test/page',
+      placeId: 'courtyard',
+    }));
+    Object.assign(snapshot.trail[5], { secret: 'PRIVATE-TRAIL-SECRET' });
+    const text = await (await fetch(`${url}/api/world`)).text();
+    expect(text).not.toContain('PRIVATE-');
+    const projected = JSON.parse(text) as PublicSnapshot;
+    expect(projected.pursuits).toHaveLength(12);
+    const first = projected.pursuits[0];
+    expect(first.question).toHaveLength(240);
+    expect(first.why).toHaveLength(240);
+    expect(first.questions).toHaveLength(8);
+    expect(first.entries.map((entry) => entry.kind)).toEqual(['search', 'read', 'read', 'note']);
+    const reads = first.entries.filter((entry) => entry.kind === 'read');
+    expect(reads.map((entry) => entry.url)).toEqual(['https://example.test/a', '']);
+    expect(first.entries[3]).toMatchObject({ text: 'n'.repeat(600), surprised: true });
+    expect(projected.trail).toHaveLength(120);
+    expect(projected.trail[0].id).toBe('trail-10');
+    expect(projected.trail[0].why).toHaveLength(200);
+    expect(projected.trail.at(-1)).not.toHaveProperty('url');
+    expect(projected.trail[0].url).toBe('https://example.test/page');
   });
 
   it('requires a bearer token before advancing state', async () => {
@@ -1019,71 +1027,16 @@ it('exposes configured social provider IDs publicly and linked IDs only to their
   expect(signed.managedCharacterIds).toEqual([]);
 });
 
-it('switches shared thoughts only for the character owner, and projects them field by field', async () => {
-  const setThoughts = vi.fn(async (_enabled: boolean) => fixture());
-  const { url } = await start({ setThoughts });
-  const post = (path: string, body: unknown = {}, bearer = true) =>
-    fetch(url + path, {
-      method: 'POST',
-      headers: {
-        origin: 'http://127.0.0.1:5173',
-        'content-type': 'application/json',
-        ...(bearer ? { authorization: 'Bearer ' + token } : {}),
-      },
-      body: JSON.stringify(body),
-    });
-  expect((await post('/api/admin/thoughts-off', {}, false)).status).toBe(401);
-  expect((await post('/api/admin/thoughts-off', { enabled: true })).status).toBe(400);
-  expect(setThoughts).not.toHaveBeenCalled();
-  expect((await post('/api/admin/thoughts-off')).status).toBe(200);
-  expect((await post('/api/admin/thoughts-on')).status).toBe(200);
-  expect(setThoughts.mock.calls).toEqual([[false], [true]]);
-  expect((await post('/api/admin/thoughts-maybe')).status).toBe(404);
-
-  const projected = publicSnapshot({
-    ...fixture(),
-    thoughts: {
-      available: true,
-      enabled: true,
-      entries: [
-        {
-          id: 't',
-          at: 1,
-          text: 'x'.repeat(400),
-          placeId: 'pond',
-          secret: 'PRIVATE-CANARY',
-        } as never,
-      ],
+it('has no owner switch for shared thoughts any more', async () => {
+  const { url } = await start();
+  const response = await fetch(url + '/api/admin/thoughts-off', {
+    method: 'POST',
+    headers: {
+      origin: 'http://127.0.0.1:5173',
+      'content-type': 'application/json',
+      authorization: 'Bearer ' + token,
     },
-    notebook: {
-      enabled: true,
-      entries: [
-        {
-          id: 'n',
-          at: 1,
-          text: 'A note.',
-          sourceIds: [],
-          topics: [
-            { kind: 'place', id: 'pond', label: 'The pond' },
-            { kind: 'reading', id: 'javascript:alert(1)', label: 'Unsafe' },
-            {
-              kind: 'reading',
-              id: 'https://example.org/a',
-              label: 'Safe',
-              secret: 'PRIVATE-CANARY',
-            } as never,
-          ],
-        },
-      ],
-    },
+    body: '{}',
   });
-  expect(projected.thoughts).toEqual({
-    available: true,
-    enabled: true,
-    entries: [{ id: 't', at: 1, text: 'x'.repeat(200), placeId: 'pond' }],
-  });
-  expect(projected.notebook!.entries[0]!.topics).toEqual([
-    { kind: 'place', id: 'pond', label: 'The pond' },
-    { kind: 'reading', id: 'https://example.org/a', label: 'Safe' },
-  ]);
+  expect(response.status).toBe(404);
 });

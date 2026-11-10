@@ -13,7 +13,7 @@ const resting: DecisionProvider = {
   id: 'offline-test-fixture',
   localOnly: true,
   managesAllowance: true,
-  propose: async () => ({ type: 'rest' }),
+  propose: async () => ({ action: { type: 'rest' }, why: '' }),
 };
 const active = new Set<ElsewhereController>();
 const directories: string[] = [];
