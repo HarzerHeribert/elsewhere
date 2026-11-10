@@ -285,6 +285,8 @@ export interface PublicTrailEntry {
   text?: string;
   url?: string;
   placeId?: string;
+  /** How often the same step was repeated in a row; absent for a single step. */
+  times?: number;
 }
 export type PublicPursuitEntry = { id: string; at: number } & (
   | { kind: 'search'; query: string; sourceCount: number }

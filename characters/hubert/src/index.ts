@@ -1099,10 +1099,25 @@ export function applyNote(
   return state;
 }
 
-/** Appends one step to the trail, keeping the newest entries. */
+const sameStep = (a: TrailEntry, b: TrailEntry) =>
+  a.kind === b.kind &&
+  a.why === b.why &&
+  a.pursuitId === b.pursuitId &&
+  a.text === b.text &&
+  a.url === b.url &&
+  a.placeId === b.placeId;
+
+/**
+ * Appends one step to the trail, keeping the newest entries. A step that repeats the one before
+ * it word for word is counted on that entry instead of being listed again.
+ */
 export function appendTrail(input: HubertState, entry: TrailEntry): HubertState {
   const state = clone(input);
-  state.trail = [...state.trail, entry].slice(-TRAIL_KEPT);
+  const last = state.trail.at(-1);
+  state.trail =
+    last && sameStep(last, entry)
+      ? [...state.trail.slice(0, -1), { ...last, at: entry.at, times: (last.times ?? 1) + 1 }]
+      : [...state.trail, entry].slice(-TRAIL_KEPT);
   return state;
 }
 

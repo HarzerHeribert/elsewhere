@@ -166,6 +166,7 @@ const publicTrailEntry = (entry: PublicTrailEntry): PublicTrailEntry => ({
   ...(entry.text ? { text: entry.text.slice(0, 600) } : {}),
   ...(httpsUrl(entry.url) ? { url: entry.url } : {}),
   ...(entry.placeId ? { placeId: entry.placeId } : {}),
+  ...(Number.isSafeInteger(entry.times) && entry.times! > 1 ? { times: entry.times } : {}),
 });
 
 /** Explicitly project public fields: never serialize a controller or private character state. */

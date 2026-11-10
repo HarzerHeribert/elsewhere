@@ -185,6 +185,7 @@ export function ActivityPanel({
                     <span>
                       {trailLabel(item.entry)}
                       {where(item.entry.placeId)}
+                      {item.entry.times ? ` · ${item.entry.times} times` : ''}
                     </span>
                   </p>
                   {item.entry.why && <p className="story-thought">{item.entry.why}</p>}
