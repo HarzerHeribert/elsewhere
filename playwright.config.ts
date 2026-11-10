@@ -49,7 +49,7 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'pnpm dev',
+    command: 'node --import tsx scripts/e2e-server.ts',
     url: webOrigin + '/api/health',
     reuseExistingServer: false,
     timeout: 60_000,

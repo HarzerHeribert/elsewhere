@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
-import { createFixtureAccount } from './auth-fixture';
+import { createFixtureAccount, fixtureAccount, waitForFixtureAuthWindow } from './auth-fixture';
 
 test('a real passkey registers, signs in to the same account only after a cookie is set, and can be revoked with confirmation', async ({
   page,
   context,
-}) => {
+}, info) => {
   test.setTimeout(120000);
+  await waitForFixtureAuthWindow(info);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -31,8 +32,7 @@ test('a real passkey registers, signs in to the same account only after a cookie
       password: 'isolated-passkey-fixture-password-only-2026',
     });
     expect(created.status()).toBe(200);
-    const before = await page.request.get('/api/account');
-    const original = await before.json();
+    const original = await fixtureAccount(page.request);
     expect(original.user?.id).toBeTruthy();
     expect(original.user.isWorldAdmin).toBe(false);
     expect(original.managedCharacterIds).toEqual([]);
@@ -72,8 +72,7 @@ test('a real passkey registers, signs in to the same account only after a cookie
     expect(await (await authentication).json()).toEqual({ ok: true });
     await expect(dialog).toContainText('You are signed in as Passkey Visitor.');
     await expect(dialog.locator('.account-details code')).toHaveText(original.user.id);
-    const after = await page.request.get('/api/account');
-    expect(await after.json()).toMatchObject({
+    expect(await fixtureAccount(page.request)).toMatchObject({
       user: { id: original.user.id, isWorldAdmin: false },
       managedCharacterIds: [],
       passkeyVerifiedRecently: true,
@@ -117,6 +116,7 @@ test('an owner opts into passkey controls explicitly and an ordinary fallback se
   context,
 }, info) => {
   test.setTimeout(120000);
+  await waitForFixtureAuthWindow(info);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -140,7 +140,7 @@ test('an owner opts into passkey controls explicitly and an ordinary fallback se
       password,
     });
     expect(created.status()).toBe(200);
-    const original = await (await page.request.get('/api/account')).json();
+    const original = await fixtureAccount(page.request);
     // Provision a world administrator only inside this disposable fixture's database.
     // No application request can grant this role, and operator/private data is excluded.
     const directory: unknown = info.config.metadata.testDataDirectory;
@@ -169,16 +169,14 @@ test('an owner opts into passkey controls explicitly and an ordinary fallback se
     await expect(
       settings.getByRole('button', { name: 'Require passkey for owner controls', exact: true }),
     ).toBeDisabled();
-    expect(
-      (await (await page.request.get('/api/account')).json()).ownerControlsRequirePasskey,
-    ).toBe(false);
+    expect((await fixtureAccount(page.request)).ownerControlsRequirePasskey).toBe(false);
     await settings.getByRole('button', { name: 'Verify passkey', exact: true }).click();
     await expect(settings).toContainText('Passkey verified.');
     await settings
       .getByRole('button', { name: 'Require passkey for owner controls', exact: true })
       .click();
     await expect(settings).toContainText('Owner controls now require a verified passkey.');
-    expect(await (await page.request.get('/api/account')).json()).toMatchObject({
+    expect(await fixtureAccount(page.request)).toMatchObject({
       user: { id: original.user.id, isWorldAdmin: true },
       ownerControlsRequirePasskey: true,
       ownerControlsUnlocked: true,
@@ -189,7 +187,7 @@ test('an owner opts into passkey controls explicitly and an ordinary fallback se
       data: { email, password },
     });
     expect(fallback.status()).toBe(200);
-    expect(await (await page.request.get('/api/account')).json()).toMatchObject({
+    expect(await fixtureAccount(page.request)).toMatchObject({
       user: { id: original.user.id, isWorldAdmin: true },
       ownerControlsRequirePasskey: true,
       ownerControlsUnlocked: false,
