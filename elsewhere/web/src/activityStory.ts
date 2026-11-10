@@ -21,7 +21,8 @@ export interface StorySource {
   notes: readonly PublicNotebookEntry[];
   research: readonly PublicResearchEpisode[];
   thoughts?: readonly PublicThought[];
-  startedAt: number;
+  /** The calendar day a world time falls on for the reader. */
+  dayOf: (at: number) => number;
 }
 export interface DayStory {
   day: number;
@@ -33,18 +34,14 @@ export interface DayStory {
 }
 
 const madeTypes = new Set(['artifact_created', 'feature_installed']);
-const dayLength = 86_400_000;
-/** The world counts days from its own start, matching the clock in the navigation. */
-export const worldDay = (at: number, startedAt: number) =>
-  Math.max(1, Math.floor((at - startedAt) / dayLength) + 1);
 export const researchInProgress = (episode?: PublicResearchEpisode) =>
   episode?.status === 'searching' || episode?.status === 'reading';
 
-/** One entry per world day that has anything to tell, newest day first. */
+/** One entry per calendar day that has anything to tell, newest day first. */
 export function dayStories(source: StorySource): DayStory[] {
   const days = new Map<number, { items: StoryItem[]; routine: WorldEvent[] }>();
   const bucket = (at: number) => {
-    const day = worldDay(at, source.startedAt);
+    const day = source.dayOf(at);
     let value = days.get(day);
     if (!value) days.set(day, (value = { items: [], routine: [] }));
     return value;

@@ -143,6 +143,7 @@ async function initialize() {
     simulationStepMs: config.TICK_INTERVAL_MS * config.SIMULATION_RATE,
     decisionIntervalMs: config.DECISION_INTERVAL_MS,
     simulationRate: config.SIMULATION_RATE,
+    realTimeClock: true,
     modelProvider: providers.model,
     reflectionProvider: providers.reflection,
     expressionProvider: providers.expression,

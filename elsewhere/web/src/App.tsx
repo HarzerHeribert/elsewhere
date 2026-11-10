@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from 'react';
 import { villageScenery } from './scenery';
 import { Scene, type CameraMode, type SceneControls } from './Scene';
 import { HubertPortrait } from './HubertPortrait';
@@ -14,7 +14,8 @@ import { useOwnerActions } from './useOwnerActions';
 import { requestJson } from './worldApi';
 import type { Position } from './types';
 import { Icon } from './Icon';
-import { formatDay, formatTime } from './formatTime';
+import { calendarDay, formatDay, formatTime } from './formatTime';
+import { wallTime, WallTimeProvider, type WorldClock } from './worldClock';
 import type { WorldControlAction, WorldControlCommand } from './sceneControls';
 import { ResidentsPanel } from './panels/ResidentsPanel';
 import { CharacterPanel, type CharacterTab } from './panels/CharacterPanel';
@@ -397,11 +398,19 @@ export function App() {
       else setPanel(null);
     } else setSheetFull((full) => !full);
   }
-  const day = snapshot
-    ? Math.floor((snapshot.runtime.simulatedAt - snapshot.runtime.startedAt) / 86400000) + 1
-    : null;
-  const dayLabel = day === null ? 'Day —' : formatDay(day);
-  const timeLabel = snapshot ? formatTime(snapshot.runtime.simulatedAt) : '—:—';
+  // The world keeps its own clock, which stands still while it is paused. Everything shown to
+  // a visitor is the real time it happened, in their timezone.
+  const clockKey = JSON.stringify({
+    clock: snapshot?.runtime.clock,
+    simulationRate: snapshot?.runtime.simulationRate,
+  });
+  const toWall = useMemo(() => {
+    const clock = JSON.parse(clockKey) as WorldClock;
+    return (at: number) => wallTime(at, clock);
+  }, [clockKey]);
+  const shownNow = snapshot ? toWall(snapshot.runtime.simulatedAt) : null;
+  const dayLabel = shownNow === null ? '—' : formatDay(calendarDay(shownNow));
+  const timeLabel = shownNow === null ? '—:—' : formatTime(shownNow);
   const lifeLabel =
     connection === 'live'
       ? snapshot?.runtime.paused
@@ -453,530 +462,530 @@ export function App() {
   const wide = panel === 'character' || panel === 'activity';
 
   return (
-    <main
-      className={
-        'game-shell ' +
-        (panel ? 'panel-open ' : '') +
-        (settingsSection ? 'settings-open ' : '') +
-        (collapsed ? 'sidebar-collapsed ' : '') +
-        (phone ? 'phone ' : '') +
-        'mode-' +
-        mode
-      }
-      aria-label="Elsewhere game"
-      ref={main}
-    >
-      {!phone && (
-        <nav className="world-sidebar" aria-label="World navigation">
-          <div className="sidebar-top">
-            <button
-              className="sidebar-brand"
-              aria-label="About Elsewhere"
-              onClick={() => openSettings('about')}
-            >
-              <ElsewhereBrand />
-            </button>
-            {!narrow && (
+    <WallTimeProvider value={toWall}>
+      <main
+        className={
+          'game-shell ' +
+          (panel ? 'panel-open ' : '') +
+          (settingsSection ? 'settings-open ' : '') +
+          (collapsed ? 'sidebar-collapsed ' : '') +
+          (phone ? 'phone ' : '') +
+          'mode-' +
+          mode
+        }
+        aria-label="Elsewhere game"
+        ref={main}
+      >
+        {!phone && (
+          <nav className="world-sidebar" aria-label="World navigation">
+            <div className="sidebar-top">
               <button
-                className="square-button subtle"
-                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                onClick={toggleSidebar}
+                className="sidebar-brand"
+                aria-label="About Elsewhere"
+                onClick={() => openSettings('about')}
               >
-                <Icon name="sidebar" />
+                <ElsewhereBrand />
               </button>
-            )}
-          </div>
-          <div className="world-clock" title={lifeLabel + ' · ' + dayLabel + ' ' + timeLabel}>
-            <StatusBadge
-              className={'connection ' + connection}
-              tone={connection === 'live' ? 'live' : 'waiting'}
-            >
-              {lifeLabel}
-            </StatusBadge>
-            <span className="world-day">
-              {dayLabel}
-              <small>{timeLabel}</small>
-            </span>
-          </div>
-          <div className="sidebar-nav">{nav.map(railButton)}</div>
-          <div className="sidebar-foot">
-            <button
-              className={settingsSection ? 'active' : ''}
-              aria-label="Settings"
-              aria-pressed={!!settingsSection}
-              title="Settings"
-              onClick={() =>
-                settingsSection
-                  ? closeSettings()
-                  : openSettings(account || privateLocalAccess ? 'account' : 'controls')
-              }
-            >
-              <Icon name="gear" />
-              <span className="rail-label">Settings</span>
-            </button>
-            <button
-              className="account-button"
-              aria-label={accountLabel}
-              title={accountLabel}
-              onClick={openAccount}
-            >
-              <span className="account-avatar">
-                <Icon name="user" />
-              </span>
-              <span className="rail-label">
-                <strong>{account ? account.name : accountLabel}</strong>
-                <small>
-                  {account ? 'Signed in' : privateLocalAccess ? 'Local session' : 'Guest'}
-                </small>
-              </span>
-              {attention}
-            </button>
-          </div>
-        </nav>
-      )}
-      {panel && (
-        <aside
-          id="world-panel"
-          className={
-            'world-panel' + (wide ? ' wide' : '') + (phone && sheetFull ? ' sheet-full' : '')
-          }
-          aria-label="World panel"
-          key={panel}
-        >
-          {phone && (
-            <button
-              className="sheet-handle"
-              aria-label={sheetFull ? 'Shrink panel' : 'Expand panel'}
-              aria-expanded={sheetFull}
-              onPointerDown={(e) => {
-                sheetDrag.current = e.clientY;
-                e.currentTarget.setPointerCapture(e.pointerId);
-              }}
-              onPointerUp={endSheetDrag}
-              onPointerCancel={() => {
-                sheetDrag.current = null;
-              }}
-              onClick={(e) => {
-                if (e.detail === 0) setSheetFull((full) => !full);
-              }}
-            >
-              <i />
-            </button>
-          )}
-          <div className="panel-header">
-            {panel === 'character' && <HubertPortrait />}
-            <div>
-              <h2 ref={panelHeading} tabIndex={-1}>
-                {titles[panel]}
-              </h2>
-              {panel === 'character' && character && (
-                <p className="panel-subtitle">
-                  {residentPlace ? residentPlace.name + ' · ' : ''}
-                  {character.activity}
-                </p>
+              {!narrow && (
+                <button
+                  className="square-button subtle"
+                  aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                  title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                  onClick={toggleSidebar}
+                >
+                  <Icon name="sidebar" />
+                </button>
               )}
             </div>
-            <button
-              className="square-button subtle"
-              aria-label="Close panel"
-              onClick={() => setPanel(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>
-          <div className="panel-scroll">
-            {panel === 'residents' && (
-              <ResidentsPanel
-                residents={snapshot?.world.residents ?? []}
-                awaitingLiveState={!snapshot}
-                characterActivity={character?.activity}
-                visitorCount={snapshot ? (snapshot.world.visitors?.length ?? 0) : undefined}
-                onSelect={pickCharacter}
-              />
-            )}
-            {panel === 'character' && character && (
-              <CharacterPanel
-                character={character}
-                tab={characterTab}
-                onTabChange={(tab) => {
-                  setCharacterTab(tab);
-                  setResearchId(null);
-                }}
-                mail={snapshot?.mail}
-                accountMail={accountSession.characterMail.find(
-                  (mail) => mail.characterId === character.id,
-                )}
-                signedIn={!!account}
-                emailVerified={account?.emailVerified ?? false}
-                mailPending={accountSession.pending}
-                onSignIn={() => setAccountOpen(true)}
-                onMailPreferences={(preferences) =>
-                  accountSession.updateMailPreferences(character.id, preferences)
-                }
-                recalledMemory={snapshot?.recalledMemory}
-                artifacts={snapshot?.artifacts}
-                creations={snapshot?.creations}
-                notebook={snapshot?.notebook}
-                events={snapshot?.events}
-                memories={snapshot?.memories}
-                research={snapshot?.research}
-                thoughts={snapshot?.thoughts}
-                now={snapshot?.runtime.simulatedAt}
-                places={snapshot?.world.places}
-                startedAt={snapshot?.runtime.startedAt}
-                researchId={researchId}
-                onResearch={setResearchId}
-                onShowPlace={showPlace}
-                onMessage={() => openPanel('messages')}
-                onViewpoint={() => camera('hubert')}
-                onWishes={() => openPanel('wishes')}
-              />
-            )}
-            {panel === 'map' && (
-              <MapPanel
-                snapshot={snapshot}
-                visitor={visitor.visitor}
-                discovered={discovered}
-                onFocusPlace={focusPlace}
-                onWalk={walkTo}
-                onSelectObject={pickObject}
-              />
-            )}
-            {panel === 'place' && place && (
-              <PlacePanel
-                place={place}
-                objects={scenery.objects}
-                discovered={discovered.includes(place.id)}
-                onWalk={snapshot ? walkTo : undefined}
-                onSelectObject={pickObject}
-                onBack={() => openPanel('map')}
-              />
-            )}
-            {panel === 'object' && (
-              <ObjectPanel entity={entity} object={object} onBack={() => openPanel('map')} />
-            )}
-
-            {panel === 'messages' && (
-              <MessagesPanel
-                message={message}
-                receipts={receipts}
-                sending={sending}
-                connected={connection === 'live'}
-                messageStatus={messageStatus}
-                onMessageChange={setMessage}
-                onSubmit={sendMessage}
-              />
-            )}
-            {!snapshot && (panel === 'activity' || panel === 'wishes') && (
-              <p className="panel-intro">
-                Hubert’s live {panel === 'wishes' ? 'wishes' : 'activity and memories'} will appear
-                when the world connects.
-              </p>
-            )}
-            {panel === 'activity' && snapshot && (
-              <ActivityPanel
-                events={snapshot.events ?? []}
-                memories={snapshot.memories ?? []}
-                notebook={snapshot.notebook}
-                research={snapshot.research}
-                thoughts={snapshot.thoughts}
-                notices={notices}
-                activity={character?.activity}
-                startedAt={snapshot.runtime.startedAt}
-                now={snapshot.runtime.simulatedAt}
-                places={snapshot.world.places}
-                researchId={researchId}
-                onResearch={setResearchId}
-                onMemories={() => {
-                  openPanel('character');
-                  setCharacterTab('memories');
-                }}
-              />
-            )}
-            {panel === 'wishes' && snapshot && (
-              <WishesPanel
-                wishes={snapshot?.wishes ?? []}
-                canDecide={Boolean(owner || canManageCharacter)}
-                busy={busy}
-                status={controlStatus}
-                onDecide={decideWish}
-              />
-            )}
-            {panel === 'more' && (
-              <MorePanel
-                accountName={account?.name ?? (privateLocalAccess ? 'Your account' : undefined)}
-                needsAttention={accountSession.hasCharacterIssue}
-                pendingWishes={pendingWishes}
-                entries={entries}
-                onAccount={openAccount}
-                onActivity={() => openPanel('activity')}
-                onWishes={() => openPanel('wishes')}
-                onSettings={openSettings}
-              />
-            )}
-          </div>
-        </aside>
-      )}
-      <div className="world-stage">
-        <div className="game-scene">
-          <Scene
-            snapshot={snapshot}
-            mode={mode}
-            selected={selected}
-            onSelect={pickObject}
-            resetKey={resetKey}
-            visitor={visitor.visitor}
-            onMove={visitor.move}
-            onLook={visitor.look}
-            onStop={visitor.stop}
-            focus={focus}
-            thought={
-              snapshot?.thoughts?.enabled
-                ? (currentThought(snapshot.thoughts.entries, snapshot.runtime.simulatedAt)?.text ??
-                  null)
-                : null
-            }
-            control={controlCommand}
-            paused={inputPaused}
-            onSelectCharacter={pickCharacter}
-            onPointerLockChange={setLocked}
-            controlsRef={controls}
-          />
-        </div>
-        <div className="world-vignette" aria-hidden="true" />
-        {phone && (
-          <header className="phone-top">
-            <div className="world-clock glass" title={lifeLabel}>
+            <div className="world-clock" title={lifeLabel + ' · ' + dayLabel + ' ' + timeLabel}>
               <StatusBadge
                 className={'connection ' + connection}
                 tone={connection === 'live' ? 'live' : 'waiting'}
               >
-                <span className="sr-only">{lifeLabel}</span>
+                {lifeLabel}
               </StatusBadge>
               <span className="world-day">
                 {dayLabel}
                 <small>{timeLabel}</small>
               </span>
-              <span className="phone-place">{currentPlace?.name ?? 'The meadow paths'}</span>
             </div>
-            <button
-              className="account-button glass"
-              aria-label={accountLabel}
-              onClick={openAccount}
-            >
-              <Icon name="user" />
-              {attention}
-            </button>
-          </header>
-        )}
-        <div className="view-controls glass">
-          <div className="camera-switch" role="group" aria-label="Camera perspective">
-            <button onClick={() => camera('overview')} aria-pressed={mode === 'overview'}>
-              <Icon name="map" />
-              <span>Overview</span>
-            </button>
-            <button
-              onClick={() => camera('visitor')}
-              aria-pressed={mode === 'visitor'}
-              disabled={visitor.busy || !snapshot}
-            >
-              <Icon name="walk" />
-              <span>Walk</span>
-            </button>
-            <button
-              onClick={() => camera('hubert')}
-              aria-pressed={mode === 'hubert'}
-              disabled={!resident}
-            >
-              <Icon name="eye" />
-              <span>Hubert’s eyes</span>
-            </button>
-          </div>
-          <div className="view-tools">
-            <button
-              className="square-button"
-              aria-label="Reset camera"
-              title="Reset camera"
-              onClick={resetCamera}
-            >
-              <Icon name="compass" />
-            </button>
-            <button
-              className="square-button"
-              aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              onClick={() => void toggleFullscreen()}
-              title="Fullscreen"
-            >
-              <Icon name="expand" />
-            </button>
-          </div>
-        </div>
-        {mode === 'visitor' &&
-          visitor.visitor &&
-          !panel &&
-          near &&
-          !settingsSection &&
-          !accountOpen && (
-            <section className="encounter-card glass" aria-label="Nearby resident">
-              <HubertPortrait />
-              <div>
-                <span className="eyebrow">You came across</span>
-                <h3>{character?.name}</h3>
-                <p>{character?.activity}</p>
-              </div>
-              <button onClick={() => openPanel('character')}>
-                <kbd>E</kbd>
-                <span>Meet Hubert</span>
-                <Icon name="arrow" />
-              </button>
-            </section>
-          )}
-        {mode === 'visitor' && (
-          <>
-            <span className="crosshair" aria-hidden="true" />
-            <div className="walk-controls glass" role="group" aria-label="Walking controls">
-              {walkingControls.map((c) => (
-                <button
-                  key={c.action}
-                  aria-label={c.label}
-                  disabled={inputPaused}
-                  onClick={() =>
-                    setControlCommand((old) => ({
-                      action: c.action,
-                      serial: (old?.serial ?? 0) + 1,
-                    }))
-                  }
-                >
-                  {c.symbol}
-                </button>
-              ))}
-              <button className="stop-walking" onClick={visitor.stop}>
-                Stop walking
-              </button>
-            </div>
-          </>
-        )}
-        <div className="world-bottom">
-          <div className="location-chip glass">
-            <Icon name="compass" />
-            <div>
-              <strong>{currentPlace?.name ?? 'The meadow paths'}</strong>
-              <small>
-                {mode === 'overview'
-                  ? 'Overview · drag to orbit'
-                  : mode === 'hubert'
-                    ? 'Following Hubert’s viewpoint'
-                    : 'WASD to walk · drag to look'}
-              </small>
-            </div>
-          </div>
-          <div className="bottom-actions">
-            {mode === 'visitor' && !inputPaused && (
+            <div className="sidebar-nav">{nav.map(railButton)}</div>
+            <div className="sidebar-foot">
               <button
-                className="mouse-capture glass"
-                onClick={() => {
-                  if (locked) controls.current?.releaseMouse();
-                  else void controls.current?.captureMouse();
+                className={settingsSection ? 'active' : ''}
+                aria-label="Settings"
+                aria-pressed={!!settingsSection}
+                title="Settings"
+                onClick={() =>
+                  settingsSection
+                    ? closeSettings()
+                    : openSettings(account || privateLocalAccess ? 'account' : 'controls')
+                }
+              >
+                <Icon name="gear" />
+                <span className="rail-label">Settings</span>
+              </button>
+              <button
+                className="account-button"
+                aria-label={accountLabel}
+                title={accountLabel}
+                onClick={openAccount}
+              >
+                <span className="account-avatar">
+                  <Icon name="user" />
+                </span>
+                <span className="rail-label">
+                  <strong>{account ? account.name : accountLabel}</strong>
+                  <small>
+                    {account ? 'Signed in' : privateLocalAccess ? 'Local session' : 'Guest'}
+                  </small>
+                </span>
+                {attention}
+              </button>
+            </div>
+          </nav>
+        )}
+        {panel && (
+          <aside
+            id="world-panel"
+            className={
+              'world-panel' + (wide ? ' wide' : '') + (phone && sheetFull ? ' sheet-full' : '')
+            }
+            aria-label="World panel"
+            key={panel}
+          >
+            {phone && (
+              <button
+                className="sheet-handle"
+                aria-label={sheetFull ? 'Shrink panel' : 'Expand panel'}
+                aria-expanded={sheetFull}
+                onPointerDown={(e) => {
+                  sheetDrag.current = e.clientY;
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                }}
+                onPointerUp={endSheetDrag}
+                onPointerCancel={() => {
+                  sheetDrag.current = null;
+                }}
+                onClick={(e) => {
+                  if (e.detail === 0) setSheetFull((full) => !full);
                 }}
               >
-                {locked ? 'Release mouse · Esc' : 'Capture mouse'}
-                <span>↗</span>
+                <i />
               </button>
             )}
+            <div className="panel-header">
+              {panel === 'character' && <HubertPortrait />}
+              <div>
+                <h2 ref={panelHeading} tabIndex={-1}>
+                  {titles[panel]}
+                </h2>
+                {panel === 'character' && character && (
+                  <p className="panel-subtitle">
+                    {residentPlace ? residentPlace.name + ' · ' : ''}
+                    {character.activity}
+                  </p>
+                )}
+              </div>
+              <button
+                className="square-button subtle"
+                aria-label="Close panel"
+                onClick={() => setPanel(null)}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+            <div className="panel-scroll">
+              {panel === 'residents' && (
+                <ResidentsPanel
+                  residents={snapshot?.world.residents ?? []}
+                  awaitingLiveState={!snapshot}
+                  characterActivity={character?.activity}
+                  visitorCount={snapshot ? (snapshot.world.visitors?.length ?? 0) : undefined}
+                  onSelect={pickCharacter}
+                />
+              )}
+              {panel === 'character' && character && (
+                <CharacterPanel
+                  character={character}
+                  tab={characterTab}
+                  onTabChange={(tab) => {
+                    setCharacterTab(tab);
+                    setResearchId(null);
+                  }}
+                  mail={snapshot?.mail}
+                  accountMail={accountSession.characterMail.find(
+                    (mail) => mail.characterId === character.id,
+                  )}
+                  signedIn={!!account}
+                  emailVerified={account?.emailVerified ?? false}
+                  mailPending={accountSession.pending}
+                  onSignIn={() => setAccountOpen(true)}
+                  onMailPreferences={(preferences) =>
+                    accountSession.updateMailPreferences(character.id, preferences)
+                  }
+                  recalledMemory={snapshot?.recalledMemory}
+                  artifacts={snapshot?.artifacts}
+                  creations={snapshot?.creations}
+                  notebook={snapshot?.notebook}
+                  events={snapshot?.events}
+                  memories={snapshot?.memories}
+                  research={snapshot?.research}
+                  thoughts={snapshot?.thoughts}
+                  now={snapshot?.runtime.simulatedAt}
+                  places={snapshot?.world.places}
+                  researchId={researchId}
+                  onResearch={setResearchId}
+                  onShowPlace={showPlace}
+                  onMessage={() => openPanel('messages')}
+                  onViewpoint={() => camera('hubert')}
+                  onWishes={() => openPanel('wishes')}
+                />
+              )}
+              {panel === 'map' && (
+                <MapPanel
+                  snapshot={snapshot}
+                  visitor={visitor.visitor}
+                  discovered={discovered}
+                  onFocusPlace={focusPlace}
+                  onWalk={walkTo}
+                  onSelectObject={pickObject}
+                />
+              )}
+              {panel === 'place' && place && (
+                <PlacePanel
+                  place={place}
+                  objects={scenery.objects}
+                  discovered={discovered.includes(place.id)}
+                  onWalk={snapshot ? walkTo : undefined}
+                  onSelectObject={pickObject}
+                  onBack={() => openPanel('map')}
+                />
+              )}
+              {panel === 'object' && (
+                <ObjectPanel entity={entity} object={object} onBack={() => openPanel('map')} />
+              )}
+
+              {panel === 'messages' && (
+                <MessagesPanel
+                  message={message}
+                  receipts={receipts}
+                  sending={sending}
+                  connected={connection === 'live'}
+                  messageStatus={messageStatus}
+                  onMessageChange={setMessage}
+                  onSubmit={sendMessage}
+                />
+              )}
+              {!snapshot && (panel === 'activity' || panel === 'wishes') && (
+                <p className="panel-intro">
+                  Hubert’s live {panel === 'wishes' ? 'wishes' : 'activity and memories'} will
+                  appear when the world connects.
+                </p>
+              )}
+              {panel === 'activity' && snapshot && (
+                <ActivityPanel
+                  events={snapshot.events ?? []}
+                  memories={snapshot.memories ?? []}
+                  notebook={snapshot.notebook}
+                  research={snapshot.research}
+                  thoughts={snapshot.thoughts}
+                  notices={notices}
+                  activity={character?.activity}
+                  now={snapshot.runtime.simulatedAt}
+                  places={snapshot.world.places}
+                  researchId={researchId}
+                  onResearch={setResearchId}
+                  onMemories={() => {
+                    openPanel('character');
+                    setCharacterTab('memories');
+                  }}
+                />
+              )}
+              {panel === 'wishes' && snapshot && (
+                <WishesPanel
+                  wishes={snapshot?.wishes ?? []}
+                  canDecide={Boolean(owner || canManageCharacter)}
+                  busy={busy}
+                  status={controlStatus}
+                  onDecide={decideWish}
+                />
+              )}
+              {panel === 'more' && (
+                <MorePanel
+                  accountName={account?.name ?? (privateLocalAccess ? 'Your account' : undefined)}
+                  needsAttention={accountSession.hasCharacterIssue}
+                  pendingWishes={pendingWishes}
+                  entries={entries}
+                  onAccount={openAccount}
+                  onActivity={() => openPanel('activity')}
+                  onWishes={() => openPanel('wishes')}
+                  onSettings={openSettings}
+                />
+              )}
+            </div>
+          </aside>
+        )}
+        <div className="world-stage">
+          <div className="game-scene">
+            <Scene
+              snapshot={snapshot}
+              mode={mode}
+              selected={selected}
+              onSelect={pickObject}
+              resetKey={resetKey}
+              visitor={visitor.visitor}
+              onMove={visitor.move}
+              onLook={visitor.look}
+              onStop={visitor.stop}
+              focus={focus}
+              thought={
+                snapshot?.thoughts?.enabled
+                  ? (currentThought(snapshot.thoughts.entries, snapshot.runtime.simulatedAt)
+                      ?.text ?? null)
+                  : null
+              }
+              control={controlCommand}
+              paused={inputPaused}
+              onSelectCharacter={pickCharacter}
+              onPointerLockChange={setLocked}
+              controlsRef={controls}
+            />
           </div>
+          <div className="world-vignette" aria-hidden="true" />
+          {phone && (
+            <header className="phone-top">
+              <div className="world-clock glass" title={lifeLabel}>
+                <StatusBadge
+                  className={'connection ' + connection}
+                  tone={connection === 'live' ? 'live' : 'waiting'}
+                >
+                  <span className="sr-only">{lifeLabel}</span>
+                </StatusBadge>
+                <span className="world-day">
+                  {dayLabel}
+                  <small>{timeLabel}</small>
+                </span>
+                <span className="phone-place">{currentPlace?.name ?? 'The meadow paths'}</span>
+              </div>
+              <button
+                className="account-button glass"
+                aria-label={accountLabel}
+                onClick={openAccount}
+              >
+                <Icon name="user" />
+                {attention}
+              </button>
+            </header>
+          )}
+          <div className="view-controls glass">
+            <div className="camera-switch" role="group" aria-label="Camera perspective">
+              <button onClick={() => camera('overview')} aria-pressed={mode === 'overview'}>
+                <Icon name="map" />
+                <span>Overview</span>
+              </button>
+              <button
+                onClick={() => camera('visitor')}
+                aria-pressed={mode === 'visitor'}
+                disabled={visitor.busy || !snapshot}
+              >
+                <Icon name="walk" />
+                <span>Walk</span>
+              </button>
+              <button
+                onClick={() => camera('hubert')}
+                aria-pressed={mode === 'hubert'}
+                disabled={!resident}
+              >
+                <Icon name="eye" />
+                <span>Hubert’s eyes</span>
+              </button>
+            </div>
+            <div className="view-tools">
+              <button
+                className="square-button"
+                aria-label="Reset camera"
+                title="Reset camera"
+                onClick={resetCamera}
+              >
+                <Icon name="compass" />
+              </button>
+              <button
+                className="square-button"
+                aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                onClick={() => void toggleFullscreen()}
+                title="Fullscreen"
+              >
+                <Icon name="expand" />
+              </button>
+            </div>
+          </div>
+          {mode === 'visitor' &&
+            visitor.visitor &&
+            !panel &&
+            near &&
+            !settingsSection &&
+            !accountOpen && (
+              <section className="encounter-card glass" aria-label="Nearby resident">
+                <HubertPortrait />
+                <div>
+                  <span className="eyebrow">You came across</span>
+                  <h3>{character?.name}</h3>
+                  <p>{character?.activity}</p>
+                </div>
+                <button onClick={() => openPanel('character')}>
+                  <kbd>E</kbd>
+                  <span>Meet Hubert</span>
+                  <Icon name="arrow" />
+                </button>
+              </section>
+            )}
+          {mode === 'visitor' && (
+            <>
+              <span className="crosshair" aria-hidden="true" />
+              <div className="walk-controls glass" role="group" aria-label="Walking controls">
+                {walkingControls.map((c) => (
+                  <button
+                    key={c.action}
+                    aria-label={c.label}
+                    disabled={inputPaused}
+                    onClick={() =>
+                      setControlCommand((old) => ({
+                        action: c.action,
+                        serial: (old?.serial ?? 0) + 1,
+                      }))
+                    }
+                  >
+                    {c.symbol}
+                  </button>
+                ))}
+                <button className="stop-walking" onClick={visitor.stop}>
+                  Stop walking
+                </button>
+              </div>
+            </>
+          )}
+          <div className="world-bottom">
+            <div className="location-chip glass">
+              <Icon name="compass" />
+              <div>
+                <strong>{currentPlace?.name ?? 'The meadow paths'}</strong>
+                <small>
+                  {mode === 'overview'
+                    ? 'Overview · drag to orbit'
+                    : mode === 'hubert'
+                      ? 'Following Hubert’s viewpoint'
+                      : 'WASD to walk · drag to look'}
+                </small>
+              </div>
+            </div>
+            <div className="bottom-actions">
+              {mode === 'visitor' && !inputPaused && (
+                <button
+                  className="mouse-capture glass"
+                  onClick={() => {
+                    if (locked) controls.current?.releaseMouse();
+                    else void controls.current?.captureMouse();
+                  }}
+                >
+                  {locked ? 'Release mouse · Esc' : 'Capture mouse'}
+                  <span>↗</span>
+                </button>
+              )}
+            </div>
+          </div>
+          {connection === 'offline' && (
+            <p className="connection-toast glass" role="status">
+              {snapshot
+                ? 'Reconnecting to Elsewhere. Showing the last known world.'
+                : 'Village preview · Waiting for the live world.'}
+            </p>
+          )}
+          {settingsSection && (
+            <SettingsScreen
+              section={settingsSection}
+              entries={entries}
+              onSection={setSettings}
+              onClose={closeSettings}
+              onBack={() => {
+                closeSettings();
+                openPanel('more');
+              }}
+              session={accountSession}
+              snapshot={snapshot}
+              admin={admin}
+              canManageCharacter={canManageCharacter}
+              privateLocalAccess={privateLocalAccess}
+              onSignIn={() => setAccountOpen(true)}
+              onCreationsChanged={async () => {
+                await refresh();
+              }}
+              controls={
+                <ControlsPanel
+                  fullscreen={fullscreen}
+                  onEnterWorld={snapshot ? enterWorld : undefined}
+                  onToggleFullscreen={toggleFullscreen}
+                  onResetCamera={resetCamera}
+                />
+              }
+            />
+          )}
         </div>
-        {connection === 'offline' && (
-          <p className="connection-toast glass" role="status">
-            {snapshot
-              ? 'Reconnecting to Elsewhere. Showing the last known world.'
-              : 'Village preview · Waiting for the live world.'}
+        {phone && (
+          <nav className="world-tabbar" aria-label="World navigation">
+            <button
+              className={!panel && !settingsSection ? 'active' : ''}
+              aria-label="World"
+              aria-pressed={!panel && !settingsSection}
+              onClick={() => {
+                setPanel(null);
+                closeSettings();
+              }}
+            >
+              <Icon name="compass" />
+              <span className="rail-label">World</span>
+            </button>
+            {nav.filter((n) => phoneTabs.some((id) => id === n.id)).map(railButton)}
+            <button
+              className={
+                settingsSection || panel === 'more' || panel === 'activity' || panel === 'wishes'
+                  ? 'active'
+                  : ''
+              }
+              aria-label="More"
+              aria-pressed={Boolean(settingsSection) || panel === 'more'}
+              aria-controls={panel ? 'world-panel' : undefined}
+              onClick={() =>
+                panel === 'more' && !settingsSection ? setPanel(null) : openPanel('more')
+              }
+            >
+              <Icon name="more" />
+              <span className="rail-label">More</span>
+              {pendingWishes > 0 && (
+                <b className="nav-count" aria-label="Pending requests">
+                  {pendingWishes}
+                </b>
+              )}
+            </button>
+          </nav>
+        )}
+        {visitor.status && (
+          <p className="sr-only" role="status">
+            {visitor.status}
           </p>
         )}
-        {settingsSection && (
-          <SettingsScreen
-            section={settingsSection}
-            entries={entries}
-            onSection={setSettings}
-            onClose={closeSettings}
-            onBack={() => {
-              closeSettings();
-              openPanel('more');
-            }}
+        {accountOpen && (
+          <AccountDialog
             session={accountSession}
-            snapshot={snapshot}
-            admin={admin}
-            canManageCharacter={canManageCharacter}
             privateLocalAccess={privateLocalAccess}
-            onSignIn={() => setAccountOpen(true)}
-            onCreationsChanged={async () => {
-              await refresh();
+            onClose={() => {
+              accountSession.dismissOperatorSignIn();
+              accountSession.dismissSocialReturn();
+              setAccountOpen(false);
             }}
-            controls={
-              <ControlsPanel
-                fullscreen={fullscreen}
-                onEnterWorld={snapshot ? enterWorld : undefined}
-                onToggleFullscreen={toggleFullscreen}
-                onResetCamera={resetCamera}
-              />
-            }
           />
         )}
-      </div>
-      {phone && (
-        <nav className="world-tabbar" aria-label="World navigation">
-          <button
-            className={!panel && !settingsSection ? 'active' : ''}
-            aria-label="World"
-            aria-pressed={!panel && !settingsSection}
-            onClick={() => {
-              setPanel(null);
-              closeSettings();
-            }}
-          >
-            <Icon name="compass" />
-            <span className="rail-label">World</span>
-          </button>
-          {nav.filter((n) => phoneTabs.some((id) => id === n.id)).map(railButton)}
-          <button
-            className={
-              settingsSection || panel === 'more' || panel === 'activity' || panel === 'wishes'
-                ? 'active'
-                : ''
-            }
-            aria-label="More"
-            aria-pressed={Boolean(settingsSection) || panel === 'more'}
-            aria-controls={panel ? 'world-panel' : undefined}
-            onClick={() =>
-              panel === 'more' && !settingsSection ? setPanel(null) : openPanel('more')
-            }
-          >
-            <Icon name="more" />
-            <span className="rail-label">More</span>
-            {pendingWishes > 0 && (
-              <b className="nav-count" aria-label="Pending requests">
-                {pendingWishes}
-              </b>
-            )}
-          </button>
-        </nav>
-      )}
-      {visitor.status && (
-        <p className="sr-only" role="status">
-          {visitor.status}
-        </p>
-      )}
-      {accountOpen && (
-        <AccountDialog
-          session={accountSession}
-          privateLocalAccess={privateLocalAccess}
-          onClose={() => {
-            accountSession.dismissOperatorSignIn();
-            accountSession.dismissSocialReturn();
-            setAccountOpen(false);
-          }}
-        />
-      )}
-    </main>
+      </main>
+    </WallTimeProvider>
   );
 }

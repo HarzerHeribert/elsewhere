@@ -1,16 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import {
   currentThought,
   dayStories,
   filterStory,
   researchInProgress,
-  worldDay,
   type DayStory,
   type StoryFilter,
   type StoryItem,
 } from '../activityStory';
-import { formatDay, formatTime } from '../formatTime';
+import { calendarDay, formatDay, formatTime } from '../formatTime';
+import { useWallTime } from '../worldClock';
 import { Icon } from '../Icon';
 import { NotebookDraft } from './NotebookPanel';
 import { ResearchSteps, ResearchStory, researchStatus } from './ResearchDetails';
@@ -32,7 +32,6 @@ export function ActivityPanel({
   thoughts,
   notices,
   activity,
-  startedAt,
   now,
   places = [],
   initialFilter = 'highlights',
@@ -48,7 +47,7 @@ export function ActivityPanel({
   notices: ReadonlyArray<{ id: string; title: string; text: string }>;
   /** What the resident is doing at this moment, in the world's words. */
   activity?: string;
-  startedAt: number;
+  /** The present moment on the world clock. */
   now: number;
   places?: ReadonlyArray<{ id: string; name: string }>;
   initialFilter?: StoryFilter;
@@ -58,6 +57,8 @@ export function ActivityPanel({
 }) {
   const [filter, setFilter] = useState<StoryFilter>(initialFilter);
   const [chosenDay, setChosenDay] = useState<number | null>(null);
+  const toWall = useWallTime();
+  const dayOf = useCallback((at: number) => calendarDay(toWall(at)), [toWall]);
   const stories = useMemo(
     () =>
       dayStories({
@@ -66,11 +67,11 @@ export function ActivityPanel({
         notes: notebook?.entries ?? [],
         research,
         thoughts: thoughts?.entries,
-        startedAt,
+        dayOf,
       }),
-    [events, memories, notebook?.entries, research, thoughts?.entries, startedAt],
+    [events, memories, notebook?.entries, research, thoughts?.entries, dayOf],
   );
-  const today = worldDay(now, startedAt);
+  const today = dayOf(now);
   const days = [...new Set([today, ...stories.map((story) => story.day)])].sort((a, b) => a - b);
   const day = chosenDay !== null && days.includes(chosenDay) ? chosenDay : today;
   const position = days.indexOf(day);
@@ -195,7 +196,7 @@ export function ActivityPanel({
       <ol className="story-line">
         {items.map((item) => (
           <li key={item.id} className={'story-item ' + item.kind}>
-            <time>{formatTime(item.at)}</time>
+            <time>{formatTime(toWall(item.at))}</time>
             <div>
               {item.kind === 'research' ? (
                 <>
@@ -275,7 +276,7 @@ export function ActivityPanel({
           <div className="notes-list">
             {story.routine.map(({ event: e, text, count }) => (
               <article className="note-row" key={e.id}>
-                <time>{formatTime(e.at)}</time>
+                <time>{formatTime(toWall(e.at))}</time>
                 <div>
                   <p>
                     {text}

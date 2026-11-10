@@ -253,7 +253,14 @@ export interface PublicRuntimeState {
   paused: boolean;
   tick: number;
   startedAt: number;
+  /** The world's own clock. It stands still while the world is paused or restarting. */
   simulatedAt: number;
+  /**
+   * How the world clock maps to real time, oldest first. From each entry on, the real time of
+   * world time `t` is `wall + (t - at) / simulationRate`; earlier times use the first entry.
+   * Absent when the world does not follow real time.
+   */
+  clock?: ReadonlyArray<{ at: number; wall: number }>;
   costUsd: number;
   modelCalls?: number;
   modelStatus?: string;

@@ -74,7 +74,7 @@ describe('compact public activity', () => {
   it('tells each world day as milestones first, with routine movement folded away', () => {
     const day = 86_400_000;
     const stories = dayStories({
-      startedAt: 0,
+      dayOf: (at) => Math.floor(at / day) + 1,
       events: [
         { id: 'walk-1', at: 10, type: 'move', message: 'Hubert walked to the pond.' },
         { id: 'walk-2', at: 20, type: 'move', message: 'Hubert walked to the pond.' },
@@ -114,7 +114,7 @@ describe('compact public activity', () => {
       text: 'Thought ' + n,
     }));
     const [story] = dayStories({
-      startedAt: 0,
+      dayOf: () => 1,
       events: [],
       memories: [],
       notes: [],
