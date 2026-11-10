@@ -2,6 +2,7 @@ import type { PublicResearchEpisode } from '@elsewhere/character-interfaces';
 import { formatTime } from '../formatTime';
 import { Icon } from '../Icon';
 import { researchInProgress } from '../activityStory';
+import { useWallTime } from '../worldClock';
 
 function safeLink(value: string) {
   try {
@@ -71,6 +72,7 @@ export function ResearchList({
   episodes: readonly PublicResearchEpisode[];
   onOpen: (id: string) => void;
 }) {
+  const toWall = useWallTime();
   return (
     <section className="research-list" aria-label="Research history">
       <p className="panel-intro">Questions I followed beyond Elsewhere, and what I found.</p>
@@ -81,7 +83,7 @@ export function ResearchList({
           </span>
           <strong>{episode.topic}</strong>
           <small>
-            {formatTime(episode.at)} ·{' '}
+            {formatTime(toWall(episode.at))} ·{' '}
             {episode.sources.length === 1 ? '1 source' : episode.sources.length + ' sources'}
           </small>
           <Icon name="chevron-right" />

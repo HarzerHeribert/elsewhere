@@ -1,6 +1,6 @@
 import type { PublicNotebook } from '@elsewhere/character-interfaces';
-import { formatDay, formatTime } from '../formatTime';
-import { worldDay } from '../activityStory';
+import { calendarDay, formatDay, formatTime } from '../formatTime';
+import { useWallTime } from '../worldClock';
 
 /** The note being written, streamed as it arrives. Text is always rendered as plain text. */
 export function NotebookDraft({
@@ -28,28 +28,26 @@ export function NotebookDraft({
 
 export function NotebookPanel({
   notebook,
-  startedAt,
   onShowPlace,
 }: {
   notebook?: PublicNotebook;
   /** When given, a note's place can be shown in the world. */
   onShowPlace?: (placeId: string) => void;
-  /** When known, entries are gathered under the world day they were written on. */
-  startedAt?: number;
 }) {
+  const toWall = useWallTime();
   const entries = [...(notebook?.entries ?? [])].reverse().slice(0, 32);
-  let lastDay = 0;
+  let lastDay: number | undefined;
   return (
     <div className="journal">
       <p className="panel-intro">Questions, ideas and changing opinions, in my own words.</p>
       {notebook?.draft && <NotebookDraft draft={notebook.draft} />}
       {entries.map((entry) => {
-        const day = startedAt === undefined ? 0 : worldDay(entry.at, startedAt);
+        const day = calendarDay(toWall(entry.at));
         const heading = day !== lastDay;
         lastDay = day;
         return (
           <div key={entry.id}>
-            {heading && day > 0 && <p className="day-rule eyebrow">{formatDay(day)}</p>}
+            {heading && <p className="day-rule eyebrow">{formatDay(day)}</p>}
             <article className="journal-page">
               <p>{entry.text}</p>
               {entry.topics && entry.topics.length > 0 && (
@@ -69,7 +67,7 @@ export function NotebookPanel({
                   ))}
                 </ul>
               )}
-              <time>{formatTime(entry.at)}</time>
+              <time>{formatTime(toWall(entry.at))}</time>
             </article>
           </div>
         );

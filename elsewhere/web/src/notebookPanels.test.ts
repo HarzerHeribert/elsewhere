@@ -5,6 +5,8 @@ import type { PublicCharacterState, PublicNotebook } from '@elsewhere/character-
 import { ActivityPanel } from './panels/ActivityPanel';
 import { CharacterPanel } from './panels/CharacterPanel';
 import { NotebookPanel } from './panels/NotebookPanel';
+import { calendarDay, formatDay } from './formatTime';
+import { WallTimeProvider } from './worldClock';
 
 const entry = (id: string, text: string) => ({
   id,
@@ -29,6 +31,26 @@ const character: PublicCharacterState = {
 const noop = () => undefined;
 
 describe('authored notebook presentation', () => {
+  it('shows notes at the real time they were written, not at the world clock time', () => {
+    const written = Date.UTC(2026, 10, 9, 7, 9);
+    const real = Date.UTC(2026, 10, 10, 9, 38);
+    const notebook: PublicNotebook = {
+      enabled: true,
+      entries: [{ ...entry('late', 'Written after a long pause.'), at: written }],
+    };
+    const html = renderToStaticMarkup(
+      createElement(
+        WallTimeProvider,
+        { value: (at: number) => at + (real - written) },
+        createElement(NotebookPanel, { notebook }),
+      ),
+    );
+    expect(html).toContain(formatDay(calendarDay(real)));
+    expect(html).not.toContain(formatDay(calendarDay(written)));
+    expect(html).toContain(
+      new Date(real).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    );
+  });
   it('shows a factual empty state instead of inventing a thought', () => {
     const html = renderToStaticMarkup(createElement(NotebookPanel));
     expect(html).toContain('My notebook is quiet for now.');
@@ -36,7 +58,7 @@ describe('authored notebook presentation', () => {
     expect(html).not.toContain('writing this now');
     expect(html).not.toMatch(/I have chosen|I keep returning/);
   });
-  it('bounds the notebook to 32 recent entries, grouped by world day, without mutating source order', () => {
+  it('bounds the notebook to 32 recent entries, grouped by calendar day, without mutating source order', () => {
     const notebook: PublicNotebook = {
       enabled: true,
       entries: Array.from({ length: 40 }, (_, i) =>
@@ -44,9 +66,9 @@ describe('authored notebook presentation', () => {
       ),
     };
     const before = structuredClone(notebook);
-    const full = renderToStaticMarkup(createElement(NotebookPanel, { notebook, startedAt: 0 }));
+    const full = renderToStaticMarkup(createElement(NotebookPanel, { notebook }));
     expect(full.match(/class="journal-page"/g)).toHaveLength(32);
-    expect(full.match(/Day 01/g)).toHaveLength(1);
+    expect(full.split(formatDay(calendarDay(1_000)))).toHaveLength(2);
     expect(full).toContain('Authored note #39.');
     expect(full).toContain('Authored note #8.');
     expect(full).not.toContain('Authored note #7.');
@@ -90,7 +112,6 @@ describe('authored notebook presentation', () => {
       memories: [{ id: 'memory', at: 1_000, summary: 'MEMORY-FEED-CANARY', cues: [] }],
       notebook: { enabled: true, entries: [entry('authored', 'NOTEBOOK-FEED-CANARY')] },
       notices: [],
-      startedAt: 0,
       now: 2_000,
     };
     const notes = renderToStaticMarkup(

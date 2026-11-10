@@ -18,6 +18,7 @@ import { Meter } from '../Meter';
 import { activityRows } from '../activityFeed';
 import { currentThought, researchInProgress } from '../activityStory';
 import { formatTime } from '../formatTime';
+import { useWallTime } from '../worldClock';
 
 export type CharacterTab = 'now' | 'notebook' | 'memories' | 'research' | 'about';
 const tabs: Array<{ id: CharacterTab; label: string }> = [
@@ -48,7 +49,6 @@ export function CharacterPanel({
   thoughts,
   now,
   places = [],
-  startedAt,
   researchId,
   onResearch = () => undefined,
   onShowPlace,
@@ -77,7 +77,6 @@ export function CharacterPanel({
   /** World time, used to tell a current thought from an earlier one. */
   now?: number;
   places?: ReadonlyArray<{ id: string; name: string }>;
-  startedAt?: number;
   researchId?: string | null;
   onResearch?: (id: string | null) => void;
   onShowPlace?: (placeId: string) => void;
@@ -85,6 +84,7 @@ export function CharacterPanel({
   onViewpoint: () => void;
   onWishes: () => void;
 }) {
+  const toWall = useWallTime();
   const [ownTab, setOwnTab] = useState<CharacterTab>('now');
   const tab = controlledTab ?? ownTab;
   const choose = (next: CharacterTab) => {
@@ -144,7 +144,7 @@ export function CharacterPanel({
             ) : (
               <p key={item.id} className="stream-marker">
                 <span>
-                  {item.seen} · {formatTime(item.at)}
+                  {item.seen} · {formatTime(toWall(item.at))}
                 </span>
               </p>
             ),
@@ -153,7 +153,7 @@ export function CharacterPanel({
             <figure className="now-thinking" aria-label="What I’m thinking">
               <figcaption>
                 <Icon name="thought" />
-                I’m thinking · {formatTime(thinking.at)}
+                I’m thinking · {formatTime(toWall(thinking.at))}
               </figcaption>
               <p>{thinking.text}</p>
             </figure>
@@ -213,16 +213,9 @@ export function CharacterPanel({
           </div>
         </div>
       )}
-      {tab === 'notebook' && (
-        <NotebookPanel notebook={notebook} startedAt={startedAt} onShowPlace={onShowPlace} />
-      )}
+      {tab === 'notebook' && <NotebookPanel notebook={notebook} onShowPlace={onShowPlace} />}
       {tab === 'memories' && (
-        <MemoriesPanel
-          memories={memories}
-          places={places}
-          startedAt={startedAt}
-          onShowPlace={onShowPlace}
-        />
+        <MemoriesPanel memories={memories} places={places} onShowPlace={onShowPlace} />
       )}
       {tab === 'research' &&
         (opened ? (

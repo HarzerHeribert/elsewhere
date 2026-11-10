@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { PublicMemory } from '@elsewhere/character-interfaces';
-import { formatDay, formatTime } from '../formatTime';
-import { worldDay } from '../activityStory';
+import { calendarDay, formatDay, formatTime } from '../formatTime';
+import { useWallTime } from '../worldClock';
 import { Icon } from '../Icon';
 
 type Sort = 'place' | 'time' | 'source';
@@ -18,7 +18,7 @@ function groups(
   memories: PublicMemory[],
   sort: Sort,
   placeName: (id: string) => string,
-  startedAt?: number,
+  dayOf: (at: number) => number,
 ): Group[] {
   const result = new Map<string, Group>();
   const add = (id: string, group: Omit<Group, 'id' | 'memories'>, memory: PublicMemory) => {
@@ -28,8 +28,8 @@ function groups(
   };
   for (const memory of memories) {
     if (sort === 'time') {
-      const day = startedAt === undefined ? 0 : worldDay(memory.at, startedAt);
-      add('day:' + day, { title: day ? formatDay(day) : 'Everything I remember' }, memory);
+      const day = dayOf(memory.at);
+      add('day:' + day, { title: formatDay(day) }, memory);
     } else if (memory.sourceUrl)
       add(
         'reading',
@@ -55,18 +55,18 @@ function groups(
 export function MemoriesPanel({
   memories,
   places = [],
-  startedAt,
   onShowPlace,
 }: {
   memories: readonly PublicMemory[];
   places?: ReadonlyArray<{ id: string; name: string }>;
-  startedAt?: number;
   onShowPlace?: (placeId: string) => void;
 }) {
+  const toWall = useWallTime();
+  const dayOf = (at: number) => calendarDay(toWall(at));
   const [sort, setSort] = useState<Sort>('place');
   const newest = [...memories].sort((a, b) => b.at - a.at);
   const placeName = (id: string) => places.find((place) => place.id === id)?.name ?? readable(id);
-  const list = groups(newest, sort, placeName, startedAt);
+  const list = groups(newest, sort, placeName, dayOf);
   return (
     <div className="memories">
       <div className="sort-row">
@@ -103,10 +103,13 @@ export function MemoriesPanel({
           {group.memories.map((memory) => (
             <article className="memory-row" key={memory.id}>
               <time>
-                {sort !== 'time' && startedAt !== undefined && (
-                  <>D{worldDay(memory.at, startedAt)} </>
+                {sort !== 'time' && (
+                  <>
+                    {formatDay(dayOf(memory.at), 'short')}
+                    <br />
+                  </>
                 )}
-                {formatTime(memory.at)}
+                {formatTime(toWall(memory.at))}
               </time>
               <p>{memory.summary}</p>
               {sort !== 'place' && memory.placeId && <small>{placeName(memory.placeId)}</small>}

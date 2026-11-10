@@ -104,6 +104,9 @@ interface WeatherSample {
 }
 /** Longest wait between automatic attempts after failed provider requests, in decision intervals. */
 const MAX_PROVIDER_BACKOFF = 16;
+/** Longest stall, in real time, that the world clock makes up for instead of standing still. */
+const CLOCK_CATCH_UP_MS = 90_000;
+const MAX_CLOCK_ANCHORS = 200;
 /** Refusals that stay refused until the owner repairs access; waiting alone does not clear them. */
 const PROVIDER_REFUSALS: ReadonlySet<string> = new Set(['unauthorized', 'not_authorized']);
 
@@ -116,6 +119,8 @@ export interface ControllerState {
     tick: number;
     startedAt: number;
     simulatedAt: number;
+    /** Where the world clock was last lined up with real time, oldest first. */
+    clock?: { at: number; wall: number }[];
     lastDecisionAt: number;
     /** Earliest natural completion of the current activity, in simulated world time. */
     activityUntil?: number;
@@ -146,6 +151,12 @@ export interface ControllerOptions {
   simulationStepMs?: number;
   decisionIntervalMs?: number;
   simulationRate?: number;
+  /**
+   * Keep the world clock in step with real time while the world runs, and record where each
+   * pause or restart ended so clients can show world times as real ones. The world's own clock
+   * never jumps over a gap: nothing ages while the world stands still.
+   */
+  realTimeClock?: boolean;
   modelMaximum?: number;
   modelProvider?: DecisionProvider;
   reflectionProvider?: ReflectionProvider;
@@ -198,6 +209,8 @@ export class ElsewhereController {
   private modelDispatchActive = false;
   private publicDraft?: { id: string; at: number; text: string };
   private readonly wallNow: () => number;
+  /** True until the next tick lines the world clock up with real time again. */
+  private clockStopped = true;
   constructor(
     private readonly store: SnapshotStore<ControllerState>,
     private readonly options: ControllerOptions = {},
@@ -314,6 +327,7 @@ export class ElsewhereController {
         tick: s.runtime.tick,
         startedAt: s.runtime.startedAt,
         simulatedAt: s.runtime.simulatedAt,
+        ...(s.runtime.clock ? { clock: s.runtime.clock.map((anchor) => ({ ...anchor })) } : {}),
         costUsd: 0,
         costKnown: [
           this.options.modelProvider,
@@ -626,11 +640,40 @@ export class ElsewhereController {
     // One snapshot atomically publishes all private derived records; none enter world events.
     await this.commit();
   }
+  /**
+   * The world clock is the world's own: it stands still while the world is paused or its
+   * process is away, so nothing ages across a gap. While the world runs it keeps pace with real
+   * time, and each time it starts moving again the moment is recorded, so that a client can
+   * show any world time as the real time it happened.
+   */
+  private nextWorldTime(force: boolean): number {
+    const runtime = this.state.runtime;
+    const step = this.options.simulationStepMs ?? 6_000;
+    if (force) {
+      this.clockStopped = true;
+      return runtime.simulatedAt + 30_000;
+    }
+    if (!this.options.realTimeClock) return runtime.simulatedAt + step;
+    const rate = this.options.simulationRate ?? 3;
+    const wall = this.wallNow();
+    const anchor = runtime.clock?.at(-1);
+    // How far the clock is behind where it would stand had every tick since then run on time.
+    const lag = anchor
+      ? Math.round(anchor.at + (wall - anchor.wall) * rate - runtime.simulatedAt)
+      : 0;
+    if (!anchor || this.clockStopped || Math.abs(lag) > CLOCK_CATCH_UP_MS * rate) {
+      const now = runtime.simulatedAt + step;
+      runtime.clock = [...(runtime.clock ?? []), { at: now, wall }].slice(-MAX_CLOCK_ANCHORS);
+      this.clockStopped = false;
+      return now;
+    }
+    // Ticks missed while a model request was awaited are made up, so the clock does not drift.
+    return runtime.simulatedAt + Math.max(step, lag);
+  }
   private async advance(force: boolean): Promise<PublicSnapshot> {
     if (this.state.runtime.paused && !force) return this.getSnapshot();
     const s = this.state;
-    const increment = force ? 30_000 : (this.options.simulationStepMs ?? 6_000);
-    const now = s.runtime.simulatedAt + increment;
+    const now = this.nextWorldTime(force);
     s.runtime.simulatedAt = now;
     s.runtime.tick++;
     s.world = advanceWorld(s.world, now);
@@ -1263,6 +1306,7 @@ export class ElsewhereController {
   resume() {
     return this.serialize(async () => {
       this.state.runtime.paused = false;
+      this.clockStopped = true;
       await this.commit();
       return this.getSnapshot();
     });

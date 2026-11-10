@@ -283,6 +283,7 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
       tick: snapshot.runtime.tick,
       startedAt: snapshot.runtime.startedAt,
       simulatedAt: snapshot.runtime.simulatedAt,
+      ...(snapshot.runtime.clock ? { clock: snapshot.runtime.clock } : {}),
       costUsd: snapshot.runtime.costUsd,
       modelCalls: snapshot.runtime.modelCalls,
       modelStatus: snapshot.runtime.modelStatus,
