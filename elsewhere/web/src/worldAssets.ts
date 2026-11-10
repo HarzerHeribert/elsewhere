@@ -13,8 +13,6 @@ export const WORLD_ASSETS = {
   shrub: '/assets/polyhaven/models/shrub_02/model-high.glb',
   rock: '/assets/polyhaven/models/rock_07/model-high.glb',
   smallRock: '/assets/polyhaven/models/rock_07/model-high.glb',
-  gate: '/assets/kenney/nature/fence_gate.glb',
-  sign: '/assets/kenney/nature/sign.glb',
 } as const;
 export interface AssetPlacement {
   height: number;
@@ -171,7 +169,7 @@ export function worldAssetLoader(
     const material = source.clone();
     trackMaterial(material);
     if (material instanceof THREE.MeshStandardMaterial) {
-      // Old Kenney exports marked organic materials metallic; this compatibility fix is scoped.
+      // Simple exports can mark organic materials metallic; this compatibility fix is scoped.
       if (!authored) {
         material.metalness = 0;
         material.roughness = material.transparent ? 0.3 : 0.86;
@@ -182,14 +180,6 @@ export function worldAssetLoader(
         material.alphaTest = source.alphaTest || 0.35;
         material.alphaToCoverage = true;
         material.depthWrite = true;
-      }
-      const name = material.name.toLowerCase();
-      if (path.includes('/kenney/nature/')) {
-        if (name.includes('leaf')) material.color.set(name.includes('dark') ? 0x4d7049 : 0x6f8d53);
-        else if (name === 'grass') material.color.set(0x7b9358);
-        else if (name === 'colorred') material.color.set(0xc9826a);
-        else if (name === 'coloryellow') material.color.set(0xd2bd73);
-        else if (name.includes('bark') || name.includes('wood')) material.color.set(0x87634b);
       }
       if (options.color !== undefined) {
         material.map = null;

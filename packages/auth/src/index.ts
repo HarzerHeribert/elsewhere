@@ -637,6 +637,28 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     });
     return socialProviders.filter((id) => accounts.some((account) => account.providerId === id));
   }
+  /** Private host-side recipient lookup; never mounted as an account-directory endpoint. */
+  function mailRecipient(
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      emailVerified: boolean;
+      banned?: boolean;
+    } | null,
+  ) {
+    if (!user || user.banned) return null;
+    return { id: user.id, email: user.email, name: user.name, emailVerified: user.emailVerified };
+  }
+  async function lookupMailUser(userId: string) {
+    const context = await auth.$context;
+    return mailRecipient(await context.internalAdapter.findUserById(userId));
+  }
+  async function lookupMailUserByEmail(email: string) {
+    const context = await auth.$context;
+    const result = await context.internalAdapter.findUserByEmail(email.trim().toLowerCase());
+    return mailRecipient(result?.user ?? null);
+  }
   async function isWorldAdmin(req: IncomingMessage) {
     return (await getAccount(req))?.isWorldAdmin ?? false;
   }
@@ -706,6 +728,8 @@ export async function createLocalAuth(options: LocalAuthOptions) {
     getLinkedSocialProviders,
     socialProviders,
     canUseOwnerControls,
+    lookupMailUser,
+    lookupMailUserByEmail,
     isWorldAdmin,
     setWorldAdmin,
     createOperatorAccount,

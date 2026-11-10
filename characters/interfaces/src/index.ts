@@ -1,3 +1,5 @@
+export * from './mail';
+import type { PublicCharacterMail, AccountCharacterMail } from './mail';
 import { z } from 'zod';
 export {
   BODY_RADIUS,
@@ -175,6 +177,8 @@ export interface ProviderIssue {
   resolvedAt?: number;
 }
 export interface AccountResponse extends AccountCapabilities {
+  characterMail?: AccountCharacterMail[];
+  characterMailUnavailable?: boolean;
   characterIssues?: ProviderIssue[];
   user: AccountSummary | null;
   /** Private session capability, independent from world administration. */
@@ -295,6 +299,7 @@ export interface PublicCreation {
   provenance: 'character' | 'owner';
 }
 export interface PublicSnapshot {
+  mail?: PublicCharacterMail;
   creations?: PublicCreation[];
   research?: PublicResearchEpisode[];
   world: PublicWorldState;

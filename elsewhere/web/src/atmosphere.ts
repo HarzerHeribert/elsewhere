@@ -4,6 +4,7 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import type { createEnvironmentMaterials } from './materials';
 import { ResourceScope } from './sceneResources';
 import { landscapeHeight } from './landscapeLayout';
+import { WORLD_LIGHT } from './worldStyle';
 
 const SKY_URL = '/assets/polyhaven/kloofendal_48d_partly_cloudy_puresky_1k.hdr';
 
@@ -24,17 +25,21 @@ export function createAtmosphere(
   uniforms.mieDirectionalG!.value = 0.76;
   const sunDirection = new THREE.Vector3().setFromSphericalCoords(
     1,
-    THREE.MathUtils.degToRad(42),
-    THREE.MathUtils.degToRad(225),
+    THREE.MathUtils.degToRad(WORLD_LIGHT.sunPolar),
+    THREE.MathUtils.degToRad(WORLD_LIGHT.sunAzimuth),
   );
   uniforms.sunPosition!.value.copy(sunDirection);
   scene.add(sky);
-  const hemisphere = new THREE.HemisphereLight(0xf1f8ff, 0xb0b292, 1.22);
+  const hemisphere = new THREE.HemisphereLight(
+    WORLD_LIGHT.sky,
+    WORLD_LIGHT.ground,
+    WORLD_LIGHT.fillIntensity,
+  );
   scene.add(hemisphere);
-  const sun = new THREE.DirectionalLight(0xffe8cc, 2.95);
+  const sun = new THREE.DirectionalLight(WORLD_LIGHT.sun, WORLD_LIGHT.sunIntensity);
   sun.position.copy(sunDirection).multiplyScalar(75);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(4096, 4096);
   Object.assign(sun.shadow.camera, {
     left: -43,
     right: 43,
@@ -45,7 +50,7 @@ export function createAtmosphere(
   });
   sun.shadow.normalBias = 0.015;
   sun.shadow.bias = -0.0001;
-  sun.shadow.radius = 3;
+  sun.shadow.radius = 4;
   scene.add(sun);
 
   const generator = new THREE.PMREMGenerator(renderer);
@@ -61,8 +66,8 @@ export function createAtmosphere(
   let environment = generator.fromScene(environmentScene, 0.02, 0.1, 1000000);
   let skyTexture: THREE.DataTexture | undefined;
   scene.environment = environment.texture;
-  scene.environmentIntensity = 0.5;
-  scene.fog = new THREE.Fog(0xc6d9d7, 54, 190);
+  scene.environmentIntensity = WORLD_LIGHT.environmentIntensity;
+  scene.fog = new THREE.Fog(WORLD_LIGHT.haze, WORLD_LIGHT.hazeNear, WORLD_LIGHT.hazeFar);
   renderer.domElement.dataset.sky = 'loading';
 
   // A single local download and prefilter, never a per-frame environment render.
@@ -108,8 +113,9 @@ export function createAtmosphere(
   const uvs = terrainGeometry.getAttribute('uv');
   const colors: number[] = [];
   const color = new THREE.Color();
-  const shadowGreen = new THREE.Color(0x92b383),
-    sunGreen = new THREE.Color(0xc9dd9c);
+  // The leafy-grass scan is straw coloured; these multipliers bring it to the meadow's green.
+  const shadowGreen = new THREE.Color(0.3, 0.72, 0.38),
+    sunGreen = new THREE.Color(0.46, 0.96, 0.46);
   for (let i = 0; i < vertices.count; i++) {
     const x = vertices.getX(i),
       z = vertices.getZ(i);
@@ -127,6 +133,8 @@ export function createAtmosphere(
   terrainGeometry.computeVertexNormals();
   const terrainMaterial = surfaces.material('grass', { normalStrength: 0.48 });
   terrainMaterial.vertexColors = true;
+  // Grass is matte: without this the valley floor picks up a milky sky sheen at eye level.
+  terrainMaterial.envMapIntensity = 0.25;
   const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
   terrain.receiveShadow = true;
   landscape.add(terrain);

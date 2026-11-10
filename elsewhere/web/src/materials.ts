@@ -19,6 +19,8 @@ export interface SurfaceOptions {
   envMapIntensity?: number;
   alphaTest?: number;
   side?: THREE.Side;
+  /** Shared by many models: survives the removal of any one of them. */
+  shared?: boolean;
 }
 export type SurfaceTextureStatus = (url: string, status: 'loaded' | 'failed') => void;
 
@@ -80,6 +82,7 @@ export function createEnvironmentMaterials(
         alphaTest: surface.alphaTest ?? 0,
         side: surface.side ?? THREE.FrontSide,
       }),
+      surface.shared,
     );
     bindings.set(result, new Set());
     result.addEventListener('dispose', () => {
@@ -99,7 +102,7 @@ export function createEnvironmentMaterials(
     void load(url, property === 'map').then((source) => {
       const textures = bindings.get(result);
       if (!source || disposed || !textures) return;
-      const texture = resources.own(source.clone());
+      const texture = resources.own(source.clone(), surface.shared);
       texture.repeat.set(...(surface.repeat ?? [1, 1]));
       texture.needsUpdate = true;
       textures.add(texture);

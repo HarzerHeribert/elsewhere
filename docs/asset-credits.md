@@ -1,52 +1,10 @@
 # Elsewhere asset credits
 
-Elsewhere includes selected 3D models by **Kenney**, from **Nature Kit 2.1**, under **Creative Commons Zero 1.0 Universal (CC0-1.0)**. Thank you to Kenney for making these assets freely available.
+Elsewhere ships a small set of third-party CC0 assets: Poly Haven surface scans, sky, trees, plants and a rock, and one AssetQuest bird. Thank you to their authors for making them freely available. Everything else in the world is authored in this repository.
 
-- Official creator and pack: https://kenney.nl/assets/nature-kit
-- License: https://creativecommons.org/publicdomain/zero/1.0/
-- Original license text: `elsewhere/web/public/assets/kenney/nature/License.txt`
-- Import manifest, exact file hashes and dependencies: `elsewhere/web/public/assets/kenney/nature/manifest.json`
-- Retrieved: November 8, 2026.
+## Authored world objects
 
-Kenney's official pack page identifies this pack as CC0. Its retained original license permits personal, educational and commercial use and says attribution is optional. We retain this credit and the license as provenance.
-
-## Download provenance
-
-The official archive is:
-
-https://kenney.nl/media/pages/assets/nature-kit/37ac38a37b-1677698939/kenney_nature-kit.zip
-
-The creator-hosted download returned HTTP 403 in the build environment. The selected unmodified files were therefore retrieved from this public mirror, which retains the original Kenney license and archive provenance:
-
-https://github.com/rajsinghtech/spurfire/tree/8792fe1404eabd93ff12dd0726460da5db648b02/game/assets/kenney/nature-kit
-
-Mirror commit: `8792fe1404eabd93ff12dd0726460da5db648b02`.
-
-This is a small selected import, not an entire third-party repository or archive. No downloaded installer, script or executable was run. Models are served locally; they do not require a CDN or runtime connection to the creator or mirror.
-
-## Shipped models
-
-| File               | Use                        |
-| ------------------ | -------------------------- |
-| `tree_default.glb` | Small broadleaf trees      |
-| `tree_oak.glb`     | Larger oak silhouettes     |
-| `rock_largeA.glb`  | Rocks near paths and water |
-| `rock_smallA.glb`  | Smaller landscape stones   |
-| `fence_simple.glb` | Low wooden fences          |
-| `fence_gate.glb`   | Garden gates and entrances |
-| `sign.glb`         | Landmark signposts         |
-| `cactus_short.glb` | Small planting specimens   |
-| `cactus_tall.glb`  | Taller planting specimens  |
-
-All paths are under `elsewhere/web/public/assets/kenney/nature/`.
-
-## Verification
-
-All nine binaries passed GLB magic, version, declared-length and JSON-chunk checks. They also loaded successfully through the project’s actual Three.js GLTFLoader in Node, with non-empty meshes and finite scene bounding boxes. Every model declares glTF 2.0 and contains meshes and scenes. The selected models have no external buffer or image URIs and need no separately shipped textures. Individual SHA-256 hashes and byte sizes are recorded in the manifest.
-
-The nine model files total **91,584 bytes**. The manifest's `sourceAccessorBounds` are mesh-accessor bounds, not fully transformed scene bounds; the renderer should normalize each loaded scene using its actual world-space bounding box. Suggested target heights are scene styling defaults and do not modify source binaries.
-
-The project-authored terrain, paths, lighting, interface, characters and any remaining procedural geometry are separate from these imported assets.
+Furniture, lanterns, signs, the gate, tools, instruments, flowers, ground cover and meadow grass are built in code from the world's own design language (`elsewhere/web/src/worldStyle.ts`, `craft.ts`, `flora.ts`). They use the Poly Haven timber and stone scans listed below and the shared paint palette; no model pack supplies them. The Kenney Nature, Fantasy Town and Furniture models that earlier versions shipped have been removed.
 
 ## Poly Haven ground, path and stone textures
 
@@ -68,37 +26,6 @@ The Poly Haven API was used only while importing these selected files; the deplo
 
 The grass, path and stone materials also include the six original **1K OpenGL normal and roughness JPEGs** imported alongside their diffuse maps. These are linear data maps; the normal maps use OpenGL Y+ convention. Their original artists and CC0 license are the same as the corresponding diffuse textures above. Exact download URLs, upstream MD5 checksums, SHA-256 hashes and sizes are retained in `elsewhere/web/public/assets/polyhaven/pbr-manifest.json`. The six files total **4,618,061 bytes**.
 
-## Kenney Fantasy Town Kit architecture and props
-
-Twenty-three selected models from **Kenney Fantasy Town Kit 2.0** supply actual modular stone and timber walls, windows, open doorways, arches, roof pieces, pillars, a lantern, bench, stool, green market stall, fountain and watermill.
-
-- Creator's official pack page: https://kenney.nl/assets/fantasy-town-kit
-- Creator's OpenGameArt upload: https://opengameart.org/content/fantasy-town-kit
-- Download used: https://opengameart.org/sites/default/files/kenney_fantasy-town-kit_2.0.zip
-- Archive SHA-256: `1a7530c09f4d2fa2cdee259876f089334f8b1f27fa86a0c4f54ef86cdd8676ef`
-- License: **CC0-1.0**, confirmed on the creator's page and in the archive's original `License.txt`.
-- Files and original license: `elsewhere/web/public/assets/kenney/town/`.
-
-Only explicitly selected archive entries were read; no archive was extracted wholesale and no downloaded code was executed. Each original `colormap.png` palette image was embedded into its corresponding GLB so the models are self-contained. Meshes, material settings and image pixels remain unchanged. The 23 GLBs total **599,840 bytes**.
-
-`town/manifest.json` records original archive entries, original and transformed file hashes, actual scene bounds and triangle counts. The actual Three.js GLTFLoader loaded their scene graphs and geometry for bounds; a placeholder texture hook was used for that Node-only bounds pass because Node has no image decoder. Embedded PNG signatures were checked independently, and normal browser loading uses the original palette images.
-
-The modules are small and have purposeful pivots. Native wall pieces lie in the YZ plane, typically span 1 unit in Y and Z, and sit at X=0.4 to 0.5. Positioning should use measured bounds and preserve door openings; decorative art does not change authoritative collision geometry.
-
-## Kenney Furniture Pack props
-
-Eleven selected models from the creator's **Furniture Pack 1.0** upload supply a bench, two bookcases, books, chair, table, desk, potted plant, floor lamp, box and radio.
-
-- Creator's current furniture page: https://kenney.nl/assets/furniture-kit
-- Creator's OpenGameArt upload: https://opengameart.org/content/furniture-kit
-- Original download: https://opengameart.org/sites/default/files/kenney_furniturePack.zip
-- Original license retained at `elsewhere/web/public/assets/kenney/furniture/License.txt`.
-- License: **CC0-1.0**, as stated in the actual downloaded archive.
-
-This older creator upload contains OBJ geometry and MTL colors. The selected models were converted to self-contained GLB with the project's Three.js OBJLoader, MTLLoader and GLTFExporter. Mesh geometry and source colors were preserved; Phong materials were mapped to rough, non-metallic standard materials for glTF compatibility. No downloaded scripts or installers were run. All eleven exported GLBs were loaded again through the actual GLTFLoader and passed header, dependency and finite-bounds checks. They total **219,396 bytes**.
-
-`furniture/manifest.json` records archive provenance, source OBJ/MTL hashes, converted GLB hashes and actual scene bounds. Furniture uses larger source units and offset pivots; normalize the loaded group by its measured bounds rather than sharing the town kit's scale.
-
 ## Poly Haven daylight sky and environment
 
 The scene includes **Kloofendal 48d Partly Cloudy Pure Sky**, a 1K HDRI from Poly Haven, under **CC0-1.0**:
@@ -109,16 +36,6 @@ The scene includes **Kloofendal 48d Partly Cloudy Pure Sky**, a 1K HDRI from Pol
 - Provenance and original artist credits: `polyhaven/sky-manifest.json`.
 
 The **1,435,119-byte**, **1024 × 512** HDR file matches the official API's size and MD5 checksum and was successfully decoded by Three.js RGBELoader. It is a linear HDR environment, not an sRGB albedo image, and is served locally with no runtime API or CDN dependency.
-
-## Additional Nature Kit ground foliage
-
-Eight more unmodified **Kenney Nature Kit 2.1** models add small-scale vegetation and pond detail: `grass.glb`, `grass_large.glb`, `grass_leafsLarge.glb`, `plant_bushDetailed.glb`, `flower_redA.glb`, `flower_yellowA.glb`, `lily_large.glb` and `mushroom_redGroup.glb`. They are under `elsewhere/web/public/assets/kenney/nature/` and total **91,388 bytes**.
-
-These files came directly from the creator's OpenGameArt upload, https://opengameart.org/content/nature-kit , using https://opengameart.org/sites/default/files/Nature%20Kit%20%282.1%29.zip . The downloaded archive's SHA-256 is `fa7974a0d342bfe63c38664ba9f8ec1a4aab8ea25f099bdc56870e33588c4d9d`, matching the original Nature Kit archive provenance above. The retained CC0 license applies to these models too.
-
-Only the eight explicit GLB entries were read from the archive. All passed GLB header/length/JSON checks and loaded through the actual Three.js GLTFLoader with finite non-empty bounds. They contain no external buffer or image references. Source entry names, file hashes, actual scene bounds and suggested scale are included in the existing nature manifest.
-
-Their source feet sit at Y=-0.05; the renderer should normalize the actual base before placing them. `grass_leafsLarge` is a low, spreading leafy clump, not a tall reed. Lily pads should be scaled by their footprint as well as height when arranging the pond surface. Decorative foliage does not change authoritative walkable paths or collision geometry.
 
 ## Rendering references
 

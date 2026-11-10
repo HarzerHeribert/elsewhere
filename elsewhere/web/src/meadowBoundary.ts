@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { VillageScenery } from './scenery';
 import type { createEnvironmentMaterials } from './materials';
+import { woodTint } from './craft';
 
 /** The orchard and library share a fieldstone wall; split rail opens the pond side to the valley. */
 export function buildMeadowBoundary(
@@ -74,7 +75,7 @@ export function buildMeadowBoundary(
     [
       joinery,
       new THREE.BoxGeometry(),
-      surfaces.material('timber', { normalStrength: 0.5, tint: 0xfbe1b1 }),
+      surfaces.material('timber', { normalStrength: 0.5, tint: woodTint('weathered') }),
     ],
   ] as const) {
     const batch = new THREE.InstancedMesh(geometry, material, matrices.length);

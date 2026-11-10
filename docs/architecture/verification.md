@@ -17,7 +17,7 @@ The current scope and security limitations are documented in the root README and
 
 ## Fullscreen world and accounts update
 
-The scene now fills the viewport with a collapsible contextual sidebar, overview/walking/character cameras, native fullscreen and optional pointer lock. Movement stops on release, blur, hidden tabs and open panels. Real local CC0 Kenney GLBs and Poly Haven textures were checked in the browser. See docs/asset-credits.md for source and license records.
+The scene now fills the viewport with a collapsible contextual sidebar, overview/walking/character cameras, native fullscreen and optional pointer lock. Movement stops on release, blur, hidden tabs and open panels. Real local CC0 Poly Haven models and textures were checked in the browser. See docs/asset-credits.md for source and license records.
 
 The browser suite also verifies actual Better Auth sign-up/sign-in/sign-out/session restoration, private account data, denial of ordinary-user world administration, contextual resident stats and nearby encounters. Separate real-handler tests exercise role grants/revocation and blocked account impersonation. Better Auth PostgreSQL migrations, session recovery and role changes passed against an isolated schema.
 

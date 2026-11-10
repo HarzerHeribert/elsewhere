@@ -1,3 +1,4 @@
+import type { MailPreferences } from '../../../characters/interfaces/src/mail';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountResponse } from '@elsewhere/character-interfaces';
 import { getAccount, requestJson } from './worldApi';
@@ -381,7 +382,20 @@ export function useAccountSession() {
       });
       if (!current(version)) return false;
       setSession((value) =>
-        value ? { ...value, user: null, managedCharacterIds: [], characterIssues: [] } : value,
+        value
+          ? {
+              user: null,
+              enabled: value.enabled,
+              passwordAuthEnabled: value.passwordAuthEnabled,
+              requiresEmailVerification: value.requiresEmailVerification,
+              ...(value.emailLinkAuthEnabled ? { emailLinkAuthEnabled: true } : {}),
+              ...(value.passkeyAuthEnabled ? { passkeyAuthEnabled: true } : {}),
+              ...(value.socialProviders ? { socialProviders: value.socialProviders } : {}),
+              managedCharacterIds: [],
+              characterIssues: [],
+              characterMail: [],
+            }
+          : value,
       );
       setVerificationEmail('');
       setSignInLinkEmail('');
@@ -455,11 +469,45 @@ export function useAccountSession() {
     },
     [begin, current],
   );
+  const updateMailPreferences = useCallback(
+    async (characterId: string, preferences: MailPreferences) => {
+      if (mutating.current) return false;
+      mutating.current = true;
+      const { version, controller } = begin();
+      setPending(true);
+      setError('');
+      try {
+        await requestJson(`/api/characters/${encodeURIComponent(characterId)}/mail/preferences`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(preferences),
+          signal: controller.signal,
+        });
+        const value = await getAccount(controller.signal);
+        if (!current(version)) return false;
+        setSession(value);
+        return true;
+      } catch (reason) {
+        if (current(version))
+          setError(
+            reason instanceof Error ? reason.message : 'Email preferences could not be saved.',
+          );
+        return false;
+      } finally {
+        mutating.current = false;
+        if (current(version)) setPending(false);
+      }
+    },
+    [begin, current],
+  );
   const characterIssues = session?.user ? (session.characterIssues ?? []) : [];
   return {
     account: session?.user ?? null,
     capabilities: session,
     characterIssues,
+    characterMail: session?.user ? (session.characterMail ?? []) : [],
+    characterMailUnavailable: Boolean(session?.user && session.characterMailUnavailable),
+    updateMailPreferences,
     hasCharacterIssue: characterIssues.some(
       (issue) => issue.resolvedAt === undefined && !issue.retrying,
     ),

@@ -11,8 +11,8 @@ describe('Responses decision generation boundary', () => {
     expect(root.required).toEqual(['action']);
     expect(root.additionalProperties).toBe(false);
     const alternatives = root.properties.action.anyOf;
-    // Rest is the only optional field: no duration and explicit duration are complete branches.
-    expect(alternatives).toHaveLength(MODEL_ACTION_FORMAT.anyOf.length + 1);
+    // Rest duration and a correspondence recipient each have absent/present complete branches.
+    expect(alternatives).toHaveLength(MODEL_ACTION_FORMAT.anyOf.length + 2);
     expect(alternatives.map((item) => item.properties.type.const)).toEqual([
       'move',
       'move',
@@ -23,6 +23,8 @@ describe('Responses decision generation boundary', () => {
       'interact',
       'work',
       'pin_creation',
+      'draft_mail',
+      'draft_mail',
       'reflect',
       'research',
       'read',
@@ -44,6 +46,10 @@ describe('Responses decision generation boundary', () => {
       }),
       expect.objectContaining({ required: ['type', 'durationMs'] }),
     ]);
+    expect(alternatives.filter((item) => item.properties.type.const === 'draft_mail')).toEqual([
+      expect.objectContaining({ required: ['type', 'kind', 'entryIds'] }),
+      expect.objectContaining({ required: ['type', 'kind', 'entryIds', 'recipientUserId'] }),
+    ]);
   });
 
   it.each([
@@ -53,6 +59,13 @@ describe('Responses decision generation boundary', () => {
     { type: 'move', targetId: 'garden' },
     { type: 'move', position: { x: 1.5, z: -2 } },
     { type: 'pin_creation', creationId: 'creation-example', pinned: true },
+    { type: 'draft_mail', kind: 'maker', entryIds: ['entry-example'] },
+    {
+      type: 'draft_mail',
+      kind: 'correspondence',
+      entryIds: ['entry-example'],
+      recipientUserId: 'contact-example',
+    },
   ])('unwraps only the transport envelope without changing the command: %j', (action) => {
     expect(parseResponsesAction(JSON.stringify({ action }))).toEqual(action);
   });

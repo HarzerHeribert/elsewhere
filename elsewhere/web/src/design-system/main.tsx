@@ -7,6 +7,7 @@ import { HubertPortrait } from '../HubertPortrait';
 import { ResidentsPanel } from '../panels/ResidentsPanel';
 import { Modal } from '../Modal';
 import { Icon } from '../Icon';
+import { WOOD_TONES, WORLD_PAINT_USES, WORLD_PALETTE, WORLD_SCALE } from '../worldStyle';
 import '../styles.css';
 import '../ui/application.css';
 import './specimen.css';
@@ -17,6 +18,7 @@ const sections = [
   'Foundations',
   'Components',
   'Motion',
+  'World',
   'Voice',
   'Build',
 ];
@@ -25,6 +27,33 @@ const palette = [
   ['Warm paper', '--ew-paper', '#f4f0e4', 'Canvas and soft surfaces'],
   ['Terracotta', '--ew-accent', '#99583f', 'One accent. Used sparingly.'],
 ];
+const hex = (value: number) => '#' + value.toString(16).padStart(6, '0');
+// The plank scan's average colour in linear light; each tone is a multiplier over it.
+const PLANK = [0.0802, 0.0562, 0.0438] as const;
+const woodSwatch = (tone: readonly [number, number, number]) =>
+  'rgb(' +
+  tone
+    .map((gain, i) => {
+      const linear = Math.min(1, gain * PLANK[i]!);
+      return Math.round(
+        255 * (linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055),
+      );
+    })
+    .join(' ') +
+  ')';
+const woodUses: Record<keyof typeof WOOD_TONES, string> = {
+  oak: 'Table tops, shelves, seats',
+  walnut: 'Legs, frames, posts, trim',
+  weathered: 'Fences, the gate, crates, raised beds',
+  cladding: 'The workshop walls',
+};
+const scaleNames: Record<keyof typeof WORLD_SCALE, string> = {
+  seat: 'Seat',
+  table: 'Table',
+  workTop: 'Workbench',
+  lantern: 'Lantern',
+  sign: 'Signpost',
+};
 function Section({
   id,
   number,
@@ -416,7 +445,48 @@ function DesignSystem() {
               interactive control.
             </p>
           </Section>
-          <Section id="voice" number="06" title="A shared-world perspective.">
+          <Section id="world" number="06" title="One place, not a pile of props.">
+            <p className="ds-rule">
+              Everything in the world is made from the same few things: three scanned building
+              surfaces, one timber grain in four tones, a short list of paints, brass, iron and
+              glass. Nothing brings its own palette, and nothing floats: an object stands on the
+              ground or on the surface beneath it, at a size a resident could use.
+            </p>
+            <div className="ds-world-swatches" aria-label="World paints">
+              {WORLD_PAINT_USES.map(([token, name, use]) => (
+                <article key={token}>
+                  <div style={{ background: hex(WORLD_PALETTE[token]) }} />
+                  <strong>{name}</strong>
+                  <code>{hex(WORLD_PALETTE[token])}</code>
+                  <small>{use}</small>
+                </article>
+              ))}
+            </div>
+            <div className="ds-world-swatches" aria-label="World wood tones">
+              {(Object.keys(WOOD_TONES) as Array<keyof typeof WOOD_TONES>).map((tone) => (
+                <article key={tone}>
+                  <div style={{ background: woodSwatch(WOOD_TONES[tone]) }} />
+                  <strong>{tone[0]!.toUpperCase() + tone.slice(1)}</strong>
+                  <code>plank scan × {WOOD_TONES[tone].join(' / ')}</code>
+                  <small>{woodUses[tone]}</small>
+                </article>
+              ))}
+            </div>
+            <dl className="ds-world-scale">
+              {(Object.keys(WORLD_SCALE) as Array<keyof typeof WORLD_SCALE>).map((key) => (
+                <div key={key}>
+                  <dt>{scaleNames[key]}</dt>
+                  <dd>{WORLD_SCALE[key].toFixed(2)} m</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="ds-rule">
+              Light is part of the system: one warm afternoon sun, a cool sky fill, soft contact
+              shadow in creases, a gentle glow on lamps and water, and one breeze that moves grass,
+              flowers and leaves together. Reduced motion stills the breeze.
+            </p>
+          </Section>
+          <Section id="voice" number="07" title="A shared-world perspective.">
             <div className="ds-voice">
               <HubertPortrait />
               <div>
@@ -454,7 +524,7 @@ function DesignSystem() {
               </div>
             </div>
           </Section>
-          <Section id="build" number="07" title="One system, used in the product.">
+          <Section id="build" number="08" title="One system, used in the product.">
             <p>
               The world’s panels, account forms, controls, and headings use these same tokens. The
               specimen imports the real Button, StatusBadge, MorphIcon, Modal, and ResidentsPanel

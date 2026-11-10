@@ -1,3 +1,4 @@
+import { CharacterMailbox, CharacterMailPreferences } from './CharacterMail';
 import type { PublicCreation } from '@elsewhere/character-interfaces';
 import { CreationManager } from './CreationManager';
 import { CharacterProviderNotices } from './CharacterProviderNotices';
@@ -148,9 +149,43 @@ export function AccountDialog({
                 onChanged={onCreationsChanged}
               />
             ))}
+          {session.characterMailUnavailable && (
+            <div className="privacy-note" role="status">
+              <p>Character mail is temporarily unavailable.</p>
+              <Button variant="quiet" onClick={() => void session.refresh()}>
+                Reload mail
+              </Button>
+            </div>
+          )}
+          {session.characterMail.map((mail) => (
+            <div key={mail.characterId}>
+              <CharacterMailPreferences
+                mail={mail}
+                accountMail={mail}
+                signedIn
+                emailVerified={account.emailVerified}
+                onSignIn={() => undefined}
+                pending={pending}
+                onChange={(preferences) =>
+                  session.updateMailPreferences(mail.characterId, preferences)
+                }
+              />
+              <CharacterMailbox
+                mail={mail}
+                onChanged={session.refresh}
+                readOnlyReason={
+                  ownerControlsLocked
+                    ? 'Verify a passkey before writing or sending mail as this character.'
+                    : !account.emailVerified
+                      ? 'Verify your account email before writing or sending mail as this character.'
+                      : undefined
+                }
+              />
+            </div>
+          ))}
           <p className="privacy-note">
-            Your email stays private. Character email delivery requires verified contact details and
-            explicit consent; it is not connected yet.
+            Your email address stays private. Each character’s newsletter and personal email
+            preferences are separate.
           </p>
           <Button
             variant="secondary"

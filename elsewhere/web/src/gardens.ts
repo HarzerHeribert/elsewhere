@@ -3,6 +3,7 @@ import type { VillageScenery } from './scenery';
 import { WORLD_ASSETS, type AssetInstance, type AttachWorldAsset } from './worldAssets';
 import { ResourceScope } from './sceneResources';
 import { MEADOW_TRAILS, TRAIL_LINES } from './landscapeLayout';
+import { meadowGrass, plantFlora } from './flora';
 
 /** Ferns and ground cover grow in natural patches and path verges, not a uniform prop grid. */
 export function buildGardens(world: VillageScenery, scene: THREE.Scene, attach: AttachWorldAsset) {
@@ -144,7 +145,7 @@ export function buildGardens(world: VillageScenery, scene: THREE.Scene, attach: 
         continue;
       const mix = random();
       if (mix < 0.045) planting(shrubs, x, z, 0.54 + random() * 0.35);
-      else if (mix < 0.19) planting(groundcover, x, z, 0.38 + random() * 0.22);
+      else if (mix < 0.19) planting(groundcover, x, z, 0.26 + random() * 0.16);
       else if (mix < 0.25) planting(ferns, x, z, 0.42 + random() * 0.19);
       else planting(Math.sin(t * 8 + ax) > 0 ? poppies : buttercups, x, z, 0.37 + random() * 0.28);
     }
@@ -154,17 +155,17 @@ export function buildGardens(world: VillageScenery, scene: THREE.Scene, attach: 
     [-28, 7.2],
     [-16.7, 20.2],
   ])
-    planting(mushrooms, x, z, 0.3);
-  for (const [id, list] of [
-    ['flower_redA', poppies],
-    ['flower_yellowA', buttercups],
-    ['grass_leafsLarge', groundcover],
-    ['mushroom_redGroup', mushrooms],
+    planting(mushrooms, x, z, 0.13);
+  // Flowers, broadleaf cover and meadow grass are hand-shaped in the world palette and
+  // share one breeze. Only the ferns, shrubs and trees remain scans.
+  for (const [kind, list] of [
+    ['poppy', poppies],
+    ['buttercup', buttercups],
+    ['groundcover', groundcover],
+    ['mushrooms', mushrooms],
   ] as const)
-    attach.instances(root, '/assets/kenney/nature/' + id + '.glb', list, {
-      maxDistance: 120,
-      shadow: false,
-    });
+    plantFlora(root, kind, list);
+  plantFlora(root, 'tuft', meadowGrass(world));
   for (const [x, z, height] of [
     [-29, 4, 0.85],
     [-30, 10, 0.75],
@@ -202,8 +203,8 @@ export function buildGardens(world: VillageScenery, scene: THREE.Scene, attach: 
       { maxDistance: 88, shadow: false },
     );
   }
-  const stem = new THREE.CylinderGeometry(0.014, 0.023, 0.75, 5),
-    reedMaterial = new THREE.MeshStandardMaterial({ color: 0x7a8050, roughness: 1 }),
+  const stem = new THREE.CylinderGeometry(0.006, 0.012, 0.75, 5),
+    reedMaterial = new THREE.MeshStandardMaterial({ color: 0x6d8a45, roughness: 1 }),
     reeds = new THREE.InstancedMesh(stem, reedMaterial, 65),
     matrix = new THREE.Matrix4(),
     quaternion = new THREE.Quaternion();

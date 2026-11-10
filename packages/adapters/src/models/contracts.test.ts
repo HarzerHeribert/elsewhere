@@ -135,7 +135,7 @@ describe('bounded model envelopes and canonical commands', () => {
       targetId: 'bench',
     });
     expect(MODEL_ACTION_FORMAT.type).toBe('object');
-    expect(MODEL_ACTION_FORMAT.anyOf).toHaveLength(12);
+    expect(MODEL_ACTION_FORMAT.anyOf).toHaveLength(13);
     expect(MODEL_ACTION_FORMAT.anyOf[0]).toMatchObject({
       type: 'object',
       required: ['type', 'targetId'],

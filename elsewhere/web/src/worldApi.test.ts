@@ -88,6 +88,92 @@ describe('API request recovery', () => {
     expect(owner.socialProviders).toEqual(['github']);
     expect(owner.linkedSocialProviders).toEqual(['github']);
   });
+  it('keeps mail preferences account-private and removes mailbox details without character ownership', async () => {
+    const mail = {
+      characterId: 'hubert',
+      name: 'Hubert',
+      address: 'hubert@example.test',
+      receiving: 'pending',
+      sendingAvailable: true,
+      canSubscribe: true,
+      preferences: { newsletter: true, correspondence: false },
+      owner: {
+        publication: 'review',
+        drafts: [{ text: 'PRIVATE-MAIL-CANARY' }],
+        inbox: [],
+        deliveries: [],
+        subscriberCount: 1,
+      },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: null,
+            managedCharacterIds: ['hubert'],
+            characterMail: [mail],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'visitor' },
+            managedCharacterIds: [],
+            characterMail: [mail],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'owner' },
+            managedCharacterIds: ['hubert'],
+            characterMail: [mail],
+          }),
+        ),
+    );
+    expect((await getAccount(new AbortController().signal)).characterMail).toEqual([]);
+    const visitor = await getAccount(new AbortController().signal);
+    expect(visitor.characterMail?.[0].preferences.newsletter).toBe(true);
+    expect(visitor.characterMail?.[0].owner).toBeUndefined();
+    expect(JSON.stringify(visitor)).not.toContain('PRIVATE-MAIL-CANARY');
+    expect((await getAccount(new AbortController().signal)).characterMail?.[0].owner).toBeDefined();
+  });
+  it('treats mail unavailability as a private optional feature notice', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: null,
+            passkeyAuthEnabled: true,
+            characterMailUnavailable: true,
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            enabled: true,
+            user: { id: 'owner' },
+            passkeyAuthEnabled: true,
+            characterMailUnavailable: true,
+            characterMail: [],
+          }),
+        ),
+    );
+    expect(
+      (await getAccount(new AbortController().signal)).characterMailUnavailable,
+    ).toBeUndefined();
+    expect(await getAccount(new AbortController().signal)).toMatchObject({
+      user: { id: 'owner' },
+      passkeyAuthEnabled: true,
+      characterMailUnavailable: true,
+      characterMail: [],
+    });
+  });
   it('keeps character management independent from the signed-in platform admin role', async () => {
     const fetcher = vi
       .fn()

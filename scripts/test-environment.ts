@@ -18,7 +18,7 @@ export function isolatedAppEnvironment(
     Object.entries(parent).filter(
       (entry): entry is [string, string] =>
         entry[1] !== undefined &&
-        !/^(MODEL_|CHATGPT_|OPENAI_|INFERENCE_|HUBERT_OWNER_|RESEARCH_|TAVILY_|SEARXNG_)/.test(
+        !/^(MODEL_|CHATGPT_|OPENAI_|INFERENCE_|HUBERT_OWNER_|CHARACTER_MAIL_|RESEND_|RESEARCH_|TAVILY_|SEARXNG_)/.test(
           entry[0],
         ),
     ),

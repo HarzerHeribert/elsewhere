@@ -1,3 +1,9 @@
+import { CharacterMailPreferences } from '../CharacterMail';
+import type {
+  AccountCharacterMail,
+  MailPreferences,
+  PublicCharacterMail,
+} from '../../../../characters/interfaces/src/mail';
 import { NotebookPanel } from './NotebookPanel';
 import { CreationsPanel } from './CreationsPanel';
 import { Button } from '../ui/Button';
@@ -9,6 +15,13 @@ import { Meter } from '../Meter';
 
 export function CharacterPanel({
   character,
+  mail,
+  accountMail,
+  signedIn = false,
+  emailVerified = false,
+  mailPending = false,
+  onSignIn = () => undefined,
+  onMailPreferences = async () => false,
   recalledMemory,
   creations,
   notebook,
@@ -19,6 +32,13 @@ export function CharacterPanel({
   onWishes,
 }: {
   character: PublicSnapshot['character'];
+  mail?: PublicCharacterMail | null;
+  accountMail?: AccountCharacterMail;
+  signedIn?: boolean;
+  emailVerified?: boolean;
+  mailPending?: boolean;
+  onSignIn?: () => void;
+  onMailPreferences?: (preferences: MailPreferences) => Promise<boolean>;
   recalledMemory?: PublicSnapshot['recalledMemory'];
   artifacts?: PublicSnapshot['artifacts'];
   creations?: PublicSnapshot['creations'];
@@ -78,6 +98,15 @@ export function CharacterPanel({
           Wishes <Icon name="arrow" />
         </button>
       </div>
+      <CharacterMailPreferences
+        mail={mail}
+        accountMail={accountMail}
+        signedIn={signedIn}
+        emailVerified={emailVerified}
+        pending={mailPending}
+        onSignIn={onSignIn}
+        onChange={onMailPreferences}
+      />
       <CreationsPanel
         characterId={character.id}
         characterName={character.name}

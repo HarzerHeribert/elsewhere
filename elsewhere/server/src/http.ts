@@ -1,6 +1,17 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
+import type { IncomingHttpHeaders } from 'node:http';
+import {
+  MailComposeSchema,
+  MailPreferencesSchema,
+  type AccountCharacterMail,
+  type MailComposeInput,
+  type MailPreferences,
+  type PublicCharacterMail,
+} from '../../../characters/interfaces/src/mail';
+import { MailError } from '../../../packages/mail/src/service';
+import { MailTransportError } from '../../../packages/mail/src/resend';
 import {
   PROTOCOL_VERSION,
   VisitorMessageSchema,
@@ -42,7 +53,21 @@ export interface ApiAuth {
   requiresEmailVerification?: boolean;
 }
 
+export interface ApiCharacterMail {
+  getPublic(characterId: string): PublicCharacterMail | null;
+  getAccount(userId: string, managedIds: string[]): Promise<AccountCharacterMail[]>;
+  setPreferences(
+    characterId: string,
+    userId: string,
+    preferences: MailPreferences,
+  ): Promise<unknown>;
+  compose(characterId: string, input: MailComposeInput, source: 'owner'): Promise<unknown>;
+  approve(characterId: string, draftId: string, ownerUserId: string): Promise<unknown>;
+  unsubscribe(token: string): Promise<unknown>;
+}
 export interface ApiDependencies {
+  characterMail?: ApiCharacterMail;
+  handleMailWebhook?(rawBody: string, headers: IncomingHttpHeaders): Promise<unknown>;
   /** Absolute JSON body deadline; trusted test/operator configuration, never client input. */
   bodyTimeoutMs?: number;
   /** Trusted host configuration only; no request can change admission or payload budgets. */
@@ -91,6 +116,17 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
   });
   return {
     world: publicWorld(snapshot.world),
+    ...(snapshot.mail
+      ? {
+          mail: {
+            characterId: snapshot.mail.characterId,
+            name: snapshot.mail.name,
+            address: snapshot.mail.address,
+            receiving: snapshot.mail.receiving,
+            sendingAvailable: snapshot.mail.sendingAvailable === true,
+          },
+        }
+      : {}),
     creations: publicCreations(snapshot.creations ?? [], character.id),
     ...(snapshot.notebook
       ? {
@@ -291,6 +327,47 @@ function readJson(req: IncomingMessage, timeoutMs: number): Promise<unknown> {
   });
 }
 
+/** Raw payload is preserved for provider signature verification. */
+function readRaw(req: IncomingMessage, timeoutMs: number, maximum = 131072): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (req.destroyed || req.aborted || req.readableEnded) {
+      reject(new HttpError(400, 'Request interrupted.'));
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let bytes = 0,
+      done = false;
+    const finish = (error?: HttpError) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      req.off('data', onData);
+      req.off('end', onEnd);
+      req.off('aborted', onAbort);
+      if (error) {
+        req.resume();
+        reject(error);
+      } else resolve(Buffer.concat(chunks).toString('utf8'));
+    };
+    const onData = (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > maximum) finish(new HttpError(413, 'Mail request is too large.'));
+      else chunks.push(chunk);
+    };
+    const onEnd = () => finish();
+    const onAbort = () => finish(new HttpError(400, 'Request interrupted.'));
+    const timer = setTimeout(
+      () => finish(new HttpError(408, 'Request body timed out.')),
+      timeoutMs,
+    );
+    timer.unref();
+    req.on('data', onData);
+    req.on('end', onEnd);
+    req.on('aborted', onAbort);
+    req.on('error', onAbort);
+  });
+}
+
 function authenticated(req: IncomingMessage, token: string): boolean {
   const supplied = req.headers.authorization?.replace(/^Bearer /, '') ?? '';
   const expected = Buffer.from(token);
@@ -427,7 +504,8 @@ export function createApiServer(deps: ApiDependencies) {
     };
     const send = (status: number, value: unknown) => sendBody(status, JSON.stringify(value));
     try {
-      const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+      const requestUrl = new URL(req.url ?? '/', 'http://localhost');
+      const pathname = requestUrl.pathname;
       if (req.method === 'GET' && pathname === '/api/health') {
         res.setHeader('Connection', 'close');
         res.shouldKeepAlive = false;
@@ -437,6 +515,33 @@ export function createApiServer(deps: ApiDependencies) {
           service: 'elsewhere',
           protocolVersion: PROTOCOL_VERSION,
         });
+        return;
+      }
+      // Only this signed provider endpoint can enter without the browser proxy secret.
+      // The callback verifies the raw body and signature before any provider fetch or state change.
+      if (req.method === 'POST' && pathname === '/api/mail/webhook/resend') {
+        if (deps.isReady && !deps.isReady())
+          throw new HttpError(503, 'Mail is temporarily unavailable.');
+        if (!deps.handleMailWebhook) throw new HttpError(503, 'Mail receiving is not configured.');
+        const ip = req.socket.remoteAddress ?? 'unknown';
+        enter(publicWrites, ip);
+        if (
+          !consume(`mail-webhook:${ip}`, 120, Date.now()) ||
+          !consume('mail-webhook', 600, Date.now(), globalLimits)
+        )
+          throw new HttpError(429, 'Mail webhook capacity reached.');
+        const raw = await readRaw(req, bodyTimeoutMs);
+        try {
+          await deps.handleMailWebhook(raw, req.headers);
+        } catch (error) {
+          if (
+            error instanceof MailTransportError &&
+            ['signature', 'input', 'response'].includes(error.code)
+          )
+            throw new HttpError(400, 'Mail webhook could not be verified.');
+          throw new HttpError(503, 'Mail processing is temporarily unavailable.');
+        }
+        send(200, { accepted: true });
         return;
       }
       let clientAddress = req.socket.remoteAddress ?? 'unknown';
@@ -488,9 +593,22 @@ export function createApiServer(deps: ApiDependencies) {
         /^\/api\/characters\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/creations(?:\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/pin)?$/.exec(
           pathname,
         );
+      const mailRoute =
+        /^\/api\/characters\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/mail\/(preferences|drafts)(?:\/([a-zA-Z0-9][a-zA-Z0-9._:-]{0,127})\/approve)?$/.exec(
+          pathname,
+        );
+      const unsubscribeRoute =
+        /^\/api\/mail\/unsubscribe\/([a-zA-Z0-9_.-]{32,2048})$/.exec(pathname) ??
+        (pathname === '/api/mail/unsubscribe' &&
+        /^[a-zA-Z0-9_.-]{32,2048}$/.test(requestUrl.searchParams.get('token') ?? '')
+          ? [pathname, requestUrl.searchParams.get('token')!]
+          : null);
       const controlRoute =
         req.method === 'POST' &&
-        (pathname.startsWith('/api/admin/') || !!providerRetry || !!creationRoute);
+        (pathname.startsWith('/api/admin/') ||
+          !!providerRetry ||
+          !!creationRoute ||
+          (mailRoute !== null && mailRoute[2] === 'drafts'));
       const visitorRoute = /^\/api\/visitors\/(visitor-[a-f0-9-]{36})(\/action)?$/.exec(pathname);
       const visitorRequest =
         visitorRoute &&
@@ -603,6 +721,20 @@ export function createApiServer(deps: ApiDependencies) {
         const characterId = (await deps.getSnapshot()).character.id;
         const managesCharacter =
           account && (await deps.canManageCharacter?.(account.id, characterId)) === true;
+        let characterMail: AccountCharacterMail[] | undefined;
+        let characterMailUnavailable = false;
+        if (account && deps.characterMail) {
+          try {
+            characterMail = await deps.characterMail.getAccount(
+              account.id,
+              managesCharacter ? [characterId] : [],
+            );
+          } catch {
+            // Optional correspondence must not hide sign-in, ownership, or passkey recovery.
+            characterMail = [];
+            characterMailUnavailable = true;
+          }
+        }
         send(200, {
           user: account,
           enabled: true,
@@ -623,6 +755,8 @@ export function createApiServer(deps: ApiDependencies) {
             : {}),
           ...(account ? await deps.auth.getSecurityState?.(req) : {}),
           managedCharacterIds: managesCharacter ? [characterId] : [],
+          ...(characterMail !== undefined ? { characterMail } : {}),
+          ...(characterMailUnavailable ? { characterMailUnavailable: true } : {}),
           ...(managesCharacter
             ? {
                 characterIssues: ((await deps.getCharacterIssues?.()) ?? [])
@@ -658,6 +792,84 @@ export function createApiServer(deps: ApiDependencies) {
               }
             : {}),
         });
+        return;
+      }
+      if (unsubscribeRoute && (req.method === 'GET' || req.method === 'POST')) {
+        if (!deps.characterMail) throw new HttpError(503, 'Character mail is unavailable.');
+        if (req.method === 'GET') {
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader(
+            'Content-Security-Policy',
+            "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+          );
+          sendBody(
+            200,
+            `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Unsubscribe · Elsewhere</title><main><h1>Stop receiving these emails?</h1><p>This changes only the email preference linked to this message. Your Elsewhere account stays active.</p><form method="post" action="/api/mail/unsubscribe?token=${unsubscribeRoute[1]}"><button type="submit">Unsubscribe</button></form></main></html>`,
+          );
+        } else {
+          await readRaw(req, bodyTimeoutMs, 4096);
+          await deps.characterMail.unsubscribe(unsubscribeRoute[1]);
+          send(200, { unsubscribed: true });
+        }
+        return;
+      }
+      if (req.method === 'POST' && mailRoute) {
+        if (!deps.characterMail) throw new HttpError(503, 'Character mail is unavailable.');
+        const account = deps.auth ? await deps.auth.getAccount(req) : null;
+        if (!account) throw new HttpError(401, 'Sign in to manage character email.');
+        if (!account.emailVerified) throw new HttpError(403, 'Verify your email address first.');
+        if (!origin || !origins.has(origin))
+          throw new HttpError(403, 'A trusted origin is required for email changes.');
+        const characterId = mailRoute[1];
+        if (characterId !== (await deps.getSnapshot()).character.id)
+          throw new HttpError(404, 'Character not found.');
+        const managesCharacter = async () =>
+          (await deps.canManageCharacter?.(account.id, characterId)) === true;
+        const ownerOperation = mailRoute[2] === 'drafts';
+        if (ownerOperation && !(await managesCharacter()))
+          throw new HttpError(403, 'Character ownership is required.');
+        if (ownerOperation) await requireControlAssurance();
+        if (ownerOperation && !owner) {
+          releaseVerification?.();
+          enter(controls, `user:${account.id}`);
+        }
+        // Personal subscription consent is public-account traffic, not owner-control capacity.
+        if (
+          !consume(
+            `mail-change:${account.id}`,
+            30,
+            Date.now(),
+            ownerOperation ? controlLimits : limits,
+          )
+        )
+          throw new HttpError(429, 'Please wait before changing mail again.');
+        const body = await readJson(req, bodyTimeoutMs);
+        if (ownerOperation && !(await managesCharacter()))
+          throw new HttpError(403, 'Character ownership is required.');
+        // Re-read the session after consuming the body: revoked/unverified sessions cannot mutate.
+        const currentAccount = await deps.auth!.getAccount(req);
+        if (!currentAccount || currentAccount.id !== account.id || !currentAccount.emailVerified)
+          throw new HttpError(403, 'A verified account is required.');
+        if (ownerOperation) await requireControlAssurance();
+        if (mailRoute[3]) {
+          if (
+            mailRoute[2] !== 'drafts' ||
+            !body ||
+            typeof body !== 'object' ||
+            Array.isArray(body) ||
+            Object.keys(body).length
+          )
+            throw new HttpError(400, 'Approval takes an empty object.');
+          send(200, await deps.characterMail.approve(characterId, mailRoute[3], account.id));
+        } else if (ownerOperation) {
+          const parsed = MailComposeSchema.safeParse(body);
+          if (!parsed.success) throw new HttpError(400, 'Mail draft is invalid.');
+          send(201, await deps.characterMail.compose(characterId, parsed.data, 'owner'));
+        } else {
+          const parsed = MailPreferencesSchema.safeParse(body);
+          if (!parsed.success) throw new HttpError(400, 'Mail preferences are invalid.');
+          send(200, await deps.characterMail.setPreferences(characterId, account.id, parsed.data));
+        }
         return;
       }
       if (req.method === 'POST' && creationRoute) {
@@ -902,7 +1114,9 @@ export function createApiServer(deps: ApiDependencies) {
       }
       throw new HttpError(404, 'Endpoint not found.');
     } catch (error) {
-      if (error instanceof HttpError || error instanceof VisitorError) {
+      if (error instanceof MailError) {
+        send(400, { error: error.message });
+      } else if (error instanceof HttpError || error instanceof VisitorError) {
         if (error.status === 408 && !res.hasHeader('Retry-After'))
           res.setHeader('Retry-After', '1');
         if ((error.status === 429 || error.status === 503) && !res.hasHeader('Retry-After'))
