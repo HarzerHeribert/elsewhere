@@ -69,6 +69,35 @@ describe('private character provider notices', () => {
     expect(recovered).not.toContain('<button');
   });
 
+  it('presents provider trouble that passes by itself as automatic, not as a reply-format problem, and still lets the owner retry at once', () => {
+    const html = render([
+      issue('waiting', {
+        kind: 'failed',
+        code: 'request_failed',
+        retrying: true,
+        message: 'A request to the model provider failed.',
+      }),
+    ]);
+    expect(html).toContain('Trying again automatically');
+    expect(html).not.toContain('Needs attention');
+    expect(html).not.toContain('Reconsidering');
+    expect(html).toContain('not a problem with the reply format');
+    expect(html.match(/Retry Hubert/g)).toHaveLength(1);
+  });
+
+  it('explains a daily limit as passing by itself and refused access as needing the owner', () => {
+    const limited = render([
+      issue('limited', { kind: 'unavailable', code: 'daily_limit', retrying: true }),
+    ]);
+    expect(limited).toContain('Trying again automatically');
+    expect(limited).toContain('accepts requests again when it resets');
+    const refused = render([issue('refused', { kind: 'unavailable', code: 'not_authorized' })]);
+    expect(refused).toContain('Needs attention');
+    expect(refused).not.toContain('Trying again automatically');
+    expect(refused).toContain('This does not pass by itself');
+    expect(refused.match(/Retry Hubert/g)).toHaveLength(1);
+  });
+
   it('renders no notices for an empty private issue list and escapes diagnostic strings', () => {
     expect(render([])).toBe('');
     const html = render([issue('escaped', { code: '<script>bad</script>', fields: ['<img>'] })]);

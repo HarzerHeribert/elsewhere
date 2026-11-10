@@ -76,7 +76,14 @@ it('runs the real sole-Hubert world through a separate private inference port an
       modelProvider: wrongProviders.model,
     }).init();
     expect((await wrong.step()).runtime.modelStatus).toContain('unavailable');
-    expect(wrong.getCharacterIssues()[0]).toMatchObject({ kind: 'failed', workload: 'decision' });
+    // Refused access needs the owner; it is never presented as passing by itself.
+    const [refused] = wrong.getCharacterIssues();
+    expect(refused).toMatchObject({
+      kind: 'unavailable',
+      code: 'not_authorized',
+      workload: 'decision',
+    });
+    expect(refused.retrying).toBeUndefined();
     expect(dispatches).toBe(1);
     expect(broker.getState().allowance.calls).toBe(1);
     expect(wrongProviders.model!.isAvailable!()).toBe(false);

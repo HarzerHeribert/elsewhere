@@ -8,7 +8,7 @@ import {
   type InferenceBrokerState,
 } from '../packages/inference/src/index';
 import { SqliteSnapshotStore } from '../packages/persistence/src/index';
-import { ChatGPTSession } from '../packages/security/src/chatgpt';
+import { ChatGPTSession, PROVIDER_ERROR_NAME } from '../packages/security/src/chatgpt';
 import { ChatGPTStore } from '../packages/security/src/chatgpt-store';
 import { ChatGPTClient } from '../packages/adapters/src/models/chatgpt';
 import { parseResponsesAction } from '../packages/adapters/src/models/responses-action';
@@ -85,6 +85,26 @@ try {
         };
         const parsed = InferenceDiagnosticSchema.safeParse(candidate);
         diagnostic = parsed.success ? parsed.data : { code: 'provider_response', fields: [] };
+        // One bounded line per provider failure, so an outage can be diagnosed from the service
+        // log: an allowlisted code, the HTTP status, the provider's request id and its own
+        // short name for an unrecognised failure. Never a provider body, prompt or credential.
+        const failure = error as { status?: unknown; requestId?: unknown; providerError?: unknown };
+        console.warn(
+          JSON.stringify({
+            event: 'provider_failure',
+            at: new Date().toISOString(),
+            workload: dream ? 'reflection' : 'decision',
+            code: diagnostic.providerCode ?? 'unclassified',
+            ...(Number.isInteger(failure.status) ? { status: failure.status } : {}),
+            ...(typeof failure.requestId === 'string' && /^[\w-]{1,200}$/.test(failure.requestId)
+              ? { requestId: failure.requestId }
+              : {}),
+            ...(typeof failure.providerError === 'string' &&
+            PROVIDER_ERROR_NAME.test(failure.providerError)
+              ? { providerError: failure.providerError }
+              : {}),
+          }),
+        );
       }
       throw new InferenceDispatchError(usage, diagnostic);
     }

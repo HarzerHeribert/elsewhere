@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { closeSettings, openSettings } from './settings-fixture';
 import type { AccountResponse, PublicSnapshot } from '@elsewhere/character-interfaces';
 import type { AccountCharacterMail } from '../../characters/interfaces/src/mail';
 const publicMail = {
@@ -58,6 +59,7 @@ test('a verified member independently subscribes to Hubert and sees truthful pen
   await page.goto('/');
   await page.getByRole('button', { name: 'Residents', exact: true }).click();
   await page.getByRole('button', { name: 'Select Hubert', exact: true }).click();
+  await page.getByRole('button', { name: 'About me', exact: true }).click();
   const prefs = page.getByRole('region', { name: 'Emails from Hubert' });
   await expect(prefs).toContainText('hubert@elswhr.dev');
   await expect(prefs).toContainText('Receiving is being verified');
@@ -129,7 +131,7 @@ test('only the character owner sees draft review and can approve a newsletter', 
     },
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Your account', exact: true }).click();
+  await openSettings(page, 'Mail');
   const mailbox = page.getByRole('region', { name: 'Hubert mailbox' });
   await expect(mailbox).toContainText('Receiving pending verification');
   await expect(mailbox).toContainText('3 newsletter subscribers');
@@ -142,7 +144,7 @@ test('only the character owner sees draft review and can approve a newsletter', 
   await page.screenshot({ path: info.outputPath('owner-mailbox.png') });
   owns = false;
   await page.reload();
-  await page.getByRole('button', { name: 'Your account', exact: true }).click();
+  await openSettings(page, 'Mail');
   await expect(page.getByRole('region', { name: 'Hubert mailbox' })).toHaveCount(0);
 });
 
@@ -223,7 +225,7 @@ test('mail stays readable under owner lock while sending waits for passkey and e
     return route.fulfill({ json: { accepted: true } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Your account', exact: true }).click();
+  await openSettings(page, 'Mail');
   const mailbox = page.getByRole('region', { name: 'Hubert mailbox' });
   const prefs = page.getByRole('region', { name: 'Emails from Hubert' });
   await expect(mailbox).toContainText('Verify a passkey before writing or sending');
@@ -300,23 +302,26 @@ test('a mail lookup outage keeps account and passkey controls available and does
   );
   await page.goto('/');
   await page.getByRole('button', { name: 'Your account', exact: true }).click();
-  let dialog = page.getByRole('dialog');
+  const dialog = await openSettings(page, 'Account');
   await expect(dialog).toContainText('You are signed in as Mail Owner.');
+  await openSettings(page, 'Mail');
   await expect(dialog).toContainText('Character mail is temporarily unavailable.');
+  await openSettings(page, 'Sign-in & security');
   await expect(
     dialog
       .getByRole('region', { name: 'Account passkeys' })
       .getByRole('button', { name: 'Add a passkey', exact: true }),
   ).toBeEnabled();
+  await openSettings(page, 'Creations');
   await expect(dialog.getByRole('region', { name: 'Manage creations' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Close account dialog', exact: true }).click();
+  await closeSettings(page);
   await page.getByRole('button', { name: 'Residents', exact: true }).click();
   await page.getByRole('button', { name: 'Select Hubert', exact: true }).click();
+  await page.getByRole('button', { name: 'About me', exact: true }).click();
   const preferences = page.getByRole('region', { name: 'Emails from Hubert' });
   await expect(preferences).toContainText('Your email preferences are unavailable right now.');
   await expect(preferences.getByRole('checkbox')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Your account', exact: true }).click();
-  dialog = page.getByRole('dialog');
+  await openSettings(page, 'Mail');
   delete account.characterMailUnavailable;
   account.characterMail = [subscribedMail()];
   await dialog.getByRole('button', { name: 'Reload mail', exact: true }).click();

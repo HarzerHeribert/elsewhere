@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { closeSettings, settings } from './settings-fixture';
 import type { AccountResponse, PublicSnapshot } from '@elsewhere/character-interfaces';
 
 const epoch = Date.UTC(2026, 10, 9, 12);
@@ -86,8 +87,7 @@ test('owner sees a persistent provider notice, retries it, and inspects research
   await expect(page.getByRole('main', { name: 'Elsewhere game' })).toBeVisible();
   await expect(page.getByLabel('Character needs attention', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Your account', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  const notices = dialog.getByRole('region', { name: 'Character provider notices' });
+  const notices = settings(page).getByRole('region', { name: 'Character provider notices' });
   await expect(notices).toContainText('Hubert · Needs attention');
   await expect(notices).toContainText('New decisions are waiting for your attention.');
   await page.screenshot({
@@ -102,20 +102,26 @@ test('owner sees a persistent provider notice, retries it, and inspects research
   await expect(notices.getByRole('button', { name: 'Retry Hubert', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Character needs attention', { exact: true })).toHaveCount(0);
   expect(retries).toBe(1);
-  await dialog.getByRole('button', { name: 'Close account dialog', exact: true }).click();
+  await closeSettings(page);
   await page
     .getByRole('navigation', { name: 'World navigation' })
-    .getByRole('button', { name: 'Activity', exact: true })
+    .getByRole('button', { name: 'Residents', exact: true })
     .click();
   const panel = page.getByLabel('World panel', { exact: true });
-  const research = panel.getByRole('region', { name: 'Research history' });
-  await research.locator('summary').filter({ hasText: 'Robin behavior' }).click();
+  await panel.getByRole('button', { name: 'Select Hubert', exact: true }).click();
+  await panel.getByRole('button', { name: 'My research', exact: true }).click();
+  await panel
+    .getByRole('region', { name: 'Research history' })
+    .getByRole('button', { name: /Robin behavior/ })
+    .click();
+  const research = panel.getByRole('article', { name: /^Research: / });
+  await expect(research).toContainText('What I searched for');
   await expect(research).toContainText('European robin ground foraging');
   await expect(research.getByRole('link', { name: 'Robin field study' })).toHaveAttribute(
     'href',
     'https://example.org/robin-study',
   );
-  await expect(research).toContainText('Search result · not read');
+  await expect(research).toContainText('Found, not opened');
   await research.locator('summary').filter({ hasText: 'Source excerpt' }).click();
   await expect(research.locator('blockquote')).toHaveText(
     'The observed robin searched for invertebrates on the ground.',
@@ -135,7 +141,7 @@ test('world administration alone does not expose character provider notices or r
   await page.goto('/');
   await expect(page.getByRole('main', { name: 'Elsewhere game' })).toBeVisible();
   await page.getByRole('button', { name: 'Your account', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('World admin');
+  await expect(settings(page)).toContainText('World admin');
   await expect(page.getByLabel('Character needs attention', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Character provider notices' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Retry Hubert', exact: true })).toHaveCount(0);

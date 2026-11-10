@@ -1,36 +1,24 @@
-import { CharacterMailbox, CharacterMailPreferences } from './CharacterMail';
-import type { PublicCreation } from '@elsewhere/character-interfaces';
-import { CreationManager } from './CreationManager';
-import { CharacterProviderNotices } from './CharacterProviderNotices';
-import { PasskeySettings, PasskeySignIn } from './PasskeySettings';
-import { SocialSignIn, SocialSignInSettings } from './SocialSignIn';
+import { PasskeySignIn } from './PasskeySettings';
+import { SocialSignIn } from './SocialSignIn';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Modal } from './Modal';
 import { Button } from './ui/Button';
 import type { useAccountSession } from './useAccountSession';
 
+/** Signing in and creating an account. Everything for a signed-in visitor lives in Settings. */
 export function AccountDialog({
   session,
-  creations,
-  onCreationsChanged,
   onClose,
-  onOpenManagement,
   privateLocalAccess = false,
 }: {
   session: ReturnType<typeof useAccountSession>;
-  creations?: PublicCreation[];
-  onCreationsChanged?: () => void | Promise<void>;
   onClose: () => void;
-  onOpenManagement?: () => void;
   privateLocalAccess?: boolean;
 }) {
   const { account, capabilities, pending, error, verificationEmail } = session;
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [usePassword, setUsePassword] = useState(false);
   const form = useRef<HTMLFormElement>(null);
-  const ownerControlsLocked =
-    capabilities?.ownerControlsRequirePasskey === true &&
-    capabilities?.ownerControlsUnlocked !== true;
   useEffect(() => {
     form.current?.querySelector<HTMLInputElement>('input')?.focus();
   }, [mode]);
@@ -88,115 +76,6 @@ export function AccountDialog({
           <p>
             You are signed in as <strong>{account.name}</strong>.
           </p>
-          <CharacterProviderNotices
-            issues={session.characterIssues}
-            pending={pending}
-            onRetry={session.retryCharacterProvider}
-            canRetry={!ownerControlsLocked}
-          />
-          {ownerControlsLocked && (
-            <div className="memory-glimpse">
-              <strong>Owner controls are locked</strong>
-              <p>Verify a passkey to change your world or characters.</p>
-              <Button
-                variant="secondary"
-                busy={pending}
-                disabled={!session.passkeysSupported}
-                onClick={() => void session.verifyPasskey()}
-              >
-                Unlock owner controls
-              </Button>
-            </div>
-          )}
-          <dl className="account-details">
-            <div>
-              <dt>Email</dt>
-              <dd>{account.email}</dd>
-            </div>
-            <div>
-              <dt>World access</dt>
-              <dd>{account.isWorldAdmin ? 'World admin' : 'Visitor'}</dd>
-            </div>
-            <div>
-              <dt>Characters you manage</dt>
-              <dd>
-                {capabilities?.managedCharacterIds.length
-                  ? capabilities.managedCharacterIds
-                      .map((id) => (id === 'hubert' ? 'Hubert' : id))
-                      .join(', ')
-                  : 'None'}
-              </dd>
-            </div>
-            <div>
-              <dt>Email status</dt>
-              <dd>{account.emailVerified ? 'Verified' : 'Unverified'}</dd>
-            </div>
-            <div>
-              <dt>User ID</dt>
-              <dd>
-                <code>{account.id}</code>
-              </dd>
-            </div>
-          </dl>
-          <PasskeySettings session={session} />
-          <SocialSignInSettings session={session} />
-          {!ownerControlsLocked &&
-            capabilities?.managedCharacterIds.map((characterId) => (
-              <CreationManager
-                key={characterId}
-                characterId={characterId}
-                creations={creations}
-                onChanged={onCreationsChanged}
-              />
-            ))}
-          {session.characterMailUnavailable && (
-            <div className="privacy-note" role="status">
-              <p>Character mail is temporarily unavailable.</p>
-              <Button variant="quiet" onClick={() => void session.refresh()}>
-                Reload mail
-              </Button>
-            </div>
-          )}
-          {session.characterMail.map((mail) => (
-            <div key={mail.characterId}>
-              <CharacterMailPreferences
-                mail={mail}
-                accountMail={mail}
-                signedIn
-                emailVerified={account.emailVerified}
-                onSignIn={() => undefined}
-                pending={pending}
-                onChange={(preferences) =>
-                  session.updateMailPreferences(mail.characterId, preferences)
-                }
-              />
-              <CharacterMailbox
-                mail={mail}
-                onChanged={session.refresh}
-                readOnlyReason={
-                  ownerControlsLocked
-                    ? 'Verify a passkey before writing or sending mail as this character.'
-                    : !account.emailVerified
-                      ? 'Verify your account email before writing or sending mail as this character.'
-                      : undefined
-                }
-              />
-            </div>
-          ))}
-          <p className="privacy-note">
-            Your email address stays private. Each character’s newsletter and personal email
-            preferences are separate.
-          </p>
-          <Button
-            variant="secondary"
-            className="full-width"
-            busy={pending}
-            onClick={async () => {
-              if (await session.signOut()) onClose();
-            }}
-          >
-            {pending ? 'One moment…' : 'Sign out'}
-          </Button>
         </>
       ) : !capabilities ? (
         <>
@@ -368,16 +247,6 @@ export function AccountDialog({
             </Button>
           </p>
         </>
-      )}
-      {onOpenManagement && (
-        <Button
-          variant="secondary"
-          className="full-width"
-          disabled={ownerControlsLocked}
-          onClick={onOpenManagement}
-        >
-          World settings
-        </Button>
       )}
       <p role="alert" className="auth-error">
         {error || session.socialAuthReturnMessage}

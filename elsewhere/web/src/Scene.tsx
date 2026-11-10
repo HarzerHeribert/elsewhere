@@ -52,6 +52,8 @@ type Props = {
   onMove: (position: Position) => void;
   onLook: (facing: number) => void;
   focus: Position | null;
+  /** A short line the resident is sharing right now, shown above them in the world. */
+  thought?: string | null;
   control: WorldControlCommand | null;
 };
 const gazeHeight = (object: WorldObject) =>
@@ -90,6 +92,14 @@ export function Scene(props: Props) {
     const look = createWorldLook(renderer);
     renderer.domElement.dataset.look = look.enabled ? 'graded' : 'direct';
     host.appendChild(renderer.domElement);
+    // The thought follows the resident on screen. It is plain text and never takes the pointer.
+    const bubble = document.createElement('p');
+    bubble.className = 'thought-bubble';
+    bubble.hidden = true;
+    bubble.setAttribute('aria-hidden', 'true');
+    host.appendChild(bubble);
+    const bubbleAnchor = new THREE.Vector3();
+    let bubbleText = '';
     let disposed = false;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, 1, 0.08, 260);
@@ -509,12 +519,16 @@ export function Scene(props: Props) {
         action === 'right' ? 1 : action === 'left' ? -1 : 0,
       );
     }
+    // Resizing clears the canvas. The docked panel changes the world's width while the frame
+    // rate is settled, so redraw at once instead of leaving a blank world until the next frame.
+    let sceneReady = false;
     const resize = () => {
       renderer.setSize(host.clientWidth, host.clientHeight);
       const buffer = renderer.getDrawingBufferSize(new THREE.Vector2());
       look.setSize(buffer.x, buffer.y);
       camera.aspect = host.clientWidth / Math.max(1, host.clientHeight);
       camera.updateProjectionMatrix();
+      if (sceneReady) look.render(scene, camera);
     };
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(host);
@@ -590,6 +604,7 @@ export function Scene(props: Props) {
       if (!initialized) {
         initializeWorld();
         initialized = true;
+        sceneReady = true;
       }
       if (data.controlsRef && data.controlsRef.current !== controlsApi)
         data.controlsRef.current = controlsApi;
@@ -904,6 +919,31 @@ export function Scene(props: Props) {
       }
       renderer.info.reset();
       look.render(scene, camera);
+      const thought = data.mode !== 'hubert' && hubert.visible ? (data.thought ?? '') : '';
+      if (thought) {
+        bubbleAnchor.copy(hubert.position);
+        bubbleAnchor.y += creature.eyeHeight + 0.75;
+        const distance = camera.position.distanceTo(bubbleAnchor);
+        bubbleAnchor.project(camera);
+        const x = (bubbleAnchor.x * 0.5 + 0.5) * host!.clientWidth,
+          y = (0.5 - bubbleAnchor.y * 0.5) * host!.clientHeight;
+        // Hidden when he is behind the camera, off screen, or too far away to tell whose it is.
+        const shown =
+          bubbleAnchor.z < 1 &&
+          distance < 90 &&
+          x > 0 &&
+          x < host!.clientWidth &&
+          y > 0 &&
+          y < host!.clientHeight;
+        if (shown) {
+          if (bubbleText !== thought) bubble.textContent = bubbleText = thought;
+          const half = bubble.offsetWidth / 2 + 8;
+          const left = Math.min(Math.max(x, half), Math.max(half, host!.clientWidth - half));
+          bubble.style.transform = `translate(${Math.round(left)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
+          bubble.style.setProperty('--tail', Math.round(x - left) + 'px');
+        }
+        if (bubble.hidden === shown) bubble.hidden = !shown;
+      } else if (!bubble.hidden) bubble.hidden = true;
       if (now - lastDiagnostics > 750) {
         renderer.domElement.dataset.renderStats = JSON.stringify({
           buildings: architecture?.roofs.filter((roof) => roof.visible).length ?? 0,
@@ -953,6 +993,7 @@ export function Scene(props: Props) {
       look.dispose();
       renderer.dispose();
       renderer.domElement.remove();
+      bubble.remove();
     };
   }, [layoutKey]);
 

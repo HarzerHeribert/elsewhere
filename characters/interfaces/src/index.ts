@@ -265,6 +265,27 @@ export interface PublicNotebookEntry {
   at: number;
   text: string;
   sourceIds: string[];
+  /** What the note drew on, recorded by the host from the facts it supplied when it was written. */
+  topics?: PublicNoteTopic[];
+}
+export interface PublicNoteTopic {
+  kind: 'place' | 'reading' | 'interest';
+  id: string;
+  label: string;
+}
+/** A short authored remark made from public facts only; never a transcript of decision reasoning. */
+export interface PublicThought {
+  id: string;
+  at: number;
+  text: string;
+  placeId?: string;
+}
+export interface PublicThoughts {
+  /** A provider that can author thoughts is connected. */
+  available: boolean;
+  /** Available and switched on by the character's owner. */
+  enabled: boolean;
+  entries: PublicThought[];
 }
 export interface PublicNotebook {
   enabled: boolean;
@@ -289,6 +310,8 @@ export interface PublicResearchEpisode {
   }>;
   outcome?: string;
   nextStep?: string;
+  /** The listed source being read while status is `reading`. */
+  readingSourceId?: string;
 }
 export interface PublicCreation {
   id: string;
@@ -314,6 +337,7 @@ export interface PublicSnapshot {
   artifacts?: PublicArtifact[];
   wishes?: PublicWish[];
   notebook?: PublicNotebook;
+  thoughts?: PublicThoughts;
 }
 
 export interface PublicArtifact {

@@ -282,6 +282,25 @@ it('halts on a quota failure after deltas, preserving usage and disabling future
   });
   expect(fixture.fetcher).toHaveBeenCalledTimes(2);
 });
+it('names an unrecognised failure reported inside the stream and gives it a timed cooldown', async () => {
+  const fixture = client(() =>
+    stream(
+      frame({
+        type: 'response.failed',
+        response: { error: { code: 'server_error', message: 'PRIVATE-BODY-CANARY' } },
+      }),
+    ),
+  );
+  const failure = await new ChatGPTDecisionProvider(fixture.api)
+    .propose(context)
+    .catch((error: unknown) => error);
+  expect(failure).toMatchObject({ code: 'request_failed', providerError: 'server_error' });
+  expect(String(failure)).not.toContain('PRIVATE');
+  expect(fixture.store.load()?.pause).toMatchObject({
+    code: 'request_failed',
+    until: expect.any(Number),
+  });
+});
 it.each(['response.incomplete', 'error'])(
   'rejects %s and never promotes partial text',
   async (type) => {

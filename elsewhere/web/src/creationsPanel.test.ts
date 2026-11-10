@@ -122,10 +122,9 @@ describe('character creations shelf', () => {
             createdAt: 1,
           },
         ],
-        onNotebook: noop,
+        tab: 'about',
         onMessage: noop,
         onViewpoint: noop,
-        onMemories: noop,
         onWishes: noop,
       }),
     );

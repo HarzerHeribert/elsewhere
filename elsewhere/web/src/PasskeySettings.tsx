@@ -26,7 +26,7 @@ export function PasskeySignIn({ session }: { session: AccountSession }) {
         <p className="privacy-note">
           No Elsewhere passkey yet? Sign in{' '}
           {session.capabilities.emailLinkAuthEnabled ? 'with an email link' : 'with another method'}{' '}
-          first, then add one under Your account → Passkeys.
+          first, then add one under Settings → Sign-in & security.
         </p>
       )}
     </div>

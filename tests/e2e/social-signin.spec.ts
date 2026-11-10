@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openSettings } from './settings-fixture';
 
 const guest = {
   user: null,
@@ -115,7 +116,7 @@ test('an existing owner links identities explicitly only after unlocking and sho
     route.fulfill({ contentType: 'text/html', body: '<title>OAuth fixture</title>' }),
   );
   await page.goto('/');
-  await page.getByRole('button', { name: 'Your account', exact: true }).click();
+  await openSettings(page, 'Sign-in & security');
   let connections = page.getByRole('region', { name: 'Linked sign-in accounts', exact: true });
   await expect(connections).toContainText('GitHub · Linked');
   await expect(connections.getByRole('button', { name: 'Link GitHub', exact: true })).toHaveCount(

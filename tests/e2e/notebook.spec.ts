@@ -69,12 +69,19 @@ async function openNotebookThroughHubert(page: Page) {
   await expect(panel(page).getByRole('heading', { name: 'Hubert', exact: true })).toBeVisible();
   await expect(panel(page)).not.toContainText('TEMPLATE-THOUGHT-CANARY');
   await expect(panel(page)).not.toContainText('TEMPLATE-REFLECTION-CANARY');
-  await panel(page).getByRole('button', { name: 'Notebook', exact: true }).click();
-  await expect(panel(page).getByRole('button', { name: 'Notebook', exact: true })).toHaveAttribute(
+  await expect(panel(page).getByRole('button', { name: 'Right now', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
-  await expect(panel(page).getByText('Hubert’s notebook', { exact: true })).toBeVisible();
+  await panel(page).getByRole('button', { name: 'My notebook', exact: true }).click();
+  await expect(
+    panel(page).getByRole('button', { name: 'My notebook', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    panel(page).getByText('Questions, ideas and changing opinions, in my own words.', {
+      exact: true,
+    }),
+  ).toBeVisible();
 }
 
 test('Hubert’s notebook is discoverable and follows real snapshot draft changes through completion', async ({
@@ -98,7 +105,7 @@ test('Hubert’s notebook is discoverable and follows real snapshot draft change
   state.runtime.tick++;
   state.notebook!.draft = { id: 'draft-one', at: epoch + 1_000, text: 'The shortest tube' };
   const draft = panel(page).getByLabel('Notebook draft');
-  await expect(draft.getByRole('status')).toHaveText('Writing a note…');
+  await expect(draft.getByRole('status')).toHaveText('I’m writing this now');
   await expect(draft.locator('p')).toHaveText('The shortest tube');
   // A poll with unchanged data must not fabricate extra words or replay a typewriter animation.
   await page.waitForResponse(
@@ -137,7 +144,7 @@ test('empty notebook and hostile text remain honest, escaped and usable on mobil
   await openNotebookThroughHubert(page);
   await expect(
     panel(page).getByText(
-      'His notebook is quiet for now. Notes appear when he has something to share.',
+      'My notebook is quiet for now. Notes appear when I have something to share.',
       { exact: true },
     ),
   ).toBeVisible();

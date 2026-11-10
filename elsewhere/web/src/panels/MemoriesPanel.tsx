@@ -1,0 +1,132 @@
+import { useState } from 'react';
+import type { PublicMemory } from '@elsewhere/character-interfaces';
+import { formatDay, formatTime } from '../formatTime';
+import { worldDay } from '../activityStory';
+import { Icon } from '../Icon';
+
+type Sort = 'place' | 'time' | 'source';
+interface Group {
+  id: string;
+  title: string;
+  note?: string;
+  placeId?: string;
+  memories: PublicMemory[];
+}
+const readable = (id: string) => id.replace(/-/g, ' ');
+
+function groups(
+  memories: PublicMemory[],
+  sort: Sort,
+  placeName: (id: string) => string,
+  startedAt?: number,
+): Group[] {
+  const result = new Map<string, Group>();
+  const add = (id: string, group: Omit<Group, 'id' | 'memories'>, memory: PublicMemory) => {
+    let value = result.get(id);
+    if (!value) result.set(id, (value = { id, memories: [], ...group }));
+    value.memories.push(memory);
+  };
+  for (const memory of memories) {
+    if (sort === 'time') {
+      const day = startedAt === undefined ? 0 : worldDay(memory.at, startedAt);
+      add('day:' + day, { title: day ? formatDay(day) : 'Everything I remember' }, memory);
+    } else if (memory.sourceUrl)
+      add(
+        'reading',
+        {
+          title: 'From my reading',
+          note: 'Things I learned outside the world, each with its source',
+        },
+        memory,
+      );
+    else if (sort === 'source')
+      add('seen', { title: 'From what I saw', note: 'Things I noticed in Elsewhere' }, memory);
+    else if (memory.placeId)
+      add(
+        'place:' + memory.placeId,
+        { title: placeName(memory.placeId), placeId: memory.placeId },
+        memory,
+      );
+    else add('nowhere', { title: 'Along the way' }, memory);
+  }
+  return [...result.values()];
+}
+
+export function MemoriesPanel({
+  memories,
+  places = [],
+  startedAt,
+  onShowPlace,
+}: {
+  memories: readonly PublicMemory[];
+  places?: ReadonlyArray<{ id: string; name: string }>;
+  startedAt?: number;
+  onShowPlace?: (placeId: string) => void;
+}) {
+  const [sort, setSort] = useState<Sort>('place');
+  const newest = [...memories].sort((a, b) => b.at - a.at);
+  const placeName = (id: string) => places.find((place) => place.id === id)?.name ?? readable(id);
+  const list = groups(newest, sort, placeName, startedAt);
+  return (
+    <div className="memories">
+      <div className="sort-row">
+        <span>What I keep, sorted by</span>
+        <div className="ew-segments" role="group" aria-label="Sort memories">
+          {(['place', 'time', 'source'] as const).map((value) => (
+            <button
+              key={value}
+              className="ew-segment"
+              aria-pressed={sort === value}
+              onClick={() => setSort(value)}
+            >
+              {value === 'place' ? 'Place' : value === 'time' ? 'Time' : 'Source'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {list.map((group, index) => (
+        <details className="memory-group" key={sort + group.id} open={index === 0}>
+          <summary>
+            <span className="memory-count">{group.memories.length}</span>
+            <span className="memory-group-title">
+              <strong>{group.title}</strong>
+              {group.note && <small>{group.note}</small>}
+            </span>
+            <Icon name="chevron-down" />
+          </summary>
+          {group.placeId && onShowPlace && places.some((place) => place.id === group.placeId) && (
+            <button className="show-place" onClick={() => onShowPlace(group.placeId!)}>
+              <Icon name="pin" />
+              Show this place in the world
+            </button>
+          )}
+          {group.memories.map((memory) => (
+            <article className="memory-row" key={memory.id}>
+              <time>
+                {sort !== 'time' && startedAt !== undefined && (
+                  <>D{worldDay(memory.at, startedAt)} </>
+                )}
+                {formatTime(memory.at)}
+              </time>
+              <p>{memory.summary}</p>
+              {sort !== 'place' && memory.placeId && <small>{placeName(memory.placeId)}</small>}
+              {memory.sourceUrl && (
+                <a
+                  href={memory.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-button"
+                >
+                  {memory.sourceTitle ?? 'External source'} ↗
+                </a>
+              )}
+            </article>
+          ))}
+        </details>
+      ))}
+      {!memories.length && (
+        <p className="empty-state">Memories appear as I experience the world.</p>
+      )}
+    </div>
+  );
+}

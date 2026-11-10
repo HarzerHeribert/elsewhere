@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openSettings } from './settings-fixture';
 import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { createFixtureAccount, waitForFixtureAuthWindow } from './auth-fixture';
 
@@ -33,8 +34,7 @@ test('real signed assertions reject another account, missing verification, a for
       expect(response.status()).toBe(200);
       const account = await (await page.request.get('/api/account')).json();
       await page.reload();
-      await page.getByRole('button', { name: 'Your account', exact: true }).click();
-      const dialog = page.getByRole('dialog');
+      const dialog = await openSettings(page, 'Sign-in & security');
       const settings = dialog.getByRole('region', { name: 'Account passkeys', exact: true });
       await settings.getByLabel('Passkey name', { exact: true }).fill(`${name} key`);
       await settings.getByRole('button', { name: 'Add a passkey', exact: true }).click();

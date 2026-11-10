@@ -100,6 +100,7 @@ const server = createApiServer({
   createCreation: (input) => controller!.createCreation(input),
   pinCreation: (id, pinned) => controller!.pinCreation(id, pinned),
   resolveWish: (id, decision) => controller!.resolveWish(id, decision),
+  setThoughts: (enabled) => controller!.setThoughts(enabled),
 });
 server.requestTimeout = 20_000;
 server.headersTimeout = 10_000;

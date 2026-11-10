@@ -2,7 +2,12 @@ import type { AddressInfo } from 'node:net';
 import { request, type IncomingMessage } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccountSummary, PublicSnapshot } from '@elsewhere/character-interfaces';
-import { closeApiServer, createApiServer, type ApiDependencies } from '../src/http.js';
+import {
+  closeApiServer,
+  createApiServer,
+  publicSnapshot,
+  type ApiDependencies,
+} from '../src/http.js';
 import { createInitialWorld } from '../src/world.js';
 
 const token = 'owner-token-long-enough-for-security-tests';
@@ -1012,4 +1017,73 @@ it('exposes configured social provider IDs publicly and linked IDs only to their
   const signed = await fetch(url + '/api/account').then((r) => r.json());
   expect(signed.linkedSocialProviders).toEqual(['github']);
   expect(signed.managedCharacterIds).toEqual([]);
+});
+
+it('switches shared thoughts only for the character owner, and projects them field by field', async () => {
+  const setThoughts = vi.fn(async (_enabled: boolean) => fixture());
+  const { url } = await start({ setThoughts });
+  const post = (path: string, body: unknown = {}, bearer = true) =>
+    fetch(url + path, {
+      method: 'POST',
+      headers: {
+        origin: 'http://127.0.0.1:5173',
+        'content-type': 'application/json',
+        ...(bearer ? { authorization: 'Bearer ' + token } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  expect((await post('/api/admin/thoughts-off', {}, false)).status).toBe(401);
+  expect((await post('/api/admin/thoughts-off', { enabled: true })).status).toBe(400);
+  expect(setThoughts).not.toHaveBeenCalled();
+  expect((await post('/api/admin/thoughts-off')).status).toBe(200);
+  expect((await post('/api/admin/thoughts-on')).status).toBe(200);
+  expect(setThoughts.mock.calls).toEqual([[false], [true]]);
+  expect((await post('/api/admin/thoughts-maybe')).status).toBe(404);
+
+  const projected = publicSnapshot({
+    ...fixture(),
+    thoughts: {
+      available: true,
+      enabled: true,
+      entries: [
+        {
+          id: 't',
+          at: 1,
+          text: 'x'.repeat(400),
+          placeId: 'pond',
+          secret: 'PRIVATE-CANARY',
+        } as never,
+      ],
+    },
+    notebook: {
+      enabled: true,
+      entries: [
+        {
+          id: 'n',
+          at: 1,
+          text: 'A note.',
+          sourceIds: [],
+          topics: [
+            { kind: 'place', id: 'pond', label: 'The pond' },
+            { kind: 'reading', id: 'javascript:alert(1)', label: 'Unsafe' },
+            {
+              kind: 'reading',
+              id: 'https://example.org/a',
+              label: 'Safe',
+              secret: 'PRIVATE-CANARY',
+            } as never,
+          ],
+        },
+      ],
+    },
+  });
+  expect(projected.thoughts).toEqual({
+    available: true,
+    enabled: true,
+    entries: [{ id: 't', at: 1, text: 'x'.repeat(200), placeId: 'pond' }],
+  });
+  expect(projected.notebook!.entries[0]!.topics).toEqual([
+    { kind: 'place', id: 'pond', label: 'The pond' },
+    { kind: 'reading', id: 'https://example.org/a', label: 'Safe' },
+  ]);
 });

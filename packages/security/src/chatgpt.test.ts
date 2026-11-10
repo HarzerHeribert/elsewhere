@@ -5,7 +5,43 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { ChatGPTError, ChatGPTStore, type ChatGPTAccount } from './chatgpt-store';
-import { beginChatGPTSignIn, ChatGPTSession, validateChatGPTIdentity } from './chatgpt';
+import {
+  beginChatGPTSignIn,
+  chatGPTFailure,
+  ChatGPTSession,
+  validateChatGPTIdentity,
+} from './chatgpt';
+
+it('keeps the provider’s name for an unrecognised failure only as a short identifier, apart from the message', () => {
+  const failure = chatGPTFailure(
+    { error: { code: 'server_error', message: 'PRIVATE-BODY-CANARY' } },
+    500,
+    'req_fixture-1',
+  );
+  expect(failure).toMatchObject({
+    code: 'request_failed',
+    status: 500,
+    requestId: 'req_fixture-1',
+    providerError: 'server_error',
+  });
+  expect(failure.message).toBe('ChatGPT connection: request_failed (HTTP 500).');
+  expect(JSON.stringify({ ...failure })).not.toContain('PRIVATE');
+  // An absent code falls back to the error type; a stream error event's own type says nothing.
+  expect(chatGPTFailure({ error: { code: null, type: 'rate_limit_error' } }).providerError).toBe(
+    'rate_limit_error',
+  );
+  expect(
+    chatGPTFailure({ error: { type: 'error', code: 'rate_limit_exceeded' } }).providerError,
+  ).toBe('rate_limit_exceeded');
+  expect(chatGPTFailure({ error: { type: 'error' } }).providerError).toBeUndefined();
+  expect(chatGPTFailure({ error: null }).providerError).toBeUndefined();
+  for (const text of ['Bearer sk-fixture', 'x'.repeat(65), 'has space', 'UPPER', '<b>', 'a-b.c'])
+    expect(chatGPTFailure({ error: { code: text, type: text } }).providerError).toBeUndefined();
+  // A recognised failure keeps its own code and needs no second name.
+  const known = chatGPTFailure({ error: { code: 'access_denied' } }, 403);
+  expect(known.code).toBe('access_denied');
+  expect(known.providerError).toBeUndefined();
+});
 
 const directories: string[] = [];
 afterEach(() => {

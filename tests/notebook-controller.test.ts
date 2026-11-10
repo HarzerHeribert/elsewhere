@@ -59,6 +59,14 @@ async function fixture(options: ControllerOptions = {}) {
     at: epoch,
   });
   store.saved!.value.hubert.intent = 'PRIVATE-INTENT-CANARY';
+  // Shared thoughts use the same provider; they are off here so every request counted is a note.
+  store.saved!.value.hubert.thoughts = {
+    day: '2026-11-09',
+    calls: 0,
+    lastAtReal: 0,
+    entries: [],
+    disabled: true,
+  };
   store.saved!.value.hubert.memories.push({
     id: 'private-episode',
     sourceEventId: 'private-note',

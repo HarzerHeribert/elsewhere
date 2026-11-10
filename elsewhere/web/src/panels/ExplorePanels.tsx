@@ -12,7 +12,7 @@ import { WorldMap } from '../WorldMap';
 import { EntityDetails, WildlifeDirectory } from '../WildlifePanel';
 import { Icon } from '../Icon';
 
-function placeCenter(place: Place): Position {
+export function placeCenter(place: Place): Position {
   return (
     place.entryPoint ?? {
       x: (place.bounds.minX + place.bounds.maxX) / 2,

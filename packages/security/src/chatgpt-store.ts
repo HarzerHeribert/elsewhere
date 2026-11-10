@@ -19,6 +19,8 @@ import { z } from 'zod';
 /** Operator authentication, deliberately outside character snapshots and connectors. */
 export class ChatGPTError extends Error {
   diagnostics?: { contentType: string; keys: string[]; object?: string; status?: string };
+  /** The provider's own name for an unrecognised failure: a short identifier for the service log. */
+  providerError?: string;
   constructor(
     readonly code: string,
     readonly status?: number,
