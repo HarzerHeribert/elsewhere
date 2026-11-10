@@ -94,6 +94,11 @@ interface WeatherSample {
   temperature: number;
   wind: number;
 }
+/** Longest wait between automatic attempts after failed provider requests, in decision intervals. */
+const MAX_PROVIDER_BACKOFF = 16;
+/** Refusals that stay refused until the owner repairs access; waiting alone does not clear them. */
+const PROVIDER_REFUSALS: ReadonlySet<string> = new Set(['unauthorized', 'not_authorized']);
+
 export interface ControllerState {
   schemaVersion: 1;
   world: WorldState;
@@ -112,6 +117,10 @@ export interface ControllerState {
     invalidDecisionCount?: number;
     /** Consecutive well-formed proposals the world declined; these pace retries, never halt. */
     declinedDecisionCount?: number;
+    /** Consecutive failed provider requests; each one waits longer before the next attempt. */
+    providerFailureCount?: number;
+    /** Wall-clock time of the next automatic attempt after provider trouble. */
+    providerRetryAt?: number;
     providerWorkloadRetries?: Array<'notebook' | 'reflection'>;
     /** Continuous observed rest only; a restart or pause begins a new session. */
     dreamRest?: { id: string; startedAt: number; startedAtReal: number };
@@ -385,6 +394,8 @@ export class ElsewhereController {
       if (active.some((issue) => issue.workload === 'decision')) {
         this.state.runtime.invalidDecisionCount = 0;
         this.state.runtime.declinedDecisionCount = 0;
+        this.state.runtime.providerFailureCount = 0;
+        delete this.state.runtime.providerRetryAt;
         this.state.runtime.providerRetryRequested = true;
         this.state.runtime.lastDecisionAt = -1;
         delete this.state.runtime.activityUntil;
@@ -428,13 +439,20 @@ export class ElsewhereController {
     const issues = (this.state.runtime.providerIssues ??= []);
     const now = this.wallNow();
     const name = publicCharacter(this.state.hubert).name;
+    // Trouble with the provider itself passes without the owner; the notice says so plainly
+    // rather than reading like a reply the model got wrong.
+    const waiting = detail?.retrying === true && kind !== 'invalid';
     const messages = {
       unconfigured: 'No model provider is connected. Connect a provider before retrying.',
-      unavailable:
-        'The model provider is unavailable. Check the connection or sign-in, then retry.',
-      failed:
-        'The provider request failed or returned an invalid response. Check the provider, then retry.',
-      allowance: 'The daily model allowance has been reached. Retry after the allowance resets.',
+      unavailable: waiting
+        ? `The model provider is not available right now. ${name} will try again automatically. If this continues, check the connection or sign-in.`
+        : 'The model provider is unavailable. Check the connection or sign-in, then retry.',
+      failed: waiting
+        ? `A request to the model provider failed. ${name} will try again automatically, waiting longer after each failure.`
+        : 'The provider request failed or returned an invalid response. Check the provider, then retry.',
+      allowance: waiting
+        ? `The daily model allowance has been reached. ${name} will continue when it resets.`
+        : 'The daily model allowance has been reached. Retry after the allowance resets.',
       invalid: detail?.retrying
         ? `The model replied, but its proposed action could not be used. ${name} will reconsider on a following turn.`
         : 'Three consecutive model replies could not be used. No replacement actions were chosen. Review the action feedback, then retry.',
@@ -462,7 +480,7 @@ export class ElsewhereController {
       if (detail) Object.assign(current, detail);
     }
     if (workload === 'decision') {
-      if (detail?.retrying) {
+      if (detail?.retrying && !waiting) {
         this.state.runtime.modelStatus = 'Model replied; reconsidering an unusable action';
         this.state.hubert.activity = {
           kind: 'reconsidering',
@@ -471,13 +489,45 @@ export class ElsewhereController {
         };
         return;
       }
-      this.state.runtime.modelStatus = `${name} is currently unavailable`;
+      this.state.runtime.modelStatus = waiting
+        ? 'Model provider unavailable; trying again automatically'
+        : `${name} is currently unavailable`;
+      const activity = this.state.hubert.activity;
       this.state.hubert.activity = {
         kind: 'unavailable',
         label: 'Currently unavailable',
-        startedAt: this.state.runtime.simulatedAt,
+        // Repeated checks during one outage are one continuous absence.
+        startedAt:
+          activity.kind === 'unavailable' ? activity.startedAt : this.state.runtime.simulatedAt,
       };
     }
+  }
+  /**
+   * Provider trouble passes without the owner: wait, then try again on a later turn. A failed
+   * request may have been charged, so consecutive failures wait progressively longer. An
+   * unavailable provider or an exhausted allowance is only a free local check each interval.
+   */
+  private awaitProvider(kind: 'unavailable' | 'failed' | 'allowance', code?: string) {
+    const failures = this.state.runtime.providerFailureCount ?? 0;
+    const intervals =
+      kind === 'failed' ? Math.min(2 ** Math.max(0, failures - 1), MAX_PROVIDER_BACKOFF) : 1;
+    this.state.runtime.providerRetryAt =
+      this.wallNow() + (this.options.decisionIntervalMs ?? 90_000) * intervals;
+    // A provider that stays away after a failed request keeps the reason it gave.
+    const previous = this.state.runtime.providerIssues?.find(
+      (issue) => issue.workload === 'decision' && !issue.resolvedAt,
+    );
+    const reason =
+      code ??
+      (kind === 'unavailable' && (previous?.kind === 'failed' || previous?.kind === 'unavailable')
+        ? previous.code
+        : undefined);
+    // Refused access is still rechecked for free, but the owner is told it needs repairing.
+    const passes = !reason || !PROVIDER_REFUSALS.has(reason);
+    this.reportProviderIssue(kind, 'decision', {
+      ...(reason ? { code: reason } : {}),
+      ...(passes ? { retrying: true } : {}),
+    });
   }
   private resolveProviderIssue(workload: NonNullable<ProviderIssue['workload']>) {
     for (const issue of this.state.runtime.providerIssues ?? [])
@@ -582,25 +632,36 @@ export class ElsewhereController {
           now - s.runtime.lastDecisionAt >= (this.options.decisionIntervalMs ?? 90_000)));
     if (ready) {
       const observation = observeWorld(s.world, 'hubert', now);
+      // Only a missing provider or repeatedly unreadable replies wait for the owner. Failed
+      // requests, outages and an exhausted allowance pass by themselves, so they only delay the
+      // next attempt. Judging by kind also releases failures stored by releases that stopped.
       const blocked = s.runtime.providerIssues?.some(
-        (issue) => issue.workload === 'decision' && !issue.resolvedAt && !issue.retrying,
+        (issue) =>
+          issue.workload === 'decision' &&
+          !issue.resolvedAt &&
+          (issue.kind === 'unconfigured' || (issue.kind === 'invalid' && !issue.retrying)),
       );
-      if (blocked && !s.runtime.providerRetryRequested) {
+      const wait = (s.runtime.providerRetryAt ?? 0) - this.wallNow();
+      // A wait beyond the longest one ever scheduled means the clock moved; do not honour it.
+      const waiting =
+        wait > 0 && wait <= (this.options.decisionIntervalMs ?? 90_000) * MAX_PROVIDER_BACKOFF;
+      if ((blocked || waiting) && !s.runtime.providerRetryRequested) {
         await this.commit();
         return this.getSnapshot();
       }
       delete s.runtime.providerRetryRequested;
+      delete s.runtime.providerRetryAt;
       let decision;
       const provider = this.options.modelProvider;
       if (!provider) this.reportProviderIssue('unconfigured');
-      else if (provider.isAvailable?.() === false) this.reportProviderIssue('unavailable');
+      else if (provider.isAvailable?.() === false) this.awaitProvider('unavailable');
       else {
         const mailContext = await this.mailPlanningContext();
         const managed = provider.managesAllowance === true;
         const allowance = managed
           ? s.modelAllowance
           : reserveModelCall(s.modelAllowance, this.wallNow(), this.options.modelMaximum ?? 100);
-        if (!allowance) this.reportProviderIssue('allowance');
+        if (!allowance) this.awaitProvider('allowance');
         else {
           s.modelAllowance = allowance;
           if (!managed) await this.commit();
@@ -619,6 +680,7 @@ export class ElsewhereController {
             this.resolveProviderIssue('decision');
             s.runtime.invalidDecisionCount = 0;
             s.runtime.declinedDecisionCount = 0;
+            s.runtime.providerFailureCount = 0;
             delete decision.state.lastDecisionProblem;
             s.runtime.modelStatus = 'Model connected';
           } catch (error) {
@@ -633,6 +695,8 @@ export class ElsewhereController {
               const count = declined ? 0 : (s.runtime.invalidDecisionCount ?? 0) + 1;
               s.runtime.invalidDecisionCount = count;
               s.runtime.declinedDecisionCount = declined;
+              // Any reply at all means the provider itself is working.
+              s.runtime.providerFailureCount = 0;
               s.hubert.lastDecisionProblem = {
                 at: now,
                 code: error.code,
@@ -667,11 +731,14 @@ export class ElsewhereController {
                 fields: [...error.fields],
                 retrying: count < 3,
               });
-            } else if (error instanceof BrokerModelError) {
-              this.reportProviderIssue('failed', 'decision', {
-                code: error.diagnostic?.providerCode ?? error.code,
-              });
-            } else this.reportProviderIssue('failed', 'decision', { code: 'decision_error' });
+            } else {
+              s.runtime.providerFailureCount = (s.runtime.providerFailureCount ?? 0) + 1;
+              const code =
+                error instanceof BrokerModelError
+                  ? (error.diagnostic?.providerCode ?? error.code)
+                  : 'decision_error';
+              this.awaitProvider(PROVIDER_REFUSALS.has(code) ? 'unavailable' : 'failed', code);
+            }
           } finally {
             this.modelDispatchActive = false;
           }
@@ -1115,6 +1182,8 @@ export class ElsewhereController {
       const issues = structuredClone(this.state.runtime.providerIssues);
       const invalidDecisionCount = this.state.runtime.invalidDecisionCount;
       const declinedDecisionCount = this.state.runtime.declinedDecisionCount;
+      const providerFailureCount = this.state.runtime.providerFailureCount;
+      const providerRetryAt = this.state.runtime.providerRetryAt;
       const creations = structuredClone(this.state.creations);
       const previous = this.state.hubert;
       const worldVersion = this.state.world.version;
@@ -1125,6 +1194,9 @@ export class ElsewhereController {
       this.state.runtime.providerIssues = issues;
       this.state.runtime.invalidDecisionCount = invalidDecisionCount;
       this.state.runtime.declinedDecisionCount = declinedDecisionCount;
+      // A fictional reset is no reason to ask a failing provider again any sooner.
+      if (providerFailureCount) this.state.runtime.providerFailureCount = providerFailureCount;
+      if (providerRetryAt) this.state.runtime.providerRetryAt = providerRetryAt;
       if (routing) this.state.modelRouting = routing;
       this.state.hubert = preserveWishLedger(this.state.hubert, previous);
       this.state.hubert.dreams = pruneDreamState(previous.dreams, []);

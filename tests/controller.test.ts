@@ -452,9 +452,12 @@ describe('authoritative controller lifecycle', () => {
       modelMaximum: 1,
     });
     const first = await controller.step();
-    expect(first.runtime.modelStatus).toBe('Hubert is currently unavailable');
+    expect(first.runtime.modelStatus).toBe(
+      'Model provider unavailable; trying again automatically',
+    );
+    expect(first.character.activity).toBe('Currently unavailable');
     expect(controller.getCharacterIssues()).toContainEqual(
-      expect.objectContaining({ kind: 'failed' }),
+      expect.objectContaining({ kind: 'failed', retrying: true }),
     );
     await controller.step();
     expect(propose).toHaveBeenCalledOnce();

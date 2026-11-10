@@ -49,17 +49,36 @@ const knownErrors = new Set([
   'chatpass_v2_invalid_authorization_context',
 ]);
 
+/** The only shape of provider error name ever kept or logged: a short lowercase identifier. */
+export const PROVIDER_ERROR_NAME = /^[a-z][a-z0-9_]{0,63}$/;
+
 /** Never copy provider bodies, authorization codes or credentials into exception messages. */
 export function chatGPTFailure(
   payload: unknown,
   status?: number,
   requestId?: string,
 ): ChatGPTError {
-  const body = payload as { error?: { code?: unknown } | string } | undefined;
-  const candidate = typeof body?.error === 'string' ? body.error : body?.error?.code;
-  const code =
-    typeof candidate === 'string' && knownErrors.has(candidate) ? candidate : 'request_failed';
-  return new ChatGPTError(code, status, requestId?.match(/^[\w-]{1,200}$/)?.[0]);
+  const body = payload as
+    | { error?: { code?: unknown; type?: unknown } | string | null }
+    | undefined;
+  const detail = typeof body?.error === 'object' ? body.error : undefined;
+  const candidate = typeof body?.error === 'string' ? body.error : detail?.code;
+  const known = typeof candidate === 'string' && knownErrors.has(candidate);
+  const failure = new ChatGPTError(
+    known ? candidate : 'request_failed',
+    status,
+    requestId?.match(/^[\w-]{1,200}$/)?.[0],
+  );
+  if (!known) {
+    // An unrecognised failure keeps the provider's name for it, so an outage can be told from
+    // a rate limit afterwards. Only a short plain identifier qualifies, never free text.
+    const named = [candidate, detail?.type].find(
+      (value): value is string =>
+        typeof value === 'string' && value !== 'error' && PROVIDER_ERROR_NAME.test(value),
+    );
+    if (named) failure.providerError = named;
+  }
+  return failure;
 }
 
 export async function boundedChatGPTJson(response: Response, maxBytes = 96000): Promise<unknown> {

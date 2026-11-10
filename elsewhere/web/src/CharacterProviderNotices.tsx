@@ -16,6 +16,23 @@ function feedback(code: ProviderIssue['code']) {
       return 'The model answered, but its reply did not match the allowed action format.';
     case 'unavailable_action':
       return 'The model chose an action or target that was not available at that moment.';
+    case 'request_failed':
+    case 'provider_unavailable':
+    case 'network_unavailable':
+    case 'network_or_stream_unavailable':
+    case 'unavailable':
+    case 'request_timeout':
+    case 'deadline_exceeded':
+    case 'busy':
+      return 'The provider did not return a reply for this request. This is a service or connection problem, not a problem with the reply format.';
+    case 'daily_limit':
+    case 'daily_token_limit':
+      return 'The inference service has reached its daily allowance and accepts requests again when it resets. This is not a problem with the reply format.';
+    case 'usage_unknown':
+      return 'Too many requests today ended without a usage report, so the inference service paused as a spending precaution until its daily reset.';
+    case 'unauthorized':
+    case 'not_authorized':
+      return 'The inference service refused this world’s access. This does not pass by itself: repair the connection or sign-in, then retry.';
     case 'response_incomplete':
     case 'stream_interrupted':
       return 'The model response ended before it was complete.';
@@ -68,7 +85,13 @@ export function CharacterProviderNotices({
     .filter((issue) => issue.resolvedAt !== undefined)
     .sort((a, b) => b.resolvedAt! - a.resolvedAt!);
   const retryCharacters = [
-    ...new Set(active.filter((issue) => !issue.retrying).map((i) => i.characterId)),
+    // A paced correction needs no retry; provider trouble that passes by itself may be retried
+    // at once by an owner who has just fixed the connection.
+    ...new Set(
+      active
+        .filter((issue) => !issue.retrying || issue.kind !== 'invalid')
+        .map((i) => i.characterId),
+    ),
   ];
   const retryScheduled = (characterId: string) =>
     requested[characterId] === issueSignature(active, characterId);
@@ -90,7 +113,9 @@ export function CharacterProviderNotices({
             {retryScheduled(issue.characterId)
               ? 'Retry scheduled'
               : issue.retrying
-                ? 'Reconsidering'
+                ? issue.kind === 'invalid'
+                  ? 'Reconsidering'
+                  : 'Trying again automatically'
                 : 'Needs attention'}
           </strong>
           <p>

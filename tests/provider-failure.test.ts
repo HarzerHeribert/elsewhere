@@ -43,7 +43,7 @@ describe('model-driven life without a local substitute', () => {
     }
   });
 
-  it('retains one private failure through restart and resumes only after an owner-requested successful retry', async () => {
+  it('retains one private failure through restart, waits, then recovers without the owner', async () => {
     const store = new MemoryStore();
     let now = epoch;
     const propose = vi
@@ -55,19 +55,20 @@ describe('model-driven life without a local substitute', () => {
     await first.step();
     const issues = first.getCharacterIssues();
     expect(issues).toHaveLength(1);
-    expect(issues[0]).toMatchObject({ kind: 'failed', since: epoch });
+    expect(issues[0]).toMatchObject({ kind: 'failed', retrying: true, since: epoch });
+    expect(issues[0].message).toContain('Hubert will try again automatically');
     expect(JSON.stringify(first.getSnapshot())).not.toContain('PRIVATE-');
     expect(JSON.stringify(issues)).not.toContain('PRIVATE-');
     await first.close();
     const restarted = await new ElsewhereController(store, options).init();
     try {
-      now += 86_400_000;
+      // The wait survives the restart: nothing is sent before one decision interval has passed.
+      now += 89_000;
       for (let i = 0; i < 20; i++) await restarted.step();
       expect(propose).toHaveBeenCalledTimes(1);
       expect(restarted.getCharacterIssues()).toEqual(issues);
-      await restarted.retryCharacterProvider();
-      expect(restarted.getCharacterIssues()[0].resolvedAt).toBeUndefined();
-      await restarted.tick();
+      now += 1_000;
+      await restarted.step();
       expect(propose).toHaveBeenCalledTimes(2);
       expect(restarted.getCharacterIssues()[0]).toMatchObject({
         id: issues[0].id,
@@ -328,7 +329,7 @@ it('still stops after three unreadable replies, and a declined proposal does not
   }
 });
 
-it('a real request failure interrupts automatic action correction immediately and keeps errors private', async () => {
+it('a real request failure after an unusable reply waits for the provider, is not counted as unusable, and keeps errors private', async () => {
   const { InvalidDecisionError } = await import('../characters/runtime/src/index');
   const store = new MemoryStore();
   const propose = vi
@@ -346,11 +347,256 @@ it('a real request failure interrupts automatic action correction immediately an
     expect(propose).toHaveBeenCalledTimes(2);
     const issue = controller.getCharacterIssues()[0];
     expect(issue.kind).toBe('failed');
-    expect(issue.retrying).toBeUndefined();
+    expect(issue.retrying).toBe(true);
     expect(issue.code).toBe('decision_error');
+    expect(store.saved!.value.runtime.invalidDecisionCount).toBe(1);
     expect(JSON.stringify(controller.getSnapshot())).not.toContain('PRIVATE-');
     expect(JSON.stringify(controller.getCharacterIssues())).not.toContain('PRIVATE-');
   } finally {
     await controller.close();
+  }
+});
+
+it('waits longer after each consecutive failed request and recovers without the owner', async () => {
+  const store = new MemoryStore();
+  let now = epoch;
+  const propose = vi.fn(async (): Promise<unknown> => {
+    throw new Error('upstream unavailable');
+  });
+  const controller = await new ElsewhereController(store, {
+    now: () => now,
+    decisionIntervalMs: 90_000,
+    modelProvider: { id: 'fixture', propose },
+  }).init();
+  const intervalsUntilNextCall = async () => {
+    const calls = propose.mock.calls.length;
+    for (let waited = 1; waited <= 40; waited++) {
+      now += 90_000;
+      await controller.step();
+      if (propose.mock.calls.length > calls) return waited;
+    }
+    return Infinity;
+  };
+  try {
+    await controller.step();
+    const waits: number[] = [];
+    for (let attempt = 0; attempt < 6; attempt++) waits.push(await intervalsUntilNextCall());
+    // One interval, doubling per failure, never more than sixteen: the character keeps trying.
+    expect(waits).toEqual([1, 2, 4, 8, 16, 16]);
+    expect(controller.getCharacterIssues()).toMatchObject([
+      { kind: 'failed', code: 'decision_error', retrying: true },
+    ]);
+    expect(controller.getSnapshot().runtime.modelStatus).toBe(
+      'Model provider unavailable; trying again automatically',
+    );
+    expect(controller.getSnapshot().character.activity).toBe('Currently unavailable');
+    expect(store.saved!.value.hubert.turn).toBe(0);
+    propose.mockImplementation(async () => ({ type: 'reflect' }));
+    expect(await intervalsUntilNextCall()).toBe(16);
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(now);
+    expect(store.saved!.value.runtime.providerFailureCount).toBe(0);
+    expect(store.saved!.value.runtime.providerRetryAt).toBeUndefined();
+    // A later failure starts again from a single interval.
+    propose.mockRejectedValueOnce(new Error('upstream unavailable'));
+    expect(await intervalsUntilNextCall()).toBe(1);
+    expect(controller.getCharacterIssues().at(-1)).toMatchObject({
+      kind: 'failed',
+      retrying: true,
+    });
+    expect(await intervalsUntilNextCall()).toBe(1);
+    expect(controller.getCharacterIssues().at(-1)!.resolvedAt).toBe(now);
+  } finally {
+    await controller.close();
+  }
+});
+
+it('lets the owner skip the wait after a failed request', async () => {
+  const store = new MemoryStore();
+  const propose = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('upstream unavailable'))
+    .mockResolvedValue({ type: 'reflect' });
+  const controller = await new ElsewhereController(store, {
+    now: () => epoch,
+    modelProvider: { id: 'fixture', propose },
+  }).init();
+  try {
+    await controller.step();
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(1);
+    await controller.retryCharacterProvider();
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(2);
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(epoch);
+  } finally {
+    await controller.close();
+  }
+});
+
+it('checks an unavailable provider once per interval without spending a call and resumes when it returns', async () => {
+  const store = new MemoryStore();
+  let now = epoch;
+  let available = false;
+  const propose = vi.fn(async (): Promise<unknown> => ({ type: 'reflect' }));
+  const controller = await new ElsewhereController(store, {
+    now: () => now,
+    modelProvider: { id: 'fixture', propose, isAvailable: () => available },
+  }).init();
+  try {
+    for (let i = 0; i < 5; i++) await controller.step();
+    const waiting = controller.getCharacterIssues();
+    expect(waiting).toMatchObject([{ kind: 'unavailable', retrying: true, lastAt: epoch }]);
+    expect(waiting[0].message).toContain('Hubert will try again automatically');
+    now += 90_000;
+    await controller.step();
+    expect(controller.getCharacterIssues()).toMatchObject([{ kind: 'unavailable', lastAt: now }]);
+    expect(propose).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().runtime.modelCalls).toBe(0);
+    available = true;
+    now += 90_000;
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(1);
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(now);
+  } finally {
+    await controller.close();
+  }
+});
+
+it('continues by itself once the daily allowance resets', async () => {
+  const store = new MemoryStore();
+  let now = epoch;
+  const propose = vi.fn(async (): Promise<unknown> => ({ type: 'reflect' }));
+  const controller = await new ElsewhereController(store, {
+    now: () => now,
+    modelMaximum: 1,
+    modelProvider: { id: 'fixture', propose },
+  }).init();
+  try {
+    await controller.step();
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(1);
+    expect(controller.getCharacterIssues()).toMatchObject([{ kind: 'allowance', retrying: true }]);
+    expect(controller.getCharacterIssues()[0].message).toContain('will continue when it resets');
+    now += 86_400_000;
+    await controller.step();
+    expect(propose).toHaveBeenCalledTimes(2);
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(now);
+  } finally {
+    await controller.close();
+  }
+});
+
+const brokerProvider = (fetcher: typeof fetch, now: () => number) =>
+  new BrokerDecisionProvider(
+    new BrokerModelClient({
+      baseUrl: 'https://inference.example',
+      token: 'fixture-service-credential-'.repeat(2),
+      expectedBinding: {
+        worldId: 'elsewhere',
+        ownerUserId: 'fixture-owner',
+        characterId: 'hubert',
+        connectionId: 'fixture-plan',
+      },
+      fetcher,
+      now,
+    }),
+  );
+
+it('keeps the stated reason while a service stays away after its daily limit, spends nothing, and resumes at the reset', async () => {
+  const store = new MemoryStore();
+  let now = epoch;
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(
+      Response.json({ error: 'daily_limit', retryAfterMs: 600_000 }, { status: 429 }),
+    )
+    .mockImplementation(async () => Response.json({ value: { type: 'reflect' } }));
+  const controller = await new ElsewhereController(store, {
+    now: () => now,
+    modelProvider: brokerProvider(fetcher, () => now),
+  }).init();
+  try {
+    await controller.step();
+    expect(controller.getCharacterIssues()).toMatchObject([
+      { kind: 'failed', code: 'daily_limit', retrying: true },
+    ]);
+    for (let i = 0; i < 6; i++) {
+      now += 90_000;
+      await controller.step();
+    }
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(controller.getCharacterIssues()).toMatchObject([
+      { kind: 'unavailable', code: 'daily_limit', retrying: true, lastAt: now },
+    ]);
+    now += 90_000;
+    await controller.step();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(now);
+  } finally {
+    await controller.close();
+  }
+});
+
+it('reports refused access as needing the owner, rechecks it without a request, and recovers on retry after repair', async () => {
+  const store = new MemoryStore();
+  let now = epoch;
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ error: 'not_authorized' }, { status: 403 }))
+    .mockImplementation(async () => Response.json({ value: { type: 'reflect' } }));
+  const controller = await new ElsewhereController(store, {
+    now: () => now,
+    modelProvider: brokerProvider(fetcher, () => now),
+  }).init();
+  try {
+    for (let i = 0; i < 20; i++) {
+      await controller.step();
+      const [issue] = controller.getCharacterIssues();
+      expect(issue).toMatchObject({ kind: 'unavailable', code: 'not_authorized' });
+      expect(issue.retrying).toBeUndefined();
+      expect(issue.message).toContain('Check the connection or sign-in, then retry');
+      now += 90_000;
+    }
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().runtime.modelStatus).toBe('Hubert is currently unavailable');
+    await controller.retryCharacterProvider();
+    await controller.step();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(controller.getCharacterIssues()[0].resolvedAt).toBe(now);
+  } finally {
+    await controller.close();
+  }
+});
+
+it('releases a failure stored by an earlier release that waited for the owner', async () => {
+  const store = new MemoryStore();
+  const failing = await new ElsewhereController(store, {
+    now: () => epoch,
+    modelProvider: {
+      id: 'fixture',
+      propose: async () => {
+        throw new Error('upstream unavailable');
+      },
+    },
+  }).init();
+  await failing.step();
+  await failing.close();
+  // Earlier releases stored the failure without a scheduled attempt and stopped there.
+  const runtime = store.saved!.value.runtime;
+  delete runtime.providerIssues![0].retrying;
+  delete runtime.providerRetryAt;
+  delete runtime.providerFailureCount;
+  const propose = vi.fn(async (): Promise<unknown> => ({ type: 'reflect' }));
+  const next = await new ElsewhereController(store, {
+    now: () => epoch,
+    simulationStepMs: 30_000,
+    modelProvider: { id: 'fixture', propose },
+  }).init();
+  try {
+    for (let ticks = 0; ticks < 10 && !propose.mock.calls.length; ticks++) await next.tick();
+    expect(propose).toHaveBeenCalledTimes(1);
+    expect(next.getCharacterIssues()[0].resolvedAt).toBe(epoch);
+  } finally {
+    await next.close();
   }
 });
