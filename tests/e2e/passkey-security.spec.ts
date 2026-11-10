@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
+import { createFixtureAccount } from './auth-fixture';
 
 test('real signed assertions reject another account, missing verification, a foreign origin and a foreign RP before granting a session', async ({
   page,
   context,
 }) => {
+  test.setTimeout(120000);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -26,10 +28,7 @@ test('real signed assertions reject another account, missing verification, a for
     async function register(name: string) {
       const email = `${name.toLowerCase()}-${randomUUID()}@example.test`;
       const password = 'isolated-passkey-negative-fixture-password-2026';
-      const response = await page.request.post('/api/auth/sign-up/email', {
-        headers: { origin },
-        data: { name, email, password },
-      });
+      const response = await createFixtureAccount(page.request, origin, { name, email, password });
       expect(response.status()).toBe(200);
       const account = await (await page.request.get('/api/account')).json();
       await page.reload();

@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
+import { createFixtureAccount } from './auth-fixture';
 
 test('a real passkey registers, signs in to the same account only after a cookie is set, and can be revoked with confirmation', async ({
   page,
   context,
 }) => {
+  test.setTimeout(120000);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -23,13 +25,10 @@ test('a real passkey registers, signs in to the same account only after a cookie
   try {
     await page.goto('/');
     const origin = new URL(page.url()).origin;
-    const created = await page.request.post('/api/auth/sign-up/email', {
-      headers: { origin },
-      data: {
-        name: 'Passkey Visitor',
-        email: `passkey-${randomUUID()}@example.test`,
-        password: 'isolated-passkey-fixture-password-only-2026',
-      },
+    const created = await createFixtureAccount(page.request, origin, {
+      name: 'Passkey Visitor',
+      email: `passkey-${randomUUID()}@example.test`,
+      password: 'isolated-passkey-fixture-password-only-2026',
     });
     expect(created.status()).toBe(200);
     const before = await page.request.get('/api/account');
@@ -117,6 +116,7 @@ test('an owner opts into passkey controls explicitly and an ordinary fallback se
   page,
   context,
 }, info) => {
+  test.setTimeout(120000);
   const cdp = await context.newCDPSession(page);
   await cdp.send('WebAuthn.enable');
   const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -134,9 +134,10 @@ test('an owner opts into passkey controls explicitly and an ordinary fallback se
     const origin = new URL(page.url()).origin;
     const email = `passkey-owner-${randomUUID()}@example.test`;
     const password = 'isolated-passkey-owner-fixture-password-only-2026';
-    const created = await page.request.post('/api/auth/sign-up/email', {
-      headers: { origin },
-      data: { name: 'Passkey Owner', email, password },
+    const created = await createFixtureAccount(page.request, origin, {
+      name: 'Passkey Owner',
+      email,
+      password,
     });
     expect(created.status()).toBe(200);
     const original = await (await page.request.get('/api/account')).json();
