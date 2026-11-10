@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import {
   currentThought,
@@ -11,6 +11,7 @@ import {
 } from '../activityStory';
 import { calendarDay, formatDay, formatTime } from '../formatTime';
 import { useWallTime } from '../worldClock';
+import { useRemembered } from '../useRemembered';
 import { Icon } from '../Icon';
 import { NotebookDraft } from './NotebookPanel';
 import { ResearchSteps, ResearchStory, researchStatus } from './ResearchDetails';
@@ -38,6 +39,8 @@ export function ActivityPanel({
   researchId,
   onResearch = () => undefined,
   onMemories,
+  onPlace,
+  onResident,
 }: {
   events: PublicSnapshot['events'];
   memories: PublicSnapshot['memories'];
@@ -54,9 +57,13 @@ export function ActivityPanel({
   researchId?: string | null;
   onResearch?: (id: string | null) => void;
   onMemories?: () => void;
+  /** When given, a place named in the day opens that place. */
+  onPlace?: (placeId: string) => void;
+  /** When given, the day links to the resident's own page. */
+  onResident?: () => void;
 }) {
-  const [filter, setFilter] = useState<StoryFilter>(initialFilter);
-  const [chosenDay, setChosenDay] = useState<number | null>(null);
+  const [filter, setFilter] = useRemembered<StoryFilter>('activity.filter', initialFilter);
+  const [chosenDay, setChosenDay] = useRemembered<number | null>('activity.day', null);
   const toWall = useWallTime();
   const dayOf = useCallback((at: number) => calendarDay(toWall(at)), [toWall]);
   const stories = useMemo(
@@ -88,8 +95,7 @@ export function ActivityPanel({
         items.filter((item) => item.kind === 'memory').length
       : 0;
   const opened = research.find((episode) => episode.id === researchId);
-  if (opened)
-    return <ResearchStory episode={opened} backLabel="Activity" onBack={() => onResearch(null)} />;
+  if (opened) return <ResearchStory episode={opened} />;
   const latest = research.at(-1);
   const live = researchInProgress(latest) ? latest : undefined;
   const thinking = currentThought(thoughts?.entries, now);
@@ -98,6 +104,22 @@ export function ActivityPanel({
   );
   const placeName = (id?: string) =>
     id ? (places.find((place) => place.id === id)?.name ?? id.replace(/-/g, ' ')) : undefined;
+  const where = (id?: string) => {
+    const name = placeName(id);
+    if (!id || !name) return null;
+    return (
+      <>
+        {' · '}
+        {onPlace && places.some((place) => place.id === id) ? (
+          <button className="inline-link" onClick={() => onPlace(id)}>
+            {name}
+          </button>
+        ) : (
+          name
+        )}
+      </>
+    );
+  };
   const showRoutine = (filter === 'highlights' || filter === 'all') && story.routineCount > 0;
   return (
     <div className="activity">
@@ -177,6 +199,11 @@ export function ActivityPanel({
               <span>{thinking.text}</span>
             </p>
           )}
+          {onResident && !live && (
+            <button className="follow-link" onClick={onResident}>
+              Open my page <Icon name="arrow" />
+            </button>
+          )}
         </section>
       )}
       {day === today && filter === 'highlights' && notices.length > 0 && (
@@ -227,16 +254,16 @@ export function ActivityPanel({
               ) : item.kind === 'thought' ? (
                 <>
                   <p className="story-label">
-                    <Icon name="thought" />I thought
-                    {placeName(item.thought.placeId) && ' · ' + placeName(item.thought.placeId)}
+                    <Icon name="thought" />
+                    <span>I thought{where(item.thought.placeId)}</span>
                   </p>
                   <p className="story-thought">{item.thought.text}</p>
                 </>
               ) : item.kind === 'memory' ? (
                 <>
                   <p className="story-label">
-                    <Icon name="pin" />I kept a memory
-                    {placeName(item.memory.placeId) && ' · ' + placeName(item.memory.placeId)}
+                    <Icon name="pin" />
+                    <span>I kept a memory{where(item.memory.placeId)}</span>
                   </p>
                   <p>{item.memory.summary}</p>
                 </>

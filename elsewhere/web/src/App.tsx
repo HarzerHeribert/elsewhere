@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent,
+} from 'react';
 import { villageScenery } from './scenery';
 import { Scene, type CameraMode, type SceneControls } from './Scene';
 import { HubertPortrait } from './HubertPortrait';
@@ -44,6 +52,16 @@ const nav: Array<{ id: Panel; label: string; icon: string }> = [
   { id: 'activity', label: 'Activity', icon: 'activity' },
   { id: 'wishes', label: 'Wishes', icon: 'star' },
 ];
+/** A spot inside the panels, with enough to return to it exactly as it was left. */
+interface PanelStop {
+  panel: Panel;
+  label: string;
+  tab: CharacterTab;
+  researchId: string | null;
+  placeId: string | null;
+  selected: string | null;
+  scroll: number;
+}
 /** Phones keep four destinations in reach; the rest sits behind More. */
 const phoneTabs = ['residents', 'map', 'messages'] as const;
 const sidebarPreference = 'elsewhere.sidebar';
@@ -82,6 +100,8 @@ export function App() {
     [resetKey, setResetKey] = useState(0);
   const [characterTab, setCharacterTab] = useState<CharacterTab>('now'),
     [researchId, setResearchId] = useState<string | null>(null),
+    // Where the visitor came from, so every jump from one panel to another has a way back.
+    [trail, setTrail] = useState<PanelStop[]>([]),
     [message, setMessage] = useState(''),
     [messageStatus, setMessageStatus] = useState(''),
     [sending, setSending] = useState(false);
@@ -100,6 +120,16 @@ export function App() {
     }
   });
   const [sheetFull, setSheetFull] = useState(false);
+  const panelScroll = useRef<HTMLDivElement>(null),
+    scrollNext = useRef<number | null>(null),
+    scrollBeforeStory = useRef(0),
+    panelBeforeSettings = useRef<Panel | null>(null);
+  // Going back lands where the visitor was reading, not at the top.
+  useLayoutEffect(() => {
+    if (scrollNext.current === null || !panelScroll.current) return;
+    panelScroll.current.scrollTop = scrollNext.current;
+    scrollNext.current = null;
+  });
   const phone = useMediaQuery('(max-width: 800px)'),
     narrow = useMediaQuery('(max-width: 1100px)');
   const collapsed = !phone && (sidebarCollapsed || narrow);
@@ -258,16 +288,57 @@ export function App() {
     controls.current?.releaseMouse();
     visitor.stop();
   }
-  function openPanel(p: Panel) {
+  /**
+   * The menus start a fresh visit to a panel. A link inside a panel remembers the panel it was
+   * followed from, so the visitor can step back to it.
+   */
+  function openPanel(p: Panel, via: 'menu' | 'link' = 'menu') {
     if (!panel || !document.getElementById('world-panel')?.contains(document.activeElement)) {
       panelTrigger.current = document.activeElement as HTMLElement;
     }
     release();
+    setTrail(
+      via === 'link' && panel
+        ? [
+            ...trail,
+            {
+              panel,
+              label: titles[panel],
+              tab: characterTab,
+              researchId,
+              placeId,
+              selected,
+              scroll: panelScroll.current?.scrollTop ?? 0,
+            },
+          ].slice(-8)
+        : [],
+    );
+    scrollNext.current = 0;
+    scrollBeforeStory.current = 0;
     setSettings(null);
     setResearchId(null);
     setSheetFull(false);
     if (p === 'character' && panel !== 'character') setCharacterTab('now');
     setPanel(p);
+  }
+  function goBack() {
+    const stop = trail.at(-1);
+    if (!stop) return;
+    release();
+    setTrail(trail.slice(0, -1));
+    setSettings(null);
+    setCharacterTab(stop.tab);
+    setResearchId(stop.researchId);
+    setPlaceId(stop.placeId);
+    setSelected(stop.selected);
+    setPanel(stop.panel);
+    scrollNext.current = stop.scroll;
+  }
+  /** A research story opens over its list and closes back to where the list was left. */
+  function openResearch(id: string | null) {
+    if (id) scrollBeforeStory.current = panelScroll.current?.scrollTop ?? 0;
+    scrollNext.current = id ? 0 : scrollBeforeStory.current;
+    setResearchId(id);
   }
   function togglePanel(p: Panel) {
     if (panel === p && !settings) setPanel(null);
@@ -278,10 +349,14 @@ export function App() {
       settingsTrigger.current = document.activeElement as HTMLElement;
     release();
     panelTrigger.current = null;
+    if (!settings) panelBeforeSettings.current = panel;
     setPanel(null);
     setSettings(section);
   }
-  function closeSettings() {
+  /** Closing Settings can return to the panel it was opened over. */
+  function closeSettings(resume = false) {
+    if (resume && settings && panelBeforeSettings.current) setPanel(panelBeforeSettings.current);
+    panelBeforeSettings.current = null;
     setSettings(null);
     accountSession.dismissSocialReturn();
   }
@@ -300,20 +375,25 @@ export function App() {
       // The preference simply lasts for this visit.
     }
   }
-  function pickObject(id: string) {
+  function pickObject(id: string, via: 'menu' | 'link' = 'menu') {
+    openPanel('object', via);
     setSelected(id);
-    openPanel('object');
   }
-  function pickCharacter(id: string) {
-    if (id === character?.id) openPanel('character');
+  function pickCharacter(id: string, via: 'menu' | 'link' = 'menu') {
+    if (id === character?.id) openPanel('character', via);
   }
-  function focusPlace(p: Position, id: string) {
+  function focusPlace(p: Position, id: string, via: 'menu' | 'link' = 'menu') {
     release();
     setMode('overview');
     setFocus(p);
+    openPanel('place', via);
     setPlaceId(id);
     setSelected(null);
-    openPanel('place');
+  }
+  /** A place named inside another panel opens that place, with a way back. */
+  function openPlace(id: string) {
+    const target = scenery.places.find((p) => p.id === id);
+    if (target) focusPlace(placeCenter(target), id, 'link');
   }
   function showPlace(id: string) {
     const target = snapshot?.world.places.find((p) => p.id === id);
@@ -460,6 +540,32 @@ export function App() {
     </button>
   );
   const wide = panel === 'character' || panel === 'activity';
+  // One way back from every panel: out of an open story, to the panel a link was followed
+  // from, or up to the list this panel belongs to.
+  const story =
+    !!researchId &&
+    (panel === 'activity' || (panel === 'character' && characterTab === 'research')) &&
+    !!snapshot?.research?.some((episode) => episode.id === researchId);
+  const parent: Panel | undefined =
+    panel === 'character'
+      ? 'residents'
+      : panel === 'place' || panel === 'object'
+        ? 'map'
+        : phone && (panel === 'activity' || panel === 'wishes')
+          ? 'more'
+          : undefined;
+  const back = !panel
+    ? null
+    : story
+      ? {
+          label: panel === 'character' ? 'My research' : 'All activity',
+          go: () => openResearch(null),
+        }
+      : trail.length
+        ? { label: trail.at(-1)!.label, go: goBack }
+        : parent
+          ? { label: titles[parent], go: () => openPanel(parent) }
+          : null;
 
   return (
     <WallTimeProvider value={toWall}>
@@ -518,7 +624,7 @@ export function App() {
                 title="Settings"
                 onClick={() =>
                   settingsSection
-                    ? closeSettings()
+                    ? closeSettings(true)
                     : openSettings(account || privateLocalAccess ? 'account' : 'controls')
                 }
               >
@@ -574,6 +680,16 @@ export function App() {
                 <i />
               </button>
             )}
+            {back && (
+              <button
+                className="back-link panel-back"
+                aria-label={'Back to ' + back.label}
+                onClick={back.go}
+              >
+                <Icon name="chevron-left" />
+                {back.label}
+              </button>
+            )}
             <div className="panel-header">
               {panel === 'character' && <HubertPortrait />}
               <div>
@@ -582,7 +698,14 @@ export function App() {
                 </h2>
                 {panel === 'character' && character && (
                   <p className="panel-subtitle">
-                    {residentPlace ? residentPlace.name + ' · ' : ''}
+                    {residentPlace && (
+                      <>
+                        <button className="inline-link" onClick={() => openPlace(residentPlace.id)}>
+                          {residentPlace.name}
+                        </button>
+                        {' · '}
+                      </>
+                    )}
                     {character.activity}
                   </p>
                 )}
@@ -595,14 +718,14 @@ export function App() {
                 <Icon name="close" />
               </button>
             </div>
-            <div className="panel-scroll">
+            <div className="panel-scroll" ref={panelScroll}>
               {panel === 'residents' && (
                 <ResidentsPanel
                   residents={snapshot?.world.residents ?? []}
                   awaitingLiveState={!snapshot}
                   characterActivity={character?.activity}
                   visitorCount={snapshot ? (snapshot.world.visitors?.length ?? 0) : undefined}
-                  onSelect={pickCharacter}
+                  onSelect={(id) => pickCharacter(id, 'link')}
                 />
               )}
               {panel === 'character' && character && (
@@ -612,6 +735,7 @@ export function App() {
                   onTabChange={(tab) => {
                     setCharacterTab(tab);
                     setResearchId(null);
+                    scrollBeforeStory.current = 0;
                   }}
                   mail={snapshot?.mail}
                   accountMail={accountSession.characterMail.find(
@@ -635,11 +759,12 @@ export function App() {
                   now={snapshot?.runtime.simulatedAt}
                   places={snapshot?.world.places}
                   researchId={researchId}
-                  onResearch={setResearchId}
+                  onResearch={openResearch}
                   onShowPlace={showPlace}
-                  onMessage={() => openPanel('messages')}
+                  onMessage={() => openPanel('messages', 'link')}
                   onViewpoint={() => camera('hubert')}
-                  onWishes={() => openPanel('wishes')}
+                  onWishes={() => openPanel('wishes', 'link')}
+                  onDay={() => openPanel('activity', 'link')}
                 />
               )}
               {panel === 'map' && (
@@ -647,9 +772,9 @@ export function App() {
                   snapshot={snapshot}
                   visitor={visitor.visitor}
                   discovered={discovered}
-                  onFocusPlace={focusPlace}
+                  onFocusPlace={(p, id) => focusPlace(p, id, 'link')}
                   onWalk={walkTo}
-                  onSelectObject={pickObject}
+                  onSelectObject={(id) => pickObject(id, 'link')}
                 />
               )}
               {panel === 'place' && place && (
@@ -658,13 +783,14 @@ export function App() {
                   objects={scenery.objects}
                   discovered={discovered.includes(place.id)}
                   onWalk={snapshot ? walkTo : undefined}
-                  onSelectObject={pickObject}
-                  onBack={() => openPanel('map')}
+                  onSelectObject={(id) => pickObject(id, 'link')}
+                  resident={
+                    character && residentPlace?.id === place.id ? character.name : undefined
+                  }
+                  onResident={() => character && pickCharacter(character.id, 'link')}
                 />
               )}
-              {panel === 'object' && (
-                <ObjectPanel entity={entity} object={object} onBack={() => openPanel('map')} />
-              )}
+              {panel === 'object' && <ObjectPanel entity={entity} object={object} />}
 
               {panel === 'messages' && (
                 <MessagesPanel
@@ -695,11 +821,13 @@ export function App() {
                   now={snapshot.runtime.simulatedAt}
                   places={snapshot.world.places}
                   researchId={researchId}
-                  onResearch={setResearchId}
+                  onResearch={openResearch}
                   onMemories={() => {
-                    openPanel('character');
+                    openPanel('character', 'link');
                     setCharacterTab('memories');
                   }}
+                  onPlace={openPlace}
+                  onResident={() => openPanel('character', 'link')}
                 />
               )}
               {panel === 'wishes' && snapshot && (
@@ -732,7 +860,7 @@ export function App() {
               snapshot={snapshot}
               mode={mode}
               selected={selected}
-              onSelect={pickObject}
+              onSelect={(id) => pickObject(id)}
               resetKey={resetKey}
               visitor={visitor.visitor}
               onMove={visitor.move}
@@ -747,7 +875,7 @@ export function App() {
               }
               control={controlCommand}
               paused={inputPaused}
-              onSelectCharacter={pickCharacter}
+              onSelectCharacter={(id) => pickCharacter(id)}
               onPointerLockChange={setLocked}
               controlsRef={controls}
             />
@@ -906,7 +1034,7 @@ export function App() {
               section={settingsSection}
               entries={entries}
               onSection={setSettings}
-              onClose={closeSettings}
+              onClose={() => closeSettings(true)}
               onBack={() => {
                 closeSettings();
                 openPanel('more');

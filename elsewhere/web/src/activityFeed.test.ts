@@ -32,8 +32,6 @@ describe('compact public activity', () => {
   it('shows query, source evidence, unread status, and honest follow-up while blocking unsafe links', () => {
     const html = renderToStaticMarkup(
       createElement(ResearchStory, {
-        backLabel: 'Activity',
-        onBack: () => undefined,
         episode: {
           id: 'search',
           at: 1000,

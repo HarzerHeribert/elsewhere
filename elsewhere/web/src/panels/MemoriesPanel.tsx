@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import type { PublicMemory } from '@elsewhere/character-interfaces';
 import { calendarDay, formatDay, formatTime } from '../formatTime';
 import { useWallTime } from '../worldClock';
+import { useRemembered } from '../useRemembered';
 import { Icon } from '../Icon';
 
 type Sort = 'place' | 'time' | 'source';
@@ -63,7 +63,7 @@ export function MemoriesPanel({
 }) {
   const toWall = useWallTime();
   const dayOf = (at: number) => calendarDay(toWall(at));
-  const [sort, setSort] = useState<Sort>('place');
+  const [sort, setSort] = useRemembered<Sort>('memories.sort', 'place');
   const newest = [...memories].sort((a, b) => b.at - a.at);
   const placeName = (id: string) => places.find((place) => place.id === id)?.name ?? readable(id);
   const list = groups(newest, sort, placeName, dayOf);
