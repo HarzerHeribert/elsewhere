@@ -18,6 +18,7 @@ import {
   type WorldResident,
   type WorldState,
 } from '@elsewhere/character-interfaces';
+import { mechanismFor, operate } from './mechanisms.js';
 import { advanceEntities, createInitialEntities, publicEntity } from './entities.js';
 
 const SPEED = 0.0022; // world units / millisecond
@@ -867,7 +868,10 @@ export function observeWorld(
       );
       return Math.abs(difference) <= Math.PI * 0.55;
     })
-    .map(({ detail: _privateDetail, ...object }) => copy(object));
+    .map(({ detail: _privateDetail, ...object }) => {
+      const controls = mechanismFor(object.kind);
+      return { ...copy(object), ...(controls ? { controls } : {}) };
+    });
   const placeId = placeAt(world, resident.position);
   const events = world.events
     .filter(
@@ -1052,6 +1056,7 @@ export function executeWorldCommand(
     command.type === 'look' ||
     command.type === 'inspect' ||
     command.type === 'interact' ||
+    command.type === 'use' ||
     command.type === 'work'
   ) {
     const entity = world.entities?.find((item) => item.id === command.targetId);
@@ -1140,9 +1145,23 @@ export function executeWorldCommand(
         outcome.summary = 'Move closer before interacting with that object.';
         return { world, outcome };
       }
-      if (command.type !== 'look' && !object.affordances.includes(command.type)) {
+      if (
+        command.type !== 'look' &&
+        (command.type === 'use'
+          ? !mechanismFor(object.kind)
+          : !object.affordances.includes(command.type))
+      ) {
         outcome.summary = 'That object does not support this activity.';
         return { world, outcome };
+      }
+      let used: ReturnType<typeof operate> | undefined;
+      if (command.type === 'use') {
+        used = operate(object, command.control, command.value, world.mechanisms?.[object.id], now);
+        if (!used.ok) {
+          outcome.summary = used.problem;
+          return { world, outcome };
+        }
+        world.mechanisms = { ...world.mechanisms, [object.id]: used.state };
       }
       resident.facing = Math.atan2(
         object.position.x - resident.position.x,
@@ -1156,13 +1175,15 @@ export function executeWorldCommand(
       outcome.status = 'completed';
       outcome.objectId = object.id;
       outcome.summary =
-        command.type === 'inspect'
-          ? `${resident.name} inspected ${object.name.toLowerCase()}. ${object.detail ?? object.description}`
-          : command.type === 'work'
-            ? `${resident.name} sketched a working idea at the workbench: a small weather-vane experiment.`
-            : command.type === 'interact'
-              ? `${resident.name} spent a moment with ${object.name.toLowerCase()}. ${object.detail ?? object.description}`
-              : `${resident.name} turned toward ${object.name.toLowerCase()}.`;
+        command.type === 'use' && used?.ok
+          ? `${resident.name} tried ${command.control}${command.value === undefined ? '' : ' ' + command.value} on ${object.name.toLowerCase()}. ${used.reading}`
+          : command.type === 'inspect'
+            ? `${resident.name} inspected ${object.name.toLowerCase()}. ${object.detail ?? object.description}`
+            : command.type === 'work'
+              ? `${resident.name} sketched a working idea at the workbench: a small weather-vane experiment.`
+              : command.type === 'interact'
+                ? `${resident.name} spent a moment with ${object.name.toLowerCase()}. ${object.detail ?? object.description}`
+                : `${resident.name} turned toward ${object.name.toLowerCase()}.`;
       if (command.type === 'work') {
         const sketch = world.objects.find((item) => item.id === 'weather-vane-sketch');
         if (!sketch)
@@ -1188,11 +1209,25 @@ export function executeWorldCommand(
       outcome.evidence =
         command.type === 'work'
           ? 'A weather-vane experiment is sketched on paper at the workbench.'
-          : command.type === 'inspect' || command.type === 'interact'
-            ? (object.detail ?? object.description)
-            : undefined;
-      outcome.energyCost = command.type === 'work' ? 5 : command.type === 'inspect' ? 1 : 0.3;
-      outcome.moodDelta = command.type === 'work' ? 2 : command.type === 'inspect' ? 1 : 0.3;
+          : command.type === 'use' && used?.ok
+            ? used.reading
+            : command.type === 'inspect' || command.type === 'interact'
+              ? (object.detail ?? object.description)
+              : undefined;
+      outcome.energyCost =
+        command.type === 'work'
+          ? 5
+          : command.type === 'inspect' || command.type === 'use'
+            ? 1
+            : 0.3;
+      outcome.moodDelta =
+        command.type === 'work'
+          ? 2
+          : command.type === 'inspect'
+            ? 1
+            : command.type === 'use'
+              ? 0.4
+              : 0.3;
     }
   } else if (command.type === 'rest') {
     resident.activity = 'resting';
@@ -1272,6 +1307,7 @@ export function publicWorld(world: WorldState): PublicWorldState {
         elevation,
         observationHeight,
         footprint: footprint ? bounds(footprint) : undefined,
+        controls: mechanismFor(kind),
       }),
     ),
     obstacles: world.obstacles.map(

@@ -155,7 +155,7 @@ describe('grounded Hubert action offers', () => {
     f.state.lastObjectUse.workbench = f.now;
     const observation = observeWorld(f.world, 'hubert');
     expect(offerFor(hubertActionOffers(f.state, observation, f.now), 'workbench')).toMatchObject({
-      ready: ['look', 'inspect'],
+      ready: ['look', 'inspect', 'use'],
       cooldownUntil: f.now + 90000,
       projectCompleted: true,
     });
@@ -229,9 +229,12 @@ describe('grounded Hubert action offers', () => {
       for (const offer of hubertActionOffers(f.state, observation, f.now)) {
         for (const type of offer.ready) {
           if (type === 'move') continue; // Paths are checked by execution, not reconstructed here.
-          expect(
-            executeWorldCommand(f.world, 'hubert', { type, targetId: offer.id }).outcome.status,
-          ).toBe('completed');
+          const control = offer.controls?.[0];
+          const command: CharacterCommand =
+            type === 'use'
+              ? { type, targetId: offer.id, control: control!.id, value: control!.value?.min }
+              : { type, targetId: offer.id };
+          expect(executeWorldCommand(f.world, 'hubert', command).outcome.status).toBe('completed');
         }
       }
     }

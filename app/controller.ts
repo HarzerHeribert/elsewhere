@@ -850,7 +850,8 @@ export class ElsewhereController {
       delete s.runtime.activityUntil;
       if (policy.allowed) {
         s.runtime.lastCommandType = policy.command.type;
-        if (!isMindCommand(policy.command))
+        // A reading only exists once the world answers, so `use` is recorded with its outcome.
+        if (!isMindCommand(policy.command) && policy.command.type !== 'use')
           this.recordTrail(policy.command, decision.why, observation.placeId, now);
         if (policy.command.type === 'draft_mail') {
           const command = policy.command;
@@ -948,6 +949,13 @@ export class ElsewhereController {
           const duration = hubertActivityDurationMs(policy.command);
           if (result.outcome.status !== 'rejected' && duration > 0)
             s.runtime.activityUntil = now + duration;
+          if (policy.command.type === 'use')
+            this.recordTrail(policy.command, decision.why, observation.placeId, now, {
+              text:
+                result.outcome.status === 'completed' && result.outcome.evidence
+                  ? result.outcome.evidence
+                  : result.outcome.summary,
+            });
           s.hubert = applyOutcome(
             s.hubert,
             result.outcome,

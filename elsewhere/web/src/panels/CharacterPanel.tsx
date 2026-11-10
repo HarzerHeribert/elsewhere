@@ -243,6 +243,7 @@ export function PursuitList({ pursuits }: { pursuits: PublicSnapshot['pursuits']
           {pursuit.why && <small>{pursuit.why}</small>}
           <small>
             {pursuit.entries.filter((entry) => entry.kind === 'note').length} notes ·{' '}
+            {pursuit.entries.filter((entry) => entry.kind === 'tried').length} tries ·{' '}
             {pursuit.questions.length} open questions
           </small>
           {pursuit.setAsideReason && <small>{pursuit.setAsideReason}</small>}

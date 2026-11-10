@@ -53,6 +53,12 @@ export interface Obstacle extends Bounds {
   shape?: 'rectangle' | 'ellipse';
   sightApertures?: Array<Bounds & { minY: number; maxY: number }>;
 }
+/** One thing a resident can do to an object with `use`. It says what the act is, never what governs the result. */
+export type WorldControl = {
+  id: string;
+  description: string;
+  value?: { min: number; max: number; step?: number; meaning: string };
+};
 export interface WorldObject {
   id: string;
   name: string;
@@ -68,6 +74,7 @@ export interface WorldObject {
   elevation?: number;
   observationHeight?: number;
   footprint?: Bounds;
+  controls?: WorldControl[];
 }
 /** A living world entity has identity and an observable state, independent of resident agents. */
 export interface WorldEntity extends WorldObject {
@@ -143,11 +150,13 @@ export interface WorldState {
   events: WorldEvent[];
   visitors?: WorldVisitor[];
   entities?: WorldEntity[];
+  /** Hidden per-object mechanism state. Never projected publicly or to a model. */
+  mechanisms?: Record<string, Record<string, number>>;
 }
 /** Public objects intentionally omit inspection-only/private detail. */
 export type PublicWorldObject = Omit<WorldObject, 'detail'>;
 export type PublicWorldEntity = Omit<WorldEntity, 'detail'>;
-export type PublicWorldState = Omit<WorldState, 'objects' | 'entities'> & {
+export type PublicWorldState = Omit<WorldState, 'objects' | 'entities' | 'mechanisms'> & {
   objects: PublicWorldObject[];
   entities?: PublicWorldEntity[];
 };
@@ -293,6 +302,7 @@ export type PublicPursuitEntry = { id: string; at: number } & (
   | { kind: 'read'; sourceId: string; url: string; title: string }
   | { kind: 'note'; text: string; surprised: boolean; sourceIds: string[] }
   | { kind: 'made'; creationId: string; path: string; url: string }
+  | { kind: 'tried'; text: string; objectId: string }
 );
 /** A question the character chose to follow, with what it searched, read and noted. */
 export interface PublicPursuit {

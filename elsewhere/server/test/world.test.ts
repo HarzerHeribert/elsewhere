@@ -205,4 +205,59 @@ describe('authoritative Elsewhere world', () => {
       restored.objects.find((o: { id: string }) => o.id === 'weather-vane-sketch'),
     ).toBeTruthy();
   });
+
+  describe('use', () => {
+    const near = () => {
+      const world = createInitialWorld(Date.UTC(2026, 10, 9, 12));
+      const resident = world.residents[0];
+      const sundial = world.objects.find((object) => object.id === 'sundial')!;
+      resident.position = { x: sundial.position.x - 1.5, z: sundial.position.z };
+      resident.facing = Math.PI / 2;
+      return { world, resident };
+    };
+
+    it('answers with a reading, keeps its hidden state apart and refuses out of reach', () => {
+      const { world, resident } = near();
+      const command = { type: 'use' as const, targetId: 'sundial', control: 'read' };
+      const result = executeWorldCommand(world, resident.id, command, world.updatedAt);
+      expect(result.outcome.status).toBe('completed');
+      expect(result.outcome.summary).toMatch(/tried read on the courtyard sundial\. The shadow is/);
+      expect(result.outcome.evidence).toMatch(/^The shadow is/);
+      expect(result.world.mechanisms?.sundial.uses).toBe(1);
+      const far = createInitialWorld(1000);
+      far.residents[0].position = { x: 0, z: 0 };
+      const refused = executeWorldCommand(far, 'hubert', command, 1000).outcome;
+      expect(refused.status).toBe('rejected');
+      expect(
+        executeWorldCommand(world, resident.id, { ...command, control: 'melt' }).outcome,
+      ).toMatchObject({
+        status: 'rejected',
+        summary: expect.stringMatching(/read/),
+      });
+    });
+
+    it('never shows hidden state or conditions, and shows controls', () => {
+      const { world, resident } = near();
+      const bench = createInitialWorld(Date.UTC(2026, 10, 9, 12));
+      bench.residents[0].position = { x: -3.5, z: -2 };
+      bench.residents[0].facing = -Math.PI / 2;
+      const crank = executeWorldCommand(bench, 'hubert', {
+        type: 'use',
+        targetId: 'artifact',
+        control: 'bend',
+        value: 3,
+      });
+      expect(crank.outcome.status).toBe('completed');
+      expect(crank.world.mechanisms?.artifact.fin).toBe(3);
+      const shown = JSON.stringify(publicWorld(crank.world));
+      const seen = JSON.stringify(observeWorld(crank.world, 'hubert'));
+      for (const text of [shown, seen]) {
+        expect(text).not.toContain('"mechanisms"');
+        expect(text).not.toMatch(/"uses"|"fin"|sunElevation|windSpeed|airTemp|windBearing/);
+      }
+      expect(shown).toContain('"controls"');
+      expect(shown).toContain('tube number');
+      expect(JSON.stringify(observeWorld(world, resident.id))).toContain('"id":"read"');
+    });
+  });
 });

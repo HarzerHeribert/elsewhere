@@ -144,6 +144,13 @@ const publicPursuitEntry = (entry: PublicPursuitEntry): PublicPursuitEntry => {
         path: entry.path.slice(0, 240),
         url: httpsUrl(entry.url) ?? '',
       };
+    case 'tried':
+      return {
+        ...base,
+        kind: 'tried',
+        text: entry.text.slice(0, 240),
+        objectId: entry.objectId.slice(0, 128),
+      };
   }
 };
 const publicPursuit = (pursuit: PublicPursuit): PublicPursuit => ({

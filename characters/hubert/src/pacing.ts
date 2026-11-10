@@ -4,6 +4,7 @@ import type { CharacterCommand } from '@elsewhere/character-interfaces';
 export function hubertActivityDurationMs(command: CharacterCommand): number {
   switch (command.type) {
     case 'search':
+    case 'use':
       return 20_000;
     case 'read':
       return 30_000;

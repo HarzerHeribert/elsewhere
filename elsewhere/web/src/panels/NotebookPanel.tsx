@@ -7,7 +7,9 @@ export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPur
   const toWall = useWallTime();
   const withNotes = [...pursuits]
     .filter(
-      (pursuit) => pursuit.questions.length > 0 || pursuit.entries.some((e) => e.kind === 'note'),
+      (pursuit) =>
+        pursuit.questions.length > 0 ||
+        pursuit.entries.some((e) => e.kind === 'note' || e.kind === 'tried'),
     )
     .sort((a, b) => b.lastAt - a.lastAt);
   return (
@@ -17,6 +19,7 @@ export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPur
       </p>
       {withNotes.map((pursuit) => {
         const notes = pursuit.entries.flatMap((entry) => (entry.kind === 'note' ? [entry] : []));
+        const tried = pursuit.entries.flatMap((entry) => (entry.kind === 'tried' ? [entry] : []));
         let lastDay: number | undefined;
         return (
           <section key={pursuit.id} aria-label={pursuit.question}>
@@ -36,6 +39,15 @@ export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPur
                 </div>
               );
             })}
+            {tried.length > 0 && (
+              <ul className="note-topics" aria-label="Tried">
+                {tried.map((entry) => (
+                  <li key={entry.id}>
+                    <span>{entry.text}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {pursuit.questions.length > 0 && (
               <ul className="note-topics" aria-label="Still to find out">
                 {pursuit.questions.map((question) => (

@@ -11,6 +11,7 @@ const labels: Record<string, string> = {
   inspect: 'I looked closely',
   rest: 'I rested',
   interact: 'I tried something',
+  use: 'Tried something',
   work: 'I worked on something',
   reflect: 'I thought it over',
   pin_creation: 'I tidied my creations',

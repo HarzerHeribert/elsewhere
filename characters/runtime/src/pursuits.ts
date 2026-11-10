@@ -4,6 +4,7 @@ export type PursuitEntry = { id: string; at: number } & (
   | { kind: 'read'; sourceId: string; url: string; title: string }
   | { kind: 'note'; text: string; surprised: boolean; sourceIds: string[] }
   | { kind: 'made'; creationId: string; path: string; url: string }
+  | { kind: 'tried'; text: string; objectId: string }
 );
 export type PursuitStatus = 'active' | 'open' | 'set-aside';
 export interface Pursuit {
@@ -39,6 +40,7 @@ export const PURSUIT_LIMITS = {
   question: 240,
   why: 240,
   note: 600,
+  tried: 240,
   setAsideReason: 240,
 } as const;
 
@@ -134,6 +136,7 @@ export function setAsidePursuit(
 }
 
 function cleanEntry(entry: PursuitEntry): PursuitEntry {
+  if (entry.kind === 'tried') return { ...entry, text: cut(entry.text, PURSUIT_LIMITS.tried) };
   return entry.kind === 'note'
     ? { ...entry, text: cut(entry.text, PURSUIT_LIMITS.note), sourceIds: [...entry.sourceIds] }
     : { ...entry };

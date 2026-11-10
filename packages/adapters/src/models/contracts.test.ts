@@ -188,7 +188,7 @@ describe('bounded model envelopes and canonical commands', () => {
       targetId: 'bench',
     });
     expect(MODEL_ACTION_FORMAT.type).toBe('object');
-    expect(MODEL_ACTION_FORMAT.anyOf).toHaveLength(16);
+    expect(MODEL_ACTION_FORMAT.anyOf).toHaveLength(17);
     expect(MODEL_ACTION_FORMAT.anyOf[0]).toMatchObject({
       type: 'object',
       required: ['type', 'targetId'],
@@ -215,6 +215,11 @@ describe('bounded model envelopes and canonical commands', () => {
           'pattern' in field
         )
           expect(field.pattern).toBe('^source-[a-f0-9]{24}$');
+        else if (
+          (alternative.properties as { type: { const: string } }).type.const === 'use' &&
+          'pattern' in field
+        )
+          expect(field.pattern).toBe('^[a-z][a-z-]*$');
         else expect(field).not.toHaveProperty('pattern');
       }
     }

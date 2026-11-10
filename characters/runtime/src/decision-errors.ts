@@ -15,6 +15,8 @@ export class InvalidDecisionError extends Error {
 export const DECISION_DIAGNOSTIC_FIELDS = [
   'type',
   'targetId',
+  'control',
+  'value',
   'position',
   'x',
   'z',

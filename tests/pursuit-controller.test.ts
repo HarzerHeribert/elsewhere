@@ -301,6 +301,29 @@ describe('pacing', () => {
   });
 });
 
+describe('working an object during a pursuit', () => {
+  it('puts the reading on the trail and on the pursuit, and the rule on neither', async () => {
+    const provider = scriptedProvider([pursue, { type: 'move', targetId: 'sundial' }], {
+      fallback: { type: 'use', targetId: 'sundial', control: 'read' },
+    });
+    const { controller, store } = await create(provider, {
+      simulationStepMs: 10_000,
+      decisionIntervalMs: 20_000,
+    });
+    for (let tick = 0; tick < 80; tick++) await controller.tick();
+    const saved = (await store.load())!.value.hubert;
+    const used = saved.trail.filter((entry) => entry.kind === 'use');
+    expect(used.length).toBeGreaterThan(0);
+    expect(used[0].text).toMatch(/^The shadow is [\d.]+ cm long and falls toward \d+ degrees\.$/);
+    expect(used[0].pursuitId).toBe(saved.pursuits.activeId);
+    const tried = saved.pursuits.items[0].entries.filter((entry) => entry.kind === 'tried');
+    expect(tried.length).toBeGreaterThan(0);
+    expect(tried[0]).toMatchObject({ objectId: 'sundial' });
+    expect(JSON.stringify(tried[0])).toContain(used[0].text!);
+    expect(JSON.stringify(provider.contexts)).not.toMatch(/gnomon|mechanisms/);
+  });
+});
+
 describe('the hourly call cap', () => {
   it('stops decisions quietly for the rest of the hour and resumes in the next one', async () => {
     let wall = start;

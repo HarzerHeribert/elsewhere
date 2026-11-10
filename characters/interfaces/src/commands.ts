@@ -41,6 +41,22 @@ const definitions = [
     instruction: 'interact: targetId is required; respect the object affordances and cooldown.',
   },
   {
+    schema: z
+      .object({
+        type: z.literal('use'),
+        targetId,
+        control: z
+          .string()
+          .min(1)
+          .max(40)
+          .regex(/^[a-z][a-z-]*$/),
+        value: z.number().finite().optional(),
+      })
+      .strict(),
+    instruction:
+      'use: works one control of an object within reach. targetId is the object, control is one of the control ids listed for it in state.actionOffers, and value is a number only when that control lists a range. The result is a reading.',
+  },
+  {
     schema: z.object({ type: z.literal('work'), targetId }).strict(),
     instruction:
       'work: targetId is required and must offer work; respect project completion and cooldown.',

@@ -492,7 +492,7 @@ export function applyOutcome(
   if (outcome.status === 'rejected') {
     state.stats.frustration += 1;
     state.intent = 'That did not work. I will reconsider rather than pretend it succeeded.';
-    if (targetId) state.lastObjectUse[targetId] = now;
+    if (targetId && outcome.command.type !== 'use') state.lastObjectUse[targetId] = now;
     state.stats = normalizeStats(state.stats);
     appendNovelMemory(state.memories, {
       id: `memory:${outcome.id}`,
@@ -528,6 +528,7 @@ export function applyOutcome(
     inspect: 2,
     work: 9,
     interact: 3,
+    use: 1,
     look: 0.5,
     reflect: 1,
     say: 1,
@@ -556,6 +557,23 @@ export function applyOutcome(
       state.project.verifiedWorkSessions = Math.min(3, state.project.verifiedWorkSessions + 1);
       state.project.completed = state.project.verifiedWorkSessions >= 3;
     }
+  }
+  const following = activePursuit(state.pursuits);
+  if (outcome.command.type === 'use' && following && targetId && outcome.evidence) {
+    const { control, value } = outcome.command;
+    const name = state.knownObjects[targetId]?.name.toLowerCase() ?? 'an object';
+    state.pursuits = recordPursuitEntry(
+      state.pursuits,
+      following.id,
+      {
+        kind: 'tried',
+        id: `tried:${outcome.id}`,
+        at: now,
+        text: `Tried ${control}${value === undefined ? '' : ' ' + value} on ${name}. ${cleanOutsideText(outcome.evidence, 160)}`,
+        objectId: targetId,
+      },
+      now,
+    );
   }
   if (outcome.command.type === 'reflect') {
     state.stats.frustration -= 2;
