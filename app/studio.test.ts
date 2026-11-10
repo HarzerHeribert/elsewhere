@@ -61,3 +61,36 @@ describe('configured studio', () => {
     ).toBeUndefined();
   });
 });
+
+describe('a studio configured through secret settings', () => {
+  it('builds the GitHub studio from the settings and keeps the key in a private file', async () => {
+    const { generateKeyPairSync } = await import('node:crypto');
+    const { configuredStudio } = await import('./studio');
+    const pem = generateKeyPairSync('rsa', { modulusLength: 2048 })
+      .privateKey.export({ type: 'pkcs1', format: 'pem' })
+      .toString();
+    const settings = {
+      production: true,
+      STUDIO_FOLDER_URL: 'https://studio.invalid/',
+      STUDIO_GITHUB_APP_ID: 12,
+      STUDIO_GITHUB_INSTALLATION_ID: 34,
+      STUDIO_GITHUB_REPOSITORY: JSON.stringify({
+        id: 56,
+        fullName: 'someone/someone.github.io',
+        branch: 'work',
+      }),
+      STUDIO_GITHUB_PRIVATE_KEY_B64: Buffer.from(pem).toString('base64'),
+    };
+    const actor = { worldId: 'elsewhere', ownerUserId: 'owner-1', characterId: 'resident' };
+    const studio = configuredStudio(settings, 'resident', '/nonexistent-root', actor);
+    expect(studio?.site().url).toBe('https://someone.github.io/');
+    expect(
+      configuredStudio(
+        { ...settings, STUDIO_GITHUB_APP_ID: undefined },
+        'resident',
+        '/nonexistent-root',
+        actor,
+      ),
+    ).toBeUndefined();
+  });
+});
