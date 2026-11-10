@@ -33,7 +33,8 @@ const definitions = [
         durationMs: z.number().int().min(1000).max(3600000).optional(),
       })
       .strict(),
-    instruction: 'rest: optional integer durationMs between 1000 and 3600000.',
+    instruction:
+      'rest: optional integer durationMs between 1000 and 3600000 (one minute when omitted). Energy returns with the time rested, so choose one duration that fits how tired you are rather than resting again and again.',
   },
   {
     schema: z.object({ type: z.literal('interact'), targetId }).strict(),
