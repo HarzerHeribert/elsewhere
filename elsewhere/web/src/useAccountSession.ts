@@ -137,7 +137,11 @@ export function useAccountSession() {
   }, [session?.user?.id, session?.passkeyAuthEnabled, passkeyRevision]);
 
   const performPasskey = useCallback(
-    async (action: 'signin' | 'verify' | 'add' | 'remove', value = '') => {
+    async (
+      action: 'signin' | 'verify' | 'add' | 'remove',
+      value = '',
+      authenticatorAttachment: AuthenticatorAttachment = 'platform',
+    ) => {
       if (mutating.current || !session?.passkeyAuthEnabled) return false;
       if (action !== 'remove' && !browserSupportsPasskeys()) {
         setError('Passkeys are not available in this browser. Use another sign-in method.');
@@ -152,7 +156,11 @@ export function useAccountSession() {
       setPasskeyStatus('');
       try {
         if (action === 'add')
-          await addAccountPasskey(value.trim().slice(0, 60) || 'My passkey', controller.signal);
+          await addAccountPasskey(
+            value.trim().slice(0, 60) || 'My passkey',
+            controller.signal,
+            authenticatorAttachment,
+          );
         else if (action === 'remove') await removeAccountPasskey(value, controller.signal);
         else await signInWithPasskey(controller.signal);
         const confirmed = await getAccount(controller.signal);
@@ -528,7 +536,8 @@ export function useAccountSession() {
     refreshPasskeys: () => setPasskeyRevision((revision) => revision + 1),
     signInWithPasskey: () => performPasskey('signin'),
     verifyPasskey: () => performPasskey('verify'),
-    addPasskey: (name: string) => performPasskey('add', name),
+    addPasskey: (name: string, authenticatorAttachment: AuthenticatorAttachment = 'platform') =>
+      performPasskey('add', name, authenticatorAttachment),
     removePasskey: (id: string) => performPasskey('remove', id),
     setOwnerPasskeyRequired,
     pending,
