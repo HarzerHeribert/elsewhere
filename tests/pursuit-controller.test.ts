@@ -223,7 +223,7 @@ describe('what cannot be done', () => {
   });
 
   it.each([
-    ['why', { action: { type: 'reflect' as const }, why: OUTSIDE.slice(4, 60) }],
+    ['why', { action: { type: 'rest' as const }, why: OUTSIDE.slice(4, 60) }],
     [
       'note text',
       {
@@ -281,7 +281,7 @@ describe('pacing', () => {
         { type: 'search', query: 'sparrow hopping gait' },
         { type: 'read', sourceId: source.id },
         { type: 'note', text: 'Short legs beat running.', surprised: false },
-        { type: 'reflect' },
+        { type: 'rest' },
         { type: 'rest' },
       ],
       { fallback: { type: 'rest' } },
@@ -327,7 +327,7 @@ describe('working an object during a pursuit', () => {
 describe('the hourly call cap', () => {
   it('stops decisions quietly for the rest of the hour and resumes in the next one', async () => {
     let wall = start;
-    const provider = scriptedProvider([], { fallback: { type: 'reflect' } });
+    const provider = scriptedProvider([], { fallback: { type: 'rest' } });
     const { controller, store } = await create(provider, {
       now: () => wall,
       modelHourlyMaximum: 2,
@@ -356,7 +356,7 @@ describe('the hourly call cap', () => {
   });
 
   it('still reports the daily cap as before', async () => {
-    const provider = scriptedProvider([], { fallback: { type: 'reflect' } });
+    const provider = scriptedProvider([], { fallback: { type: 'rest' } });
     const { controller } = await create(provider, { modelMaximum: 1, modelHourlyMaximum: 30 });
     await controller.step();
     await controller.step();

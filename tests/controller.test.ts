@@ -62,7 +62,7 @@ afterEach(async () => {
 
 describe('authoritative controller lifecycle', () => {
   it('paces natural decisions while physics and needs continue between model calls', async () => {
-    const propose = vi.fn(async () => ({ action: { type: 'reflect' }, why: '' }));
+    const propose = vi.fn(async () => ({ action: { type: 'rest', durationMs: 90_000 }, why: '' }));
     const { controller } = await create({
       simulationStepMs: 10_000,
       modelProvider: { id: 'fixture', propose },
@@ -73,7 +73,8 @@ describe('authoritative controller lifecycle', () => {
     for (let index = 0; index < 8; index++) await controller.tick();
     expect(propose).toHaveBeenCalledTimes(1);
     expect(controller.getSnapshot().runtime.tick).toBe(before.runtime.tick + 8);
-    expect(controller.getSnapshot().character.energy).toBeLessThan(before.character.energy);
+    // Needs keep moving between model calls: resting restores energy with elapsed time.
+    expect(controller.getSnapshot().character.energy).toBeGreaterThan(before.character.energy);
     await controller.tick();
     expect(propose).toHaveBeenCalledTimes(2);
   });
@@ -83,7 +84,7 @@ describe('authoritative controller lifecycle', () => {
     const propose = vi
       .fn()
       .mockResolvedValueOnce({ action: { type: 'rest', durationMs: 180_000 }, why: '' })
-      .mockResolvedValue({ action: { type: 'reflect' }, why: '' });
+      .mockResolvedValue({ action: { type: 'rest' }, why: '' });
     const options = { simulationStepMs: 10_000, modelProvider: { id: 'fixture', propose } };
     const first = await create(options, file);
     await first.controller.step();
@@ -132,13 +133,13 @@ describe('authoritative controller lifecycle', () => {
     const seed = new SqliteSnapshotStore<ControllerState>(file);
     await seed.save(saved.value, saved.version);
     await seed.close();
-    const propose = vi.fn(async () => ({ action: { type: 'reflect' }, why: '' }));
+    const propose = vi.fn(async () => ({ action: { type: 'rest' }, why: '' }));
     const { controller, store } = await create({ modelProvider: { id: 'test', propose } }, file);
     const before = (await store.load())!.value.modelAllowance.calls;
     await controller.step();
     expect(propose).toHaveBeenCalledOnce();
     expect((await store.load())!.value.modelAllowance.calls).toBe(before + 1);
-    expect((await store.load())!.value.hubert.activity.kind).toBe('reflect');
+    expect((await store.load())!.value.hubert.activity.kind).toBe('rest');
   });
   it('pauses ordinary ticks, permits an explicit step, and resumes normally', async () => {
     const { controller } = await create();
@@ -569,88 +570,42 @@ describe('authoritative controller lifecycle', () => {
     await stop(migrated.controller);
     const reopened = await create({}, file);
     expect(reopened.controller.getArtifact('weather-study')).toEqual(artifact);
-    expect((await reopened.store.load())!.version).toBe(
-      advanced.version + (advanced.value.runtime.dreamRest ? 1 : 0),
-    );
+    expect((await reopened.store.load())!.version).toBe(advanced.version);
   });
 });
 
 const bench = 'I would like a bench by the pond, so I can watch the mallard sitting down.';
-/** An expression provider that answers only the chance to wish; notes and thoughts stay empty. */
-const wishing = (answer: () => string = () => bench) => ({
-  id: 'wish-fixture',
-  express: vi.fn(async (input: { form?: string; recentNotes?: string[] }) =>
-    input.form === 'wish' ? answer() : '',
-  ),
-});
-const wishAsks = (provider: ReturnType<typeof wishing>) =>
-  provider.express.mock.calls.map(([input]) => input).filter((input) => input.form === 'wish');
-async function reachWish(controller: ElsewhereController) {
-  for (let i = 0; i < 100 && !controller.getSnapshot().wishes?.length; i++) await controller.step();
-  const wish = controller.getSnapshot().wishes?.[0];
-  expect(wish).toBeDefined();
-  return wish!;
+/** Wishes the resident makes with the `wish` command, then the usual offline behaviour. */
+const wishing = (...texts: string[]) =>
+  scriptedProvider(
+    texts.map((text) => ({ type: 'wish' as const, text })),
+    {
+      id: 'wish-fixture',
+      managesAllowance: true,
+      fallback: (context) => browserFixtureAction(context, 'memories'),
+    },
+  );
+async function reachWish(controller: ElsewhereController, count = 1) {
+  for (let i = 0; i < 100 && (controller.getSnapshot().wishes?.length ?? 0) < count; i++)
+    await controller.step();
+  const wishes = controller.getSnapshot().wishes ?? [];
+  expect(wishes).toHaveLength(count);
+  return wishes[0];
 }
 
 describe('wishes in the resident’s own words and world upgrades', () => {
-  it('never makes up a wish: without an authoring model there are none', async () => {
+  it('never makes up a wish: without the resident choosing to wish there are none', async () => {
     const { controller } = await create();
     for (let i = 0; i < 40; i++) await controller.step();
     expect(controller.getSnapshot().memories.length).toBeGreaterThanOrEqual(3);
     expect(controller.getSnapshot().wishes).toEqual([]);
   });
 
-  it('publishes what the resident wrote, asked from public fields on real wall time', async () => {
-    let wall = epoch;
-    const expressionProvider = wishing();
-    const { controller } = await create({
-      now: () => wall,
-      simulationStepMs: 10 * 86_400_000,
-      expressionProvider,
-    });
-    const first = await reachWish(controller);
-    expect(first).toEqual({ id: first.id, text: bench, createdAt: epoch, status: 'pending' });
-    const [asked] = wishAsks(expressionProvider);
-    expect(Object.keys(asked).sort()).toEqual(['facts', 'form', 'questions', 'recentNotes']);
-    expect(JSON.stringify(asked)).not.toMatch(/intent|outsideMessages|dreams|knownObjects/);
-    // Accelerated world time buys no further chances: only real time does.
-    for (let i = 0; i < 3; i++) await controller.tick();
-    expect(controller.getSnapshot().runtime.simulatedAt).toBeGreaterThan(epoch + 20 * 86_400_000);
-    expect(wishAsks(expressionProvider)).toHaveLength(1);
-    wall += 48 * 3_600_000;
-    await controller.step();
-    expect(wishAsks(expressionProvider)).toHaveLength(2);
-    expect(wishAsks(expressionProvider)[1].recentNotes).toEqual([bench]);
-    expect(controller.getSnapshot().wishes).toHaveLength(2);
-  });
-
-  it('takes silence, or an answer that is not one short wish, as no wish and waits a day', async () => {
-    let wall = epoch;
-    let answer = '';
-    const expressionProvider = wishing(() => answer);
-    const { controller, store } = await create({ now: () => wall, expressionProvider });
-    for (let i = 0; i < 40 && !wishAsks(expressionProvider).length; i++) await controller.step();
-    expect(wishAsks(expressionProvider)).toHaveLength(1);
-    expect(controller.getSnapshot().wishes).toEqual([]);
-    expect((await store.load())!.value.hubert.wishesAskedAtReal).toBe(epoch);
-    await controller.step();
-    expect(wishAsks(expressionProvider)).toHaveLength(1);
-    wall += 24 * 3_600_000;
-    answer = 'Two lines\nare not a wish.';
-    await controller.step();
-    expect(wishAsks(expressionProvider)).toHaveLength(2);
-    expect(controller.getSnapshot().wishes).toEqual([]);
-    wall += 24 * 3_600_000;
-    answer = '“' + bench + '”';
-    await controller.step();
-    expect(controller.getSnapshot().wishes?.map((wish) => wish.text)).toEqual([bench]);
-  });
-
   it('marks a wish as built on the owner’s word, installs nothing and survives restart', async () => {
     const file = databaseFile();
-    const expressionProvider = wishing();
-    const { controller, store } = await create({ expressionProvider }, file);
+    const { controller, store } = await create({ modelProvider: wishing(bench) }, file);
     const wish = await reachWish(controller);
+    expect(wish).toEqual({ id: wish.id, text: bench, createdAt: epoch, status: 'pending' });
     const before = controller.getSnapshot();
     const updated = await controller.resolveWish(wish.id, 'fulfill');
     expect(updated.wishes).toEqual([{ ...wish, status: 'fulfilled', fulfilledAt: epoch }]);
@@ -661,12 +616,12 @@ describe('wishes in the resident’s own words and world upgrades', () => {
     ]);
     await expect(controller.resolveWish(wish.id, 'fulfill')).rejects.toThrow(/not pending/);
     await stop(controller);
-    const restarted = await create({ expressionProvider }, file);
+    const restarted = await create({ modelProvider: wishing() }, file);
     expect(restarted.controller.getSnapshot()).toEqual(updated);
   });
 
   it('allows an owner to decline without changing the world or damaging mood', async () => {
-    const { controller, store } = await create({ expressionProvider: wishing() });
+    const { controller, store } = await create({ modelProvider: wishing(bench) });
     const wish = await reachWish(controller);
     const before = controller.getSnapshot();
     const result = await controller.resolveWish(wish.id, 'decline');
@@ -677,8 +632,7 @@ describe('wishes in the resident’s own words and world upgrades', () => {
   });
 
   it('preserves wishes, receipts and a monotonic world version when resetting', async () => {
-    const expressionProvider = wishing();
-    const { controller, store } = await create({ expressionProvider });
+    const { controller, store } = await create({ modelProvider: wishing(bench) });
     const wish = await reachWish(controller);
     const fulfilled = await controller.resolveWish(wish.id, 'fulfill');
     const receipts = (await store.load())!.value.hubert.wishReceipts;
@@ -690,7 +644,6 @@ describe('wishes in the resident’s own words and world upgrades', () => {
     expect((await store.load())!.value.hubert.wishReceipts).toEqual(receipts);
     for (let i = 0; i < 30; i++) await controller.step();
     expect(controller.getSnapshot().wishes).toHaveLength(1);
-    expect(wishAsks(expressionProvider)).toHaveLength(1);
   });
 
   it('retires catalog wishes and the objects they installed from a saved world', async () => {

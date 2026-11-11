@@ -327,24 +327,6 @@ describe('Hubert', () => {
     expect(propose).toHaveBeenCalledTimes(2);
   });
 
-  it('provides repeated-failure guidance to the model without choosing on its behalf', async () => {
-    const state = createInitialHubert(0);
-    state.progressGuidance = {
-      kind: 'select-alternative',
-      intentionKey: 'project:weather-study',
-      reason: 'repeated-failure',
-      count: 3,
-      alternativesLimit: 2,
-    };
-    const propose = vi.fn(async () => ({ action: { type: 'look', targetId: 'bench' }, why: '' }));
-    const decision = await chooseActionWithProvider(state, observation, 0, {
-      id: 'stub',
-      propose,
-    });
-    expect(propose).toHaveBeenCalledOnce();
-    expect(decision.action).toEqual({ type: 'look', targetId: 'bench' });
-  });
-
   it('shares remembered planning facts and completion without rewriting episodes or identity', () => {
     const state = createInitialHubert(0);
     state.knownObjects.bench = observation.visibleObjects[0];

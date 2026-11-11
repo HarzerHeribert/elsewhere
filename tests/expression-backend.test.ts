@@ -16,7 +16,6 @@ import { readChatGPTStream } from '../packages/adapters/src/models/chatgpt';
 import {
   expressionMessages,
   PublicExpressionInputSchema,
-  validatePublicWish,
   type PublicExpressionInput,
 } from '../packages/adapters/src/models/expression';
 
@@ -28,10 +27,17 @@ const binding = {
   connectionId: 'expression-plan',
 };
 const input: PublicExpressionInput = {
-  facts: [{ id: 'public-chime', summary: 'Hubert inspected five copper wind-chime tubes.' }],
-  questions: ['Why do the tubes ring differently?', 'How does a small mechanism work?'],
-  recentNotes: [],
-  form: 'wish',
+  form: 'work',
+  path: 'notes/chimes.md',
+  title: 'The chimes',
+  about: 'What the five copper tubes sound like when struck in turn.',
+  siteUrl: 'https://studio.invalid/',
+  material: {
+    notes: ['The shortest tube starts first.'],
+    readings: ['Tried strike 2 on the chime. It rang low.'],
+    openQuestions: ['Why do the tubes ring differently?'],
+  },
+  shelf: [],
 };
 const usage = { inputTokens: 121, outputTokens: 18, cachedInputTokens: 50 };
 const brokers = new Set<Awaited<ReturnType<typeof createInferenceBroker>>>();
@@ -71,8 +77,8 @@ async function start(overrides: Partial<InferenceBrokerOptions> = {}) {
     identity: 'Hubert is an odd, curious nonhuman creature.',
     store,
     now: () => Date.UTC(2026, 10, 9, 12),
-    decision: async () => ({ value: { action: { type: 'reflect' }, why: '' }, usage }),
-    reflection: async () => ({ value: { vignette: 'A private dream.', impulses: [] }, usage }),
+    decision: async () => ({ value: { action: { type: 'rest' }, why: '' }, usage }),
+    reflection: async () => ({ value: 'A private portrait.', usage }),
     ...overrides,
   });
   brokers.add(broker);
@@ -83,7 +89,7 @@ async function start(overrides: Partial<InferenceBrokerOptions> = {}) {
   const address = broker.server.address();
   if (!address || typeof address === 'string') throw Error('Fixture listener missing.');
   const baseUrl = `http://127.0.0.1:${address.port}`;
-  const request = (body: unknown, headers: Record<string, string> = {}) =>
+  const request = (body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal) =>
     fetch(baseUrl + '/v1/expression', {
       method: 'POST',
       headers: {
@@ -93,6 +99,7 @@ async function start(overrides: Partial<InferenceBrokerOptions> = {}) {
         ...headers,
       },
       body: JSON.stringify(body),
+      signal,
     });
   return { broker, store, baseUrl, request };
 }
@@ -126,19 +133,18 @@ describe('a private stream for deliberately public expression', () => {
     expect(absent.broker.getState().allowance.calls).toBe(0);
   });
 
-  it('streams before completion only after a durable reservation, then settles shared usage', async () => {
-    const first = deferred();
+  it('dispatches only after a durable reservation, then settles shared usage', async () => {
+    const started = deferred();
     const finish = deferred();
-    const text = 'The shortest tube starts first. I wonder whether it is impatient.';
+    const text = '# The chimes\n\nThe shortest tube starts first.';
     const h = await start({
-      expression: async (actual, _signal, onDelta) => {
+      expression: async (actual) => {
         expect(actual).toEqual(input);
         const durable = (await h.store.load())!.value;
         expect(durable.allowance.calls).toBe(1);
         expect(durable.accounting?.pending).toBeTruthy();
-        onDelta(text.slice(0, 25));
+        started.resolve();
         await finish.promise;
-        onDelta(text.slice(25));
         return { value: text, usage };
       },
     });
@@ -151,21 +157,15 @@ describe('a private stream for deliberately public expression', () => {
       onUsage,
       onUsageDetails,
     });
-    const chunks: string[] = [];
-    const response = new BrokerExpressionProvider(client).express(input, (delta) => {
-      chunks.push(delta);
-      first.resolve();
-    });
+    const response = new BrokerExpressionProvider(client).express(input);
     try {
-      await first.promise;
-      expect(chunks.join('')).toBe(text.slice(0, 25));
+      await started.promise;
       expect(onUsage).not.toHaveBeenCalled();
       expect((await h.request({ input })).status).toBe(409);
     } finally {
       finish.resolve();
     }
     expect(await response).toBe(text);
-    expect(chunks.join('')).toBe(text);
     expect(onUsage).toHaveBeenCalledWith(usage.inputTokens, usage.outputTokens);
     expect(onUsageDetails).toHaveBeenCalledWith(usage);
     expect(h.broker.getState()).toMatchObject({
@@ -174,10 +174,9 @@ describe('a private stream for deliberately public expression', () => {
     expect(h.broker.getState().accounting?.pending).toBeUndefined();
   });
 
-  it('preserves known usage when a provider fails after a delta', async () => {
+  it('preserves known usage when a provider fails', async () => {
     const h = await start({
-      expression: async (_actual, _signal, onDelta) => {
-        onDelta('The five tubes');
+      expression: async () => {
         throw new InferenceDispatchError(usage);
       },
     });
@@ -188,11 +187,7 @@ describe('a private stream for deliberately public expression', () => {
       expectedBinding: binding,
       onUsageDetails: reported,
     });
-    const delta = vi.fn();
-    await expect(client.expression(input, delta)).rejects.toMatchObject({
-      code: 'provider_unavailable',
-    });
-    expect(delta).toHaveBeenCalledWith('The five tubes');
+    await expect(client.expression(input)).rejects.toMatchObject({ code: 'provider_unavailable' });
     expect(reported).toHaveBeenCalledWith(usage);
     expect(h.broker.getState().allowance).toMatchObject({
       calls: 1,
@@ -201,13 +196,8 @@ describe('a private stream for deliberately public expression', () => {
     });
   });
 
-  it('rejects contradictory completed text without refunding or losing reported usage', async () => {
-    const h = await start({
-      expression: async (_actual, _signal, onDelta) => {
-        onDelta('The copper tubes sound uneven.');
-        return { value: 'An unrelated new encounter.', usage };
-      },
-    });
+  it('never publishes an empty file, and keeps the reported usage', async () => {
+    const h = await start({ expression: async () => ({ value: '  ', usage }) });
     const reported = vi.fn();
     const client = new BrokerModelClient({
       baseUrl: h.baseUrl,
@@ -220,15 +210,8 @@ describe('a private stream for deliberately public expression', () => {
     expect(h.broker.getState().allowance.calls).toBe(1);
   });
 
-  it('accepts an empty authored observation without inventing a fallback thought', async () => {
-    const h = await start({ expression: async () => ({ value: '', usage }) });
-    const client = new BrokerModelClient({ baseUrl: h.baseUrl, token, expectedBinding: binding });
-    const delta = vi.fn();
-    expect(await client.expression(input, delta)).toBe('');
-    expect(delta).not.toHaveBeenCalled();
-  });
-
   it('aborts a disconnected expression and retains the spent call and unknown-usage fence', async () => {
+    const started = deferred();
     const aborted = deferred();
     const settled = deferred();
     const backing = memoryStore();
@@ -241,8 +224,8 @@ describe('a private stream for deliberately public expression', () => {
           return next;
         },
       },
-      expression: async (_actual, signal, onDelta) => {
-        onDelta('A quiet moment');
+      expression: async (_actual, signal) => {
+        started.resolve();
         return new Promise((_resolve, reject) => {
           signal.addEventListener(
             'abort',
@@ -255,10 +238,11 @@ describe('a private stream for deliberately public expression', () => {
         });
       },
     });
-    const response = await h.request({ input });
-    const reader = response.body!.getReader();
-    await reader.read();
-    await reader.cancel();
+    const controller = new AbortController();
+    const response = h.request({ input }, {}, controller.signal).catch(() => undefined);
+    await started.promise;
+    controller.abort();
+    await response;
     await aborted.promise;
     await settled.promise;
     expect(h.broker.getState().allowance.calls).toBe(1);
@@ -327,69 +311,18 @@ it('forwards only Responses output_text deltas and ignores reasoning, refusal an
   expect(JSON.stringify(expressionMessages('Hubert', input))).not.toContain('PRIVATE-');
 });
 
-it('consumes an overflowing provider note to preserve reported usage without blocking the next decision', async () => {
-  const h = await start({
-    expression: async (_input, _signal, onDelta) => {
-      onDelta('A public draft.');
-      onDelta('x'.repeat(361));
-      return { value: 'A public draft.', usage };
-    },
-  });
-  const reported = vi.fn();
-  const client = new BrokerModelClient({
-    baseUrl: h.baseUrl,
-    token,
-    expectedBinding: binding,
-    onUsageDetails: reported,
-  });
-  await expect(client.expression(input)).rejects.toMatchObject({ code: 'invalid_expression' });
-  expect(reported).toHaveBeenCalledWith(usage);
-  expect(h.broker.getState().accounting?.pending).toBeUndefined();
-  expect(h.broker.getState().allowance.inputTokens).toBe(usage.inputTokens);
-  expect(client.isAvailable()).toBe(true);
-  expect(
-    await client.decision({
-      identity: 'Caller',
-      state: {},
-      intentions: [],
-      memories: [],
-      observations: {},
-      outsideMessages: [],
-    }),
-  ).toEqual({ action: { type: 'reflect' }, why: '' });
-  expect(h.broker.getState().allowance.calls).toBe(2);
-});
-
-describe('a wish is asked for, never supplied', () => {
-  const wish: PublicExpressionInput = input;
-  it('accepts the wish form, keeps it out of the data and leaves the wish to the resident', () => {
-    expect(PublicExpressionInputSchema.safeParse(wish).success).toBe(true);
-    expect(PublicExpressionInputSchema.safeParse({ ...input, form: 'catalog' }).success).toBe(
-      false,
-    );
-    // The retired thought and notebook forms are no longer accepted.
-    expect(PublicExpressionInputSchema.safeParse({ ...input, form: 'thought' }).success).toBe(
-      false,
-    );
+describe('the file form of public expression', () => {
+  it('accepts only the work form, with nothing private in its data', () => {
+    expect(PublicExpressionInputSchema.safeParse(input).success).toBe(true);
+    for (const form of ['catalog', 'wish', 'thought'])
+      expect(PublicExpressionInputSchema.safeParse({ ...input, form }).success).toBe(false);
     const { form: _form, ...noForm } = input;
     expect(PublicExpressionInputSchema.safeParse(noForm).success).toBe(false);
-    const [system, user] = expressionMessages('Hubert.', wish);
+    const [system, user] = expressionMessages('Hubert.', input);
     expect(user.content).not.toContain('"form"');
-    expect(user.content).toContain('public-chime');
+    expect(user.content).toContain('copper tubes');
     expect(system.content).toMatch(/^Hubert\.\n/);
-    expect(system.content).toContain('something you wish existed in Elsewhere');
-    expect(system.content).toContain('saying nothing is the ordinary answer');
-    expect(system.content).toContain('return an empty response');
-    // No object, name or example of a wish is suggested to the resident.
-    expect(system.content).not.toMatch(/telescope|weather station|for example|such as/i);
-  });
-  it('publishes one short paragraph or nothing', () => {
-    expect(validatePublicWish(' “I would like a bench by the pond.” ')).toBe(
-      'I would like a bench by the pond.',
-    );
-    expect(validatePublicWish('')).toBe('');
-    expect(() => validatePublicWish('One line.\nAnother line.')).toThrow(/short wish/);
-    expect(() => validatePublicWish('a'.repeat(281))).toThrow(/short wish/);
-    expect(() => validatePublicWish('{"wish":"a bench"}')).toThrow();
+    expect(system.content).toContain('one file for your own public site');
+    expect(system.content).not.toContain('wish');
   });
 });

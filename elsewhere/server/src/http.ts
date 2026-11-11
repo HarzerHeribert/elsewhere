@@ -96,6 +96,13 @@ export interface ApiDependencies {
     text: string,
     actor?: { userId: string; displayName: string },
   ): Promise<{ accepted: boolean }>;
+  /** Only the signed-in account's own messages, each with the resident's private reply. */
+  listMessages?(userId: string): Array<{
+    id: string;
+    at: number;
+    text: string;
+    reply?: { text: string; at: number };
+  }>;
   getArtifact?(id: string): { contentType: string; body: string } | null;
   resolveWish?(id: string, decision: 'fulfill' | 'decline'): Promise<PublicSnapshot>;
 }
@@ -1012,6 +1019,12 @@ export function createApiServer(deps: ApiDependencies) {
         );
         res.setHeader('Content-Disposition', `inline; filename="${id}.svg"`);
         sendBody(200, artifact.body);
+        return;
+      }
+      if (req.method === 'GET' && pathname === '/api/messages') {
+        const account = deps.auth ? await deps.auth.getAccount(req) : null;
+        res.setHeader('Cache-Control', 'private, no-store');
+        send(200, { messages: account ? (deps.listMessages?.(account.id) ?? []) : [] });
         return;
       }
       if (req.method === 'POST' && pathname === '/api/messages') {

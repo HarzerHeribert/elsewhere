@@ -100,8 +100,9 @@ export function CharacterPanel({
     ...trail.slice(-3).map((entry) => ({
       id: 'step:' + entry.id,
       at: entry.at,
-      note: entry.why || entry.text || '',
-      seen: entry.why || entry.text ? '' : trailLabel(entry),
+      // A portrait is long; the stream only marks that it was written.
+      note: entry.kind === 'portrait' ? '' : entry.why || entry.text || '',
+      seen: entry.kind !== 'portrait' && (entry.why || entry.text) ? '' : trailLabel(entry),
     })),
     ...activityRows(events)
       .slice(0, 3)
@@ -194,6 +195,13 @@ export function CharacterPanel({
               <p>Follow what I decide, look through what I remember, or leave me a note.</p>
             </div>
           </div>
+          {character.portrait && (
+            <div className="panel-section portrait-text">
+              <p className="eyebrow">How I see myself</p>
+              <p>{character.portrait.text}</p>
+              <small>Written {formatTime(toWall(character.portrait.at))}</small>
+            </div>
+          )}
           <div className="panel-section">
             <p className="eyebrow">Questions I follow</p>
             <PursuitList pursuits={pursuits} />

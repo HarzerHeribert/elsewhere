@@ -53,22 +53,12 @@ try {
   const dispatch = async (input: DecisionContext | ReflectionInput, signal: AbortSignal) => {
     usage = undefined;
     let text: string | undefined;
-    const dream = 'episodes' in input;
+    const portrait = 'form' in input;
     try {
-      text = dream
+      text = portrait
         ? await client.text(reflectionMessages(input), signal)
         : await client.decisionText(input, signal);
-      const value = dream
-        ? validateReflectionProposal(
-            JSON.parse(
-              text
-                .trim()
-                .replace(/^```(?:json)?\s*/, '')
-                .replace(/\s*```$/, ''),
-            ),
-            input,
-          )
-        : parseResponsesAction(text);
+      const value = portrait ? validateReflectionProposal(text, input) : parseResponsesAction(text);
       return { value, usage };
     } catch (error) {
       let diagnostic: InferenceDiagnostic;
@@ -77,7 +67,8 @@ try {
           code: error.code === 'invalid_json' ? 'invalid_json' : 'invalid_action',
           fields: error.fields,
         };
-      else if (text !== undefined && dream) diagnostic = { code: 'invalid_reflection', fields: [] };
+      else if (text !== undefined && portrait)
+        diagnostic = { code: 'invalid_reflection', fields: [] };
       else {
         const candidate = {
           code: 'provider_response',
@@ -94,7 +85,7 @@ try {
           JSON.stringify({
             event: 'provider_failure',
             at: new Date().toISOString(),
-            workload: dream ? 'reflection' : 'decision',
+            workload: portrait ? 'reflection' : 'decision',
             code: diagnostic.providerCode ?? 'unclassified',
             ...(Number.isInteger(failure.status) ? { status: failure.status } : {}),
             ...(typeof failure.requestId === 'string' && /^[\w-]{1,200}$/.test(failure.requestId)

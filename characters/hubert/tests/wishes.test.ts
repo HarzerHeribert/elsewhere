@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { PublicSnapshot } from '@elsewhere/character-interfaces';
-import { createInitialWorld } from '@elsewhere/server';
 import {
   applyExternalEvent,
   createInitialHubert,
@@ -8,13 +6,11 @@ import {
   publicWishes,
   recordWish,
   resolveWish,
-  wishDue,
-  wishInput,
+  wishProblem,
   type HubertState,
 } from '../src/index';
 import { WISHES_KEPT } from '../src/wishes';
 
-const hour = 3_600_000;
 const epoch = Date.UTC(2026, 10, 8, 12);
 function experienced(): HubertState {
   const state = createInitialHubert(epoch);
@@ -37,31 +33,18 @@ const wished = (state = experienced(), at = epoch, id = 'wish-1', text = bench) 
   recordWish(state, { id, text }, at);
 
 describe('wishes in the resident’s own words', () => {
-  it('offers the chance to wish on real time, only to a life with something behind it', () => {
-    expect(wishDue(createInitialHubert(epoch), epoch)).toBe(false);
-    const state = experienced();
-    expect(wishDue(state, epoch)).toBe(true);
-    expect(() => wishDue(state, Number.NaN)).toThrow(/wall-clock/);
-    // Asked and answered with nothing: a day passes before the next chance.
-    state.wishesAskedAtReal = epoch;
-    expect(wishDue(state, epoch + 24 * hour - 1)).toBe(false);
-    expect(wishDue(state, epoch + 24 * hour)).toBe(true);
-    // After a wish there are two quiet days, and never more than three open wishes.
-    const one = wished(state);
-    expect(wishDue(one, epoch + 48 * hour - 1)).toBe(false);
-    expect(wishDue(one, epoch + 48 * hour)).toBe(true);
-    let three = one;
-    for (const n of [2, 3]) three = wished(three, epoch + n, 'wish-' + n, 'Another thing ' + n);
-    expect(wishDue(three, epoch + 400 * hour)).toBe(false);
+  it('says in words the resident can read when three wishes are still waiting', () => {
+    let state = wished();
+    expect(wishProblem(state)).toBeUndefined();
+    for (const n of [2, 3]) state = wished(state, epoch + n, 'wish-' + n, 'Another thing ' + n);
+    expect(wishProblem(state)).toMatch(/3 wishes that nobody has answered/);
+    // An answer from the owner, either way, makes room again.
     const settled = resolveWish(
-      three,
+      state,
       { wishId: 'wish-2', decision: 'decline', receiptId: 'r' },
       epoch + 10,
     );
-    expect(wishDue(settled, epoch + 400 * hour)).toBe(true);
-    // Three wishes inside seven days are the week's allowance, however they were answered.
-    expect(wishDue(settled, epoch + 100 * hour)).toBe(false);
-    expect(wishDue(settled, epoch + 168 * hour + 3)).toBe(true);
+    expect(wishProblem(settled)).toBeUndefined();
   });
 
   it('keeps exactly the words the resident wrote and publishes only declared fields', () => {
@@ -167,68 +150,17 @@ describe('wishes in the resident’s own words', () => {
       at: epoch - 1,
     });
     expect(publicWishes(state).map((wish) => wish.id)).toEqual(['wish-1']);
-    // A catalog wish never counts as the resident having wished.
-    expect(wishDue({ ...experienced(), wishes: [catalog as never] }, epoch)).toBe(true);
-    const kept = preserveWishLedger(createInitialHubert(epoch + 1), {
-      ...state,
-      wishesAskedAtReal: epoch,
-    });
+    // A catalog wish never counts as one the resident is waiting on.
+    expect(wishProblem({ ...experienced(), wishes: [catalog, catalog, catalog] as never })).toBe(
+      undefined,
+    );
+    const kept = preserveWishLedger(createInitialHubert(epoch + 1), state);
     expect(kept.wishes.map((wish) => wish.id)).toEqual(['wish-1']);
     expect(kept.wishReceipts).toEqual([]);
-    expect(kept.wishesAskedAtReal).toBe(epoch);
     const legacy = experienced();
     delete (legacy as Partial<HubertState>).wishes;
     delete (legacy as Partial<HubertState>).wishReceipts;
     expect(publicWishes(legacy)).toEqual([]);
-    expect(wishDue(legacy, epoch)).toBe(true);
     expect(wished(legacy).wishes).toHaveLength(1);
-  });
-
-  it('asks from public fields only: what exists, a note, a memory, the questions followed and earlier wishes', () => {
-    const world = createInitialWorld(epoch);
-    const snapshot = {
-      world,
-      character: {},
-      pursuits: [
-        {
-          id: 'p-1',
-          question: 'Why do mallards keep to the far bank?',
-          status: 'open',
-          lastAt: 10,
-          entries: [
-            { kind: 'note', id: 'note-1', at: 5, text: 'The mallard keeps to the far bank.' },
-          ],
-        },
-        {
-          id: 'p-2',
-          question: 'What does the weather do to birds?',
-          status: 'active',
-          lastAt: 20,
-          entries: [],
-        },
-        {
-          id: 'p-3',
-          question: 'A dropped question?',
-          status: 'set-aside',
-          lastAt: 30,
-          entries: [],
-        },
-      ],
-      memories: [{ id: 'memory-1', summary: 'Watched the pond for a while.' }],
-      wishes: [{ id: 'wish-0', text: 'An earlier wish.' }],
-      events: [{ message: 'NOT-A-FACT' }],
-    } as unknown as PublicSnapshot;
-    const input = wishInput(snapshot);
-    expect(Object.keys(input).sort()).toEqual(['facts', 'form', 'questions', 'recentNotes']);
-    expect(input.form).toBe('wish');
-    expect(input.facts.map((fact) => fact.id)).toEqual(['elsewhere', 'note-1', 'memory-1']);
-    expect(input.facts[0].summary).toContain('The lookout telescope');
-    expect(input.facts[0].summary.length).toBeLessThanOrEqual(600);
-    expect(input.questions).toEqual([
-      'What does the weather do to birds?',
-      'Why do mallards keep to the far bank?',
-    ]);
-    expect(input.recentNotes).toEqual(['An earlier wish.']);
-    expect(JSON.stringify(input)).not.toContain('NOT-A-FACT');
   });
 });

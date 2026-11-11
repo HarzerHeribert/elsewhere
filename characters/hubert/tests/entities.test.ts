@@ -163,7 +163,15 @@ describe('living entities and what is remembered of them', () => {
     const tiredContext = workingContext(tired, observation());
     expect(tiredContext.state.bodyLanguage).toMatchObject({ posture: 'settled' });
     expect(tiredContext.identity).not.toContain('PRIVATE-CANARY');
-    expect(tiredContext.outsideMessages[0].text).toContain('PRIVATE-CANARY');
+    expect(tiredContext.outsideMessages).toEqual([]);
+    expect(tiredContext.state.messages).toEqual([
+      expect.objectContaining({
+        id: 'outside',
+        from: 'a visitor',
+        text: expect.stringContaining('PRIVATE-CANARY'),
+        answered: false,
+      }),
+    ]);
     const decision = await chooseActionWithProvider(
       createInitialHubert(0),
       observation(),

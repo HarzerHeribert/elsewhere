@@ -92,7 +92,7 @@ describe.each(transports)('$name canonical model boundary', (transport) => {
     );
     const choices = [
       { type: 'look' as const, where: { targetId: ['courtyard-bench'] } },
-      { type: 'reflect' as const },
+      { type: 'rest' as const },
     ];
     await transport.create(fetcher as typeof fetch).propose({ ...context, choices });
     const sent = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
@@ -189,7 +189,7 @@ describe('bounded model envelopes and canonical commands', () => {
       targetId: 'bench',
     });
     expect(MODEL_ACTION_FORMAT.type).toBe('object');
-    expect(MODEL_ACTION_FORMAT.anyOf).toHaveLength(17);
+    expect(MODEL_ACTION_FORMAT.anyOf).toHaveLength(18);
     expect(MODEL_ACTION_FORMAT.anyOf[0]).toMatchObject({
       type: 'object',
       required: ['type', 'targetId'],

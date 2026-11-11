@@ -148,6 +148,22 @@ const definitions = [
       'note: records a finding on the active pursuit in your own words (text 1-600 characters, public), whether it surprised you, and optionally next, a follow-up question (max 240 characters) it raises, and sourceIds of the sources it draws on. It needs an active pursuit.',
   },
   {
+    schema: z.object({ type: z.literal('wish'), text: z.string().trim().min(8).max(240) }).strict(),
+    instruction:
+      'wish: tells the people who look after this world one thing you lack here (a tool, a way to measure something, a place, a material), in one or two sentences; it is public and may or may not be built.',
+  },
+  {
+    schema: z
+      .object({
+        type: z.literal('reply'),
+        messageId: z.string().trim().min(1).max(100),
+        text: z.string().trim().min(1).max(600),
+      })
+      .strict(),
+    instruction:
+      "reply: answers one message from state.messages. messageId is that message's id and text is your answer in your own words; it goes only to the person who wrote, never to the public trail.",
+  },
+  {
     schema: z
       .object({ type: z.literal('delegate'), task: z.string().trim().min(1).max(1000) })
       .strict(),
@@ -207,7 +223,7 @@ function fieldFormat(schema: z.ZodTypeAny): JsonSchema {
 }
 
 /** Commands the model is never offered: disabled by policy, or retired in favour of another. */
-const MODEL_HIDDEN: readonly string[] = ['say', 'delegate', 'work'];
+const MODEL_HIDDEN: readonly string[] = ['say', 'delegate', 'work', 'reflect'];
 
 export const MODEL_ACTION_FORMAT = {
   type: 'object',
@@ -236,7 +252,7 @@ export const MODEL_ACTION_FORMAT = {
     }),
 };
 export const MODEL_ACTION_INSTRUCTIONS = definitions
-  .filter((item) => item.schema.shape.type.value !== 'work')
+  .filter((item) => !['work', 'reflect'].includes(item.schema.shape.type.value))
   .map((item) => item.instruction)
   .join(' ');
 

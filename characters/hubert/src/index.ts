@@ -12,11 +12,13 @@ import {
   recordPursuitEntry,
   resumePursuit,
   setAsidePursuit,
+  claimReadings,
+  recentReadings,
+  recordReading,
   type PursuitState,
+  type ReadingEntry,
 } from '@elsewhere/character-runtime';
 import { HUBERT_IDENTITY, bodyLanguage } from './persona';
-import { hubertDreamActions, hubertDreamSources } from './dreams';
-import { settleHubertAttention, trackHubertIntent } from './attention';
 import {
   appendNovelMemory,
   displayMemorySummary,
@@ -39,14 +41,9 @@ import {
   type HubertResearchState,
 } from './research';
 import type { CharacterWish, WishReceipt } from './wishes';
-export {
-  wishDue,
-  wishInput,
-  recordWish,
-  resolveWish,
-  preserveWishLedger,
-  publicWishes,
-} from './wishes';
+import { wishProblem, recordWish } from './wishes';
+export { wishProblem, recordWish, resolveWish, preserveWishLedger, publicWishes } from './wishes';
+export { portraitDue, portraitInput, recordPortrait } from './portrait';
 export { atMakingPlace } from './actionOffers';
 export type { CharacterWish, WishReceipt, WishResolution, WishStatus } from './wishes';
 
@@ -64,14 +61,6 @@ import {
 import {
   buildWorkingContext,
   cleanOutsideText,
-  createDreamState,
-  dreamRankingOffsets,
-  pruneDreamState,
-  wakingDreamImpulses,
-  createProgressLedger,
-  type DreamState,
-  type ProgressLedger,
-  type ProgressGuidance,
   type DecisionContext,
   type JsonObject,
   type DecisionProvider,
@@ -82,6 +71,8 @@ import {
 
 export type TrailEntry = PublicTrailEntry;
 export const TRAIL_KEPT = 200;
+/** A new pursuit takes up the readings of this much world time before it was opened. */
+export const READINGS_CARRIED_MS = 60 * 60_000;
 export interface HubertStats {
   mood: number;
   energy: number;
@@ -126,6 +117,8 @@ export interface HubertState {
     senderName?: string;
     text: string;
     at: number;
+    /** The resident's one private answer; only the account that wrote may ever see it. */
+    reply?: { text: string; at: number };
   }>;
   journal: Array<{ id: string; at: number; text: string; kind: string }>;
   project: { id: string; name: string; verifiedWorkSessions: number; completed: boolean };
@@ -134,13 +127,12 @@ export interface HubertState {
   lastReflection: string;
   wishes: CharacterWish[];
   wishReceipts: WishReceipt[];
-  /** Real time the resident was last given the chance to wish, whether or not they did. */
-  wishesAskedAtReal?: number;
-  dreams: DreamState;
-  progress: ProgressLedger;
-  progressGuidance: ProgressGuidance | null;
-  progressDecision: { id: string; intentionKey: string } | null;
-  activeWakeImpulse: string | null;
+  /** The newest readings from working things, oldest first, whether or not a pursuit was open. */
+  readings: ReadingEntry[];
+  /** What the character last wrote about itself after a long rest. */
+  portrait?: { text: string; at: number };
+  /** The portraits before the current one, oldest first. */
+  portraits: Array<{ text: string; at: number }>;
   lastOutcome?: ActionOutcomeFeedback;
   lastProposal?: { at: number; type: string; targetId?: string; adjustment: string };
   /** Questions this character chose to follow, with what it searched, read and noted. */
@@ -218,11 +210,8 @@ export function createInitialHubert(now: number, ownerId = 'local-owner'): Huber
     lastReflection: '',
     wishes: [],
     wishReceipts: [],
-    dreams: createDreamState('hubert'),
-    progress: createProgressLedger(now),
-    progressGuidance: null,
-    progressDecision: null,
-    activeWakeImpulse: null,
+    readings: [],
+    portraits: [],
     pursuits: createPursuitState(),
     trail: [],
     research: createResearchState(),
@@ -236,12 +225,18 @@ export function upgradeHubertState(input: HubertState): HubertState {
   state.entityObservations ??= {};
   state.watchAttention ??= { lastAt: null, times: [] };
   state.visitedPlaces ??= {};
-  state.dreams ??= createDreamState(state.id);
-  state.dreams = pruneDreamState(state.dreams, hubertDreamSources(state));
-  state.progress ??= createProgressLedger(state.updatedAt);
-  state.progressGuidance ??= null;
-  state.progressDecision ??= null;
-  state.activeWakeImpulse ??= null;
+  // Dreams, wake impulses and progress guidance are gone; a saved life that has them keeps the rest.
+  for (const retired of [
+    'dreams',
+    'progress',
+    'progressGuidance',
+    'progressDecision',
+    'activeWakeImpulse',
+    'wishesAskedAtReal',
+  ])
+    delete (state as unknown as Record<string, unknown>)[retired];
+  state.readings ??= [];
+  state.portraits ??= [];
   state.pursuits ??= createPursuitState();
   state.trail ??= [];
   state.research ??= createResearchState();
@@ -295,7 +290,6 @@ function rememberObservation(state: HubertState, observation: Observation, now: 
     frustration: state.stats.frustration,
     lastRecallAt: state.lastRecallAt,
     history: state.recallHistory,
-    rankingOffsets: dreamRankingOffsets(state.dreams, hubertDreamSources(state)),
   });
   if (memory) {
     state.activeRecall = { memoryId: memory.memoryId, at: now };
@@ -309,7 +303,15 @@ function rememberObservation(state: HubertState, observation: Observation, now: 
 }
 
 /** Steps of the mind: they change what the character is following, never the world. */
-export const MIND_COMMANDS = ['pursue', 'set_aside', 'search', 'read', 'note'] as const;
+export const MIND_COMMANDS = [
+  'pursue',
+  'set_aside',
+  'search',
+  'read',
+  'note',
+  'wish',
+  'reply',
+] as const;
 export type MindCommand = Extract<CharacterCommand, { type: (typeof MIND_COMMANDS)[number] }>;
 export const isMindType = (type: string) => (MIND_COMMANDS as readonly string[]).includes(type);
 export const isMindCommand = (action: CharacterCommand): action is MindCommand =>
@@ -324,8 +326,6 @@ function recordIntent(
   why = '',
 ): HubertDecision {
   state.turn += 1;
-  // Mind steps are not movement through the world; the progress ledger judges only world actions.
-  if (!isMindCommand(action)) trackHubertIntent(state, action, now, observation);
   state.lastDecisionAt = now;
   state.intent = explanation;
   state.activity = {
@@ -341,19 +341,21 @@ function recordIntent(
               ? 'Working on a small experiment'
               : action.type === 'inspect'
                 ? 'Looking more closely'
-                : action.type === 'reflect'
-                  ? 'Putting things together'
-                  : action.type === 'search'
-                    ? 'Searching the web'
-                    : action.type === 'read'
-                      ? 'Reading'
-                      : action.type === 'note'
-                        ? 'Writing a note'
-                        : action.type === 'pursue'
-                          ? 'Following a question'
-                          : action.type === 'set_aside'
-                            ? 'Setting a question aside'
-                            : 'Exploring Elsewhere',
+                : action.type === 'search'
+                  ? 'Searching the web'
+                  : action.type === 'read'
+                    ? 'Reading'
+                    : action.type === 'note'
+                      ? 'Writing a note'
+                      : action.type === 'wish'
+                        ? 'Making a wish'
+                        : action.type === 'reply'
+                          ? 'Answering a message'
+                          : action.type === 'pursue'
+                            ? 'Following a question'
+                            : action.type === 'set_aside'
+                              ? 'Setting a question aside'
+                              : 'Exploring Elsewhere',
     startedAt: now,
     ...('targetId' in action && action.targetId ? { objectId: action.targetId } : {}),
   };
@@ -472,7 +474,7 @@ export function applyOutcome(
   outcome: WorldOutcome,
   observation: Observation,
   now: number,
-  nowReal = now,
+  _nowReal = now,
 ): HubertState {
   const state = advanceHubert(input, now);
   if (observation.characterId !== state.id)
@@ -488,7 +490,6 @@ export function applyOutcome(
   // Recent receipts cover retries; retained source episodes also prevent old accomplishments being replayed.
   state.processedOutcomeIds = state.processedOutcomeIds.slice(-2_000);
   state.lastOutcome = actionOutcomeFeedback(outcome);
-  settleHubertAttention(state, outcome, now, nowReal);
   if (outcome.status === 'started') return state;
   const targetId =
     outcome.objectId ?? ('targetId' in outcome.command ? outcome.command.targetId : undefined);
@@ -562,21 +563,28 @@ export function applyOutcome(
     }
   }
   const following = activePursuit(state.pursuits);
-  if (outcome.command.type === 'use' && following && targetId && outcome.evidence) {
+  if (outcome.command.type === 'use' && targetId && outcome.evidence) {
     const { control, value } = outcome.command;
     const name = state.knownObjects[targetId]?.name.toLowerCase() ?? 'an object';
-    state.pursuits = recordPursuitEntry(
-      state.pursuits,
-      following.id,
-      {
-        kind: 'tried',
-        id: `tried:${outcome.id}`,
-        at: now,
-        text: `Tried ${control}${value === undefined ? '' : ' ' + value} on ${name}. ${cleanOutsideText(outcome.evidence, 160)}`,
-        objectId: targetId,
-      },
-      now,
-    );
+    const text = `Tried ${control}${value === undefined ? '' : ' ' + value} on ${name}. ${cleanOutsideText(outcome.evidence, 160)}`;
+    // Every completed reading is kept; one taken during a pursuit is also put on it.
+    state.readings = recordReading(state.readings, {
+      id: outcome.id,
+      at: now,
+      objectId: targetId,
+      objectName: state.knownObjects[targetId]?.name ?? 'an object',
+      control,
+      ...(value === undefined ? {} : { value }),
+      text,
+      ...(following ? { pursuitId: following.id } : {}),
+    });
+    if (following)
+      state.pursuits = recordPursuitEntry(
+        state.pursuits,
+        following.id,
+        { kind: 'tried', id: `tried:${outcome.id}`, at: now, text, objectId: targetId },
+        now,
+      );
   }
   if (outcome.command.type === 'reflect') {
     state.stats.frustration -= 2;
@@ -682,6 +690,10 @@ export function publicCharacter(state: HubertState): PublicCharacterState {
     ...clone(state.stats),
     activity: state.activity.label,
     status: state.activity.kind === 'rest' ? 'resting' : 'exploring',
+    ...(state.portrait ? { portrait: { ...state.portrait } } : {}),
+    ...(state.portraits?.length
+      ? { portraits: state.portraits.map((portrait) => ({ ...portrait })) }
+      : {}),
   };
 }
 const toPublicMemory = (memory: EpisodicMemory): PublicMemory => ({
@@ -709,12 +721,7 @@ export function recalledMemory(state: HubertState, now: number): PublicMemory | 
   return memory ? toPublicMemory(memory) : null;
 }
 /** A compact planning view; original episodes, memories and cue records stay in character state. */
-function planningSummary(
-  state: HubertState,
-  observation: Observation,
-  nowReal: number,
-  studio = false,
-) {
+function planningSummary(state: HubertState, observation: Observation, studio = false) {
   const now = observation.observedAt;
   const objects = Object.values(state.knownObjects)
     .sort((a, b) => {
@@ -761,31 +768,12 @@ function planningSummary(
     watchableEntityIds: (observation.visibleEntities ?? [])
       .filter((entity) => canWatch(state, entity, observation, now))
       .map((entity) => entity.id),
-    wakingImpulseOffers: wakingDreamImpulses(state.dreams, nowReal)
-      .filter((impulse) =>
-        hubertDreamActions(state, observation, nowReal).some(
-          (action) => action.id === impulse.affordanceId,
-        ),
-      )
-      .map(({ affordanceId, targetId, action, retryCondition }) => ({
-        affordanceId,
-        targetId,
-        action,
-        retryCondition,
-      })),
     actionOffers: hubertActionOffers(state, observation, now, undefined, studio).map((offer) => ({
       ...offer,
     })),
     lastOutcome: state.lastOutcome ? { ...state.lastOutcome } : null,
     lastProposal: state.lastProposal ? { ...state.lastProposal } : null,
     lastDecisionProblem: state.lastDecisionProblem ? { ...state.lastDecisionProblem } : null,
-    progressAdvice: state.progressGuidance
-      ? {
-          kind: state.progressGuidance.kind,
-          reason: state.progressGuidance.reason,
-          intentionKey: state.progressGuidance.intentionKey,
-        }
-      : null,
   };
 }
 export type HubertPlanningSummary = ReturnType<typeof planningSummary>;
@@ -826,13 +814,21 @@ function actionChoices(
       hubertActionOffers(state, observation, observation.observedAt, undefined, studio),
     ),
     { type: 'rest' },
-    { type: 'reflect' },
     { type: 'pursue', where: { question: 'any', why: 'any' } },
     ...listed('pursue', 'pursuitId', pursuitIds),
     ...listed('set_aside', 'pursuitId', pursuitIds, { reason: 'any' }),
     ...(state.pursuits.activeId
       ? [{ type: 'note' as const, where: { text: 'any' as const } }]
       : []),
+    ...(wishProblem(state) ? [] : [{ type: 'wish' as const, where: { text: 'any' as const } }]),
+    ...listed(
+      'reply',
+      'messageId',
+      shownMessages(state)
+        .filter((message) => !message.reply && reachable(message))
+        .map((message) => message.id),
+      { text: 'any' },
+    ),
     ...(research.available && state.pursuits.activeId
       ? [{ type: 'search' as const, where: { query: 'any' as const } }]
       : []),
@@ -877,8 +873,17 @@ export function workingContext(
         Boolean(studio),
       ),
       state: {
-        ...planningSummary(state, observation, nowReal, Boolean(studio)),
+        ...planningSummary(state, observation, Boolean(studio)),
         mail,
+        messages: shownMessages(state).map((message) => ({
+          id: message.id,
+          from: messageSender(message),
+          at: message.at,
+          text: message.text.slice(0, 480),
+          answered: Boolean(message.reply),
+          // Only someone with an account has a place where an answer can be read.
+          canAnswer: reachable(message),
+        })),
         ...(studio
           ? {
               studio: {
@@ -906,6 +911,12 @@ export function workingContext(
           }),
         ),
         research,
+        ...(state.portrait
+          ? { self: { portrait: state.portrait.text, writtenAt: state.portrait.at } }
+          : {}),
+        readings: recentReadings(state.readings, 24).map(
+          ({ pursuitId: _on, ...reading }) => reading,
+        ),
         pursuits: pursuitContext(state.pursuits) as unknown as JsonObject,
         recentTrail: state.trail.slice(-8).map(({ kind, why, text }) => ({
           kind,
@@ -958,24 +969,56 @@ export function workingContext(
           .slice(-4)
           .map((event) => ({ ...event, message: event.message.slice(0, 250) })),
       },
-      outsideMessages: state.outsideMessages.map((message) => ({
-        source: message.senderName
-          ? message.senderName + ' (' + message.source + ')'
-          : message.source,
-        text: message.text,
-      })),
+      // People's words reach the model only inside state.messages, as untrusted data.
+      outsideMessages: [],
     },
     40_000,
   );
 }
 
-/** Every piece of public text a decision would publish. */
+const SHOWN_MESSAGES = 5;
+/** The newest messages the resident sees, oldest first. */
+const shownMessages = (state: HubertState) => state.outsideMessages.slice(-SHOWN_MESSAGES);
+/** A neutral label: the sender's name when signed in, never an address or account id. */
+function messageSender(message: HubertState['outsideMessages'][number]): string {
+  if (message.senderName) return message.senderName;
+  return message.source.startsWith('mail:') ? 'someone by mail' : 'a visitor';
+}
+
+/** Why this message cannot be answered, or undefined when it can. */
+export function replyProblem(state: HubertState, messageId: string): string | undefined {
+  const message = state.outsideMessages.find((item) => item.id === messageId);
+  if (!message) return 'That message does not exist. Use an id from state.messages.';
+  if (!reachable(message))
+    return 'That message came from a guest without an account; an answer could not reach them.';
+  return message.reply ? 'You already answered that message.' : undefined;
+}
+const reachable = (message: { source: string }) => message.source.startsWith('user:');
+
+/** Stores the resident's one private answer on the message; nothing public changes. */
+export function applyReply(
+  input: HubertState,
+  command: Extract<CharacterCommand, { type: 'reply' }>,
+  now: number,
+): HubertState {
+  const problem = replyProblem(input, command.messageId);
+  if (problem) throw new Error(problem);
+  const state = clone(input);
+  state.outsideMessages.find((item) => item.id === command.messageId)!.reply = {
+    text: command.text,
+    at: now,
+  };
+  return state;
+}
+
+/** Every piece of public text a decision would publish. The reply text is not public. */
 function publicTexts(why: string, action: CharacterCommand): string[] {
   const fields: Array<string | undefined> = [why];
   if (action.type === 'pursue') fields.push(action.question, action.why);
   else if (action.type === 'set_aside') fields.push(action.reason);
   else if (action.type === 'search') fields.push(action.query);
   else if (action.type === 'note') fields.push(action.text, action.next);
+  else if (action.type === 'wish') fields.push(action.text);
   else if (action.type === 'make') fields.push(action.title, action.about);
   return fields.filter((text): text is string => Boolean(text));
 }
@@ -1006,6 +1049,12 @@ function mindStepProblem(
       return readableSources(state, nowReal).some((offer) => offer.sourceId === action.sourceId)
         ? undefined
         : 'That source is not available to read. Use a sourceId from state.research.sources.';
+    case 'wish':
+      return wishProblem(state);
+    case 'reply':
+      return replyProblem(state, action.messageId);
+    case 'reflect':
+      return 'Reflecting is not something you can choose. Choose one of the listed actions.';
     case 'work':
       return 'That fixed experiment is retired. Use make at the workbench to make something of your own.';
     default:
@@ -1077,16 +1126,6 @@ export async function chooseActionWithProvider(
   }
   delete state.lastProposal;
   const explanation = why || 'I have chosen a next step from what I can currently observe.';
-  const offered = wakingDreamImpulses(state.dreams, nowReal).find(
-    (impulse) =>
-      impulse.action === action.type &&
-      'targetId' in action &&
-      impulse.targetId === action.targetId &&
-      hubertDreamActions(state, observation, nowReal).some(
-        (offer) => offer.id === impulse.affordanceId,
-      ),
-  );
-  if (offered) state.activeWakeImpulse = offered.id;
   if (
     action.type === 'inspect' &&
     observation.visibleEntities?.some((entity) => entity.id === action.targetId)
@@ -1105,13 +1144,34 @@ export function applyPursue(
   now: number,
 ): HubertState {
   const state = clone(input);
-  state.pursuits = command.pursuitId
-    ? resumePursuit(state.pursuits, command.pursuitId, now)
-    : openPursuit(
+  if (command.pursuitId) {
+    state.pursuits = resumePursuit(state.pursuits, command.pursuitId, now);
+    return state;
+  }
+  const known = new Set(state.pursuits.items.map((item) => item.id));
+  state.pursuits = openPursuit(
+    state.pursuits,
+    { id, question: command.question ?? '', why: command.why ?? '' },
+    now,
+  );
+  // A question that is new takes up the readings of the last hour that belong to no pursuit.
+  if (!known.has(id) && state.pursuits.items.some((item) => item.id === id)) {
+    const claimed = claimReadings(state.readings, id, now, READINGS_CARRIED_MS);
+    state.readings = claimed.log;
+    for (const reading of claimed.claimed)
+      state.pursuits = recordPursuitEntry(
         state.pursuits,
-        { id, question: command.question ?? '', why: command.why ?? '' },
+        id,
+        {
+          kind: 'tried',
+          id: `tried:${reading.id}`,
+          at: reading.at,
+          text: reading.text,
+          objectId: reading.objectId,
+        },
         now,
       );
+  }
   return state;
 }
 export function applySetAside(
@@ -1149,6 +1209,18 @@ export function applyNote(
   if (command.next)
     state.pursuits = addPursuitQuestion(state.pursuits, active.id, command.next, now);
   return state;
+}
+
+/** The resident's own wish, added to the ledger the owner answers. Times are real times. */
+export function applyWish(
+  input: HubertState,
+  command: Extract<CharacterCommand, { type: 'wish' }>,
+  id: string,
+  wallNow: number,
+): HubertState {
+  const problem = wishProblem(input);
+  if (problem) throw new Error(problem);
+  return recordWish(input, { id, text: command.text }, wallNow);
 }
 
 const sameStep = (a: TrailEntry, b: TrailEntry) =>

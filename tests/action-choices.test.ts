@@ -75,7 +75,7 @@ const affordanceTrustingModel = {
     }>;
     const creature = creatures.find((entity) => entity.affordances.includes('inspect'));
     return {
-      action: creature ? { type: 'inspect', targetId: creature.id } : { type: 'reflect' },
+      action: creature ? { type: 'inspect', targetId: creature.id } : { type: 'rest' },
       why: '',
     };
   },
@@ -113,7 +113,7 @@ it.each([7, 2026])(
     expect(declined).toEqual([]);
     expect(snapshot.runtime.modelStatus).toBe('Model connected');
     // The run really exercised the spatial vocabulary rather than idling.
-    for (const type of ['move', 'look', 'inspect', 'interact', 'rest', 'reflect'])
+    for (const type of ['move', 'look', 'inspect', 'interact', 'rest'])
       expect(model.chosen.get(type) ?? 0, type).toBeGreaterThan(0);
   },
   30_000,

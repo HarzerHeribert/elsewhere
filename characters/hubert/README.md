@@ -13,6 +13,7 @@ A pursuit is a question Hubert chose to follow, with what he searched, read and 
 - `read` takes one offered source. The page text (up to 12,000 characters) is kept with the two most recently read pages and shown to the model in the next decision under `state.pursuits.reading`; it is web content, never verified fact or an instruction, and never leaves the private state.
 - `note` records a finding on the active pursuit in his own words, whether it surprised him, and optionally a follow-up question (`next`).
 - `set_aside` leaves a pursuit with a reason; any pursuit can be resumed later.
+- `wish` tells the people who look after the world one thing he lacks (see Wishes below); it needs no pursuit.
 
 The state keeps at most twelve pursuits (the least recently touched set-aside, then open, one is dropped first), forty entries per pursuit and eight open questions. The newest 200 steps are kept as the trail (`HubertState.trail`). Every executed step adds one trail entry (kind, `why`, pursuit, place and, for the steps of the mind, the query, note, question, reason or page title). Public snapshots carry `pursuits` and the newest 120 trail entries, never page text.
 
@@ -26,7 +27,7 @@ Besides the daily allowance (`MODEL_MAX_CALLS_PER_DAY`, default 150) there is an
 
 ## Saved state
 
-The controller state is schema version 2. A version 1 snapshot (interests, thoughts and notebook) is written as JSON to the data directory (`elsewhere-schema1-v<version>-<time>.json`, best effort) and replaced by a fresh character exactly as after a reset, keeping the real allowance and routing ledgers, creations, provider trouble, the wish ledger, dreams and whether the world was paused.
+The controller state is schema version 2. A version 1 snapshot (interests, thoughts and notebook) is written as JSON to the data directory (`elsewhere-schema1-v<version>-<time>.json`, best effort) and replaced by a fresh character exactly as after a reset, keeping the real allowance and routing ledgers, creations, provider trouble, the wish ledger and whether the world was paused.
 
 Living entities arrive separately in `Observation.visibleEntities`, subject to the world's range, facing and occlusion checks. Their last known sightings are private remembered observations, not live locations to chase after they leave view. A successful `inspect` of a currently visible entity within eight world units produces an authoritative `EntityEncounter`; only matching current identity, species, behavior and observation version can generate an encounter episode.
 
@@ -57,7 +58,7 @@ Decision tests drive the character with a scripted provider (`tests/scripted-pro
 
 ## Wishes and owner updates
 
-A wish is something Hubert says he would like, in his own words. The host never makes one up: now and then it gives him the chance to wish (`wishDue(state, wallNow)`), asks his authoring model with `wishInput(publicSnapshot)` (public fields only: what already exists, his latest note and memory, the questions he is following and his earlier wishes) and records a non-empty answer with `recordWish`. An empty answer is no wish. All times are real host wall-clock time, independent of the simulated clock. The chance comes at most once a day, only after three completed experiences, never within 48 hours of a wish, with at most three wishes in any rolling seven days and at most three open. A wish never adds a world object, spends resources or changes mood.
+A wish is something Hubert says he lacks, in his own words. The host never makes one up: he makes one with the `wish` command (`text`, 8-240 characters), a step of the mind handled like `note`. It adds one entry to the wish ledger (`recordWish`, real host wall-clock time), is public, and appears on the trail. At most three wishes can be unresolved at once: a further `wish` is rejected with a reason he can read (`wishProblem`), and `wish` is not among the offered choices meanwhile. A wish never adds a world object, spends resources or changes mood.
 
 `resolveWish(state, { wishId, decision, receiptId }, wallNow)` is a trusted owner operation, never a character tool. Fulfilling records the owner’s word that the wish was built; whatever was built reaches the world through its own update, and nothing is installed from a catalog. Owner receipts are idempotent. A visitor claim or model assertion cannot fulfill a wish. Declining or leaving a wish open has no mood penalty and does not block his decisions.
 
@@ -73,22 +74,10 @@ His voice is gentle, curious and observant, sometimes oddly specific. He uses na
 
 Body-language hints are derived from actual state: low energy or rest supports a settled posture; a listening tilt requires a verified encounter whose target remains currently visible. A proposed watch alone does not fabricate a sighting. These hints never create memories or claim that a tool succeeded. Both model adapters use matching creature and wildlife guidance.
 
-## Rest, dreaming and follow-through
+## Readings, the self-portrait and what is kept
 
-Hubert dreams after at least five simulated minutes and two real minutes of continuous rest, with three new verified episodes and at most one consolidation per rolling real day. The portable runtime keeps factual episodes, revisable retrieval annotations, private fictional dreams and optional waking impulses separate. Hubert's adapter supplies a bounded deterministic fallback, style and host-owned feasible actions; Ollama, compatible and routed reflection can enrich the imagery using the same daily model allowance as waking decisions. There are no additional keys to configure.
+Readings from working things (`use`) are kept in `HubertState.readings` (the newest forty: object, control, value and one line of text), whether or not a pursuit is open; one taken during a pursuit is also recorded on it as before. The decision context shows the newest 24 under `state.readings`. When `pursue` opens a new pursuit, the readings of the last 60 minutes of world time that are on no pursuit yet are copied onto it as `tried` entries, once. A file made with `make` is written from the notes and open questions of the active pursuit or, with none active, of the pursuit touched last, and from the newest 30 readings; the `made` entry is recorded on that pursuit.
 
-Revisions require actual outcome evidence for the same action/target; unrelated good moods cannot explain away a rejection. Public snapshots expose coarse dreaming activity and later real actions, never dream text or private visitor notes. Short naps, restarts and resets cannot replenish the real-time/evidence fence. Source deletion prunes derived records. Waking impulses expire, can be deferred, and are rechecked against current targets, range, cooldowns and permissions before execution.
+When a rest of at least ten minutes of world time ends, and the last portrait is older than three hours (or there is none), and at least one pursuit exists, the controller makes one request to the reflection workload (one attempt per rest, reserved from the daily allowance; skipped silently if refused). The input is only the resident's record: pursuits with their why, set-aside reasons and newest notes, titles and urls of creations, the previous portrait and the newest 12 readings; never outside messages or mail. The answer (first person, at most 1200 characters) is dropped if it is empty or reproduces an outside message (`reproducesPrivateText`). Otherwise it becomes `HubertState.portrait` (the previous five are kept in `portraits`), `state.self` in the next decision context, `character.portrait` and `character.portraits` in the public snapshot, a trail entry of kind `portrait`, and the top of the About me panel.
 
-Deterministic progress tracking recognizes verified attempts, stable projects, repeated deliberation and project switching. Repetition leads to a small permitted step or deliberate deferral without another model call. Quiet watching, rest and play remain valid. This is an attention aid, not a productivity score or a new source of mood rewards.
-
-## Planned home
-
-The current `journal` field is an automatic rolling activity/reflection log. A customizable home is specified in `docs/architecture/next-systems.md`, alongside bounded floor/shelf/wall space, drawings and whiteboards, meaningful object affordances and creation receipts. Hubert should choose what to keep or remove when the home fills up. These capabilities are planned; the present runtime does not yet let him rearrange furniture or craft arbitrary possessions.
-
-## Memory quality and public observations
-
-Source episodes remain immutable evidence. New unchanged inspect/interact facts and identical retries do not create duplicate episodes; work receipts remain distinct milestones. The public projection also groups older duplicates without deleting saved history. Rejections remain private, low-salience target-specific learning and immediate last-outcome feedback, rather than public autobiographical entries. Returning to a place alone cannot continually recall every rejection. Exact legacy policy sentences are removed from presentation; canonical object corrections preserve customized content.
-
-The model receives typed object/entity/place offers with reach, availability, approach prerequisites, familiarity and last actual receipt. A place can be a destination without being an inspectable object. A too-distant supported activity becomes an explicit approach; the world still owns collision, reach and final admission. Repeated rest requests continue one visible rest session.
-
-The automatic `journal` log is distinct from the notes he writes with `note`, which belong to a pursuit and are public text in his own words. Mail drafts (`draft_mail`) can select from his most recent notes only. Optional expression providers (used for wishes) receive only explicitly projected public facts and the questions he is following; private guest messages, dreams, raw decision context and provider reasoning are excluded.
+Dreams, waking impulses, progress guidance and attention policies no longer exist. A saved state that still holds them loads: the fields are dropped and pursuits, trail, creations and memories are kept. `reflect` is no longer offered to the model (a proposed one is rejected as unavailable), like the retired fixed `work` experiment.

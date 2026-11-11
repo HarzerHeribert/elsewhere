@@ -361,8 +361,7 @@ describe('turn choices derived from grounded offers', () => {
     const observation = observeWorld(f.world, 'hubert', f.now);
     const quiet = workingContext(f.state, observation).choices!;
     const types = new Set(quiet.map((choice) => choice.type));
-    for (const type of ['move', 'look', 'inspect', 'rest', 'reflect'])
-      expect(types).toContain(type);
+    for (const type of ['move', 'look', 'inspect', 'rest']) expect(types).toContain(type);
     for (const type of ['research', 'read', 'pin_creation', 'draft_mail', 'say', 'delegate'])
       expect(types).not.toContain(type);
     expect(quiet).toContainEqual({ type: 'move', where: { position: 'any' } });

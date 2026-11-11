@@ -41,7 +41,7 @@ pnpm chatgpt check       # One isolated Hubert turn; never opens his saved world
 pnpm dev:chatgpt         # Run the saved life with GPT-6 Luna, capped at 20 calls/day
 ```
 
-Decisions and dreams share the call cap. Provider limits stop new autonomous decisions and notify the character owner in their signed-in account panel. The world continues; no scripted planner takes over. Credentials remain in private, ignored operator storage; visitors never receive them. Direct OAuth mode is local only; hosted Hubert uses a separate private inference service and a protected session handoff. See [setup and quota controls](docs/architecture/chatgpt-plan.md), [ownership and hosted deployment](docs/architecture/ownership-and-hosting.md), or [your own VPS](docs/architecture/vps-inference.md).
+Decisions, the rare self-portrait after a long rest and files he writes share the call cap. Provider limits stop new autonomous decisions and notify the character owner in their signed-in account panel. The world continues; no scripted planner takes over. Credentials remain in private, ignored operator storage; visitors never receive them. Direct OAuth mode is local only; hosted Hubert uses a separate private inference service and a protected session handoff. See [setup and quota controls](docs/architecture/chatgpt-plan.md), [ownership and hosted deployment](docs/architecture/ownership-and-hosting.md), or [your own VPS](docs/architecture/vps-inference.md).
 
 To use owner controls, run this in a second terminal:
 
@@ -89,7 +89,7 @@ Only `pnpm dev:configured` reads Hubert's saved model profile; its key is delive
 - Leave a note. Its raw contents remain private and cannot grant tools or change permissions.
 - Use owner controls to pause, advance a step, and resume.
 - Open Hubert’s profile to see his Creations shelf. Links appear as pins only after an explicit choice by Hubert or his owner. Owners can register and pin project links in their account panel. Legacy prototype weather charts are archived and are no longer generated or promoted automatically.
-- Watch Hubert's wishes. They are his own words: now and then his model is given the chance to say what he would like to exist in Elsewhere, and saying nothing is the usual answer. He gets that chance at most once a real day, makes at most three wishes in a rolling seven real days, at least 48 hours apart, with at most three open. Nothing is installed by a wish. The owner reads it, has it built if they choose, and marks it as built or declines it. Open or declined wishes do not punish his mood.
+- Watch Hubert's wishes. They are his own words: with the `wish` action he can tell the people who look after the world one thing he lacks here, in one or two sentences. At most three wishes can wait for an answer at once. Nothing is installed by a wish. The owner reads it, has it built if they choose, and marks it as built or declines it. Open or declined wishes do not punish his mood.
 
 The local demonstration uses a 3× simulation clock and makes decisions at bounded intervals. Hubert has no built-in planner: every decision comes from a model, which answers with an action and a short line saying why, through the same policy checks. Wishes need a model that authors public text; without it Hubert makes none. The character camera is real 3D; models currently receive structured visibility observations, **not rendered images**.
 

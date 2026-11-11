@@ -24,7 +24,7 @@ it('runs the real sole-Hubert world through a separate private inference port an
       expect(context.observations).toBeTruthy();
       dispatches++;
       return {
-        value: { action: { type: 'reflect' }, why: '' },
+        value: { action: { type: 'rest' }, why: '' },
         usage: { inputTokens: 123, outputTokens: 17, cachedInputTokens: 100 },
       };
     },
