@@ -3,7 +3,14 @@ export type PursuitEntry = { id: string; at: number } & (
   | { kind: 'search'; query: string; sourceCount: number }
   | { kind: 'read'; sourceId: string; url: string; title: string }
   | { kind: 'note'; text: string; surprised: boolean; sourceIds: string[] }
-  | { kind: 'made'; creationId: string; path: string; url: string }
+  | {
+      kind: 'made';
+      creationId: string;
+      path: string;
+      title: string;
+      url: string;
+      commitSha: string;
+    }
   | { kind: 'tried'; text: string; objectId: string }
 );
 export type PursuitStatus = 'active' | 'open' | 'set-aside';

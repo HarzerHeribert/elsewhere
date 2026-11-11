@@ -20,6 +20,7 @@ import {
   signInSenderFromEnvironment,
 } from '../packages/auth/src/verification-mail';
 import { ResearchClient } from '../packages/research/src/client';
+import { configuredStudio } from './studio';
 
 const config = appConfig(process.env);
 const directory = resolve(config.DATA_DIR);
@@ -157,6 +158,11 @@ async function initialize() {
     modelProvider: providers.model,
     reflectionProvider: providers.reflection,
     expressionProvider: providers.expression,
+    studio: configuredStudio(config, 'hubert', undefined, {
+      worldId: 'elsewhere',
+      ownerUserId: config.HUBERT_OWNER_USER_ID,
+      characterId: 'hubert',
+    }),
     modelMaximum: config.MODEL_MAX_CALLS_PER_DAY,
     modelHourlyMaximum: config.MODEL_MAX_CALLS_PER_HOUR,
     archiveSnapshot: archiveRetiredSnapshot,

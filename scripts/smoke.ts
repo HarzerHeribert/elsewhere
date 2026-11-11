@@ -52,9 +52,7 @@ const fixture = createHttpServer((request, response) => {
           ? bench.nextAction
           : !bench.inspections && bench.ready.includes('inspect')
             ? { type: 'inspect', targetId: bench.id }
-            : bench.ready.includes('work')
-              ? { type: 'work', targetId: bench.id }
-              : { type: 'reflect' };
+            : { type: 'reflect' };
     fixtureCalls++;
     response.writeHead(200, { 'content-type': 'application/json' });
     response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(action) } }] }));
@@ -172,10 +170,6 @@ try {
   let snapshot = await owner('tick');
   for (let i = 0; i < 90; i++) snapshot = await owner('tick');
   assert(snapshot.memories.length > 0, 'Hubert should remember actual experiences');
-  assert(
-    snapshot.world.objects.some((object) => object.id === 'weather-vane-sketch'),
-    'A verified work action should produce a persistent sketch',
-  );
   assert.deepEqual(
     snapshot.artifacts,
     [],

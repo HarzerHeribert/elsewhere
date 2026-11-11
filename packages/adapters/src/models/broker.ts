@@ -106,7 +106,14 @@ export class BrokerModelClient {
   resetAvailability() {
     this.pausedUntil = 0;
   }
-  private async readExpression(response: Response, onDelta?: (text: string) => void) {
+  private async readExpression(
+    response: Response,
+    form: 'wish' | 'work',
+    onDelta?: (text: string) => void,
+  ) {
+    // A file arrives whole in one frame; a wish may arrive as a short stream.
+    const lineLimit = form === 'work' ? 120000 : 4000;
+    const byteLimit = form === 'work' ? 160000 : 64000;
     if (response.headers.get('content-type')?.split(';')[0] !== 'application/x-ndjson')
       throw new BrokerModelError('invalid_response');
     const reader = response.body?.getReader();
@@ -119,14 +126,14 @@ export class BrokerModelClient {
       while (true) {
         const { done, value } = await reader.read();
         bytes += value?.byteLength ?? 0;
-        if (bytes > 64000) throw new BrokerModelError('response_too_large');
+        if (bytes > byteLimit) throw new BrokerModelError('response_too_large');
         buffer += decoder.decode(value, { stream: !done });
         for (;;) {
           const boundary = buffer.indexOf('\n');
           if (boundary < 0) break;
           const line = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 1);
-          if (!line || line.length > 4000) throw new BrokerModelError('invalid_response');
+          if (!line || line.length > lineLimit) throw new BrokerModelError('invalid_response');
           let json: unknown;
           try {
             json = JSON.parse(line);
@@ -153,12 +160,12 @@ export class BrokerModelClient {
                 : (this.options.now ?? Date.now)() + (frame.retryAfterMs ?? 60000);
             throw new BrokerModelError(frame.error);
           }
-          const completed = validatePublicExpression(frame.value);
-          if (text && validatePublicExpression(text) !== completed)
+          const completed = validatePublicExpression(frame.value, form);
+          if (text && validatePublicExpression(text, form) !== completed)
             throw new BrokerModelError('invalid_response');
           return completed;
         }
-        if (buffer.length > 4000) throw new BrokerModelError('response_too_large');
+        if (buffer.length > lineLimit) throw new BrokerModelError('response_too_large');
         if (done) throw new BrokerModelError('stream_interrupted');
       }
     } finally {
@@ -170,6 +177,7 @@ export class BrokerModelClient {
     workload: InferenceWorkload,
     body: unknown,
     onDelta?: (text: string) => void,
+    form: 'wish' | 'work' = 'wish',
   ): Promise<unknown> {
     if (!this.isAvailable()) throw new BrokerModelError('paused');
     const encoded = JSON.stringify(body);
@@ -187,7 +195,7 @@ export class BrokerModelClient {
         body: encoded,
       });
       if (workload === 'expression' && response.ok)
-        return await this.readExpression(response, onDelta);
+        return await this.readExpression(response, form, onDelta);
       const reader = response.body?.getReader();
       if (!reader) throw new BrokerModelError('empty_response');
       const chunks: Uint8Array[] = [];
@@ -259,7 +267,10 @@ export class BrokerModelClient {
   async expression(input: PublicExpressionInput, onDelta?: (text: string) => void) {
     const parsed = BrokerExpressionRequestSchema.safeParse({ input });
     if (!parsed.success) throw new BrokerModelError('invalid_context');
-    return validatePublicExpression(await this.request('expression', parsed.data, onDelta));
+    return validatePublicExpression(
+      await this.request('expression', parsed.data, onDelta, parsed.data.input.form),
+      parsed.data.input.form,
+    );
   }
 }
 

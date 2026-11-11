@@ -25,6 +25,7 @@ import {
 } from '../packages/inference/src/contracts';
 import type { ModelUsage } from '../packages/models/src/contracts';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
+import { STUDIO_TEXT_LIMIT } from '../characters/interfaces/src/studio';
 import {
   expressionMessages,
   validatePublicExpression,
@@ -146,6 +147,8 @@ try {
               expressionMessages(HUBERT_IDENTITY, input),
               signal,
               onDelta,
+              undefined,
+              input.form === 'work' ? 4 * STUDIO_TEXT_LIMIT : undefined,
             );
             return { value: text, usage };
           } catch {

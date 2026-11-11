@@ -1,4 +1,5 @@
 export * from './mail';
+export * from './studio';
 import type { PublicCharacterMail, AccountCharacterMail } from './mail';
 import { z } from 'zod';
 export {
@@ -301,7 +302,14 @@ export type PublicPursuitEntry = { id: string; at: number } & (
   | { kind: 'search'; query: string; sourceCount: number }
   | { kind: 'read'; sourceId: string; url: string; title: string }
   | { kind: 'note'; text: string; surprised: boolean; sourceIds: string[] }
-  | { kind: 'made'; creationId: string; path: string; url: string }
+  | {
+      kind: 'made';
+      creationId: string;
+      path: string;
+      title: string;
+      url: string;
+      commitSha: string;
+    }
   | { kind: 'tried'; text: string; objectId: string }
 );
 /** A question the character chose to follow, with what it searched, read and noted. */
@@ -326,6 +334,8 @@ export interface PublicCreation {
   createdAt: number;
   pinnedAt?: number;
   provenance: 'character' | 'owner';
+  /** Where a made creation came from, when the character made it itself. */
+  origin?: { pursuitId?: string; path: string; commitSha: string };
 }
 export interface PublicSnapshot {
   mail?: PublicCharacterMail;

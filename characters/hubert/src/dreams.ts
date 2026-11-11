@@ -44,7 +44,6 @@ export function hubertDreamActions(
             ? ['inspect']
             : []),
           ...(object.affordances.includes('interact') ? ['interact'] : []),
-          ...(object.affordances.includes('work') && !state.project.completed ? ['work'] : []),
           ...(state.inspections[object.id] && object.affordances.includes('inspect')
             ? ['inspect']
             : []),

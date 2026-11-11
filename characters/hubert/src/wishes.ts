@@ -1,5 +1,5 @@
 import type { PublicSnapshot, PublicWish } from '@elsewhere/character-interfaces';
-import type { PublicExpressionInput } from '../../../packages/adapters/src/models/expression';
+import type { PublicWishInput } from '../../../packages/adapters/src/models/expression';
 import type { HubertState } from './index';
 import { isPublicMemoryEpisode } from './memoryQuality';
 
@@ -76,7 +76,7 @@ export function wishDue(state: HubertState, wallNow: number): boolean {
 }
 
 /** Explicit projection: never pass a HubertState or decision context into public authoring. */
-export function wishInput(snapshot: PublicSnapshot): PublicExpressionInput {
+export function wishInput(snapshot: PublicSnapshot): PublicWishInput {
   const note = snapshot.pursuits
     .flatMap((pursuit) => pursuit.entries)
     .filter((entry) => entry.kind === 'note')

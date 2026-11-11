@@ -20,6 +20,8 @@ export function hubertActivityDurationMs(command: CharacterCommand, energy?: num
         command.durationMs ??
         Math.min(30 * 60_000, Math.max(60_000, Math.ceil(((70 - (energy ?? 70)) / 2) * 60_000)))
       );
+    case 'make':
+      return 120_000;
     case 'work':
       return 180_000;
     case 'inspect':

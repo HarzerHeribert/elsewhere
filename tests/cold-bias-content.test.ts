@@ -50,7 +50,7 @@ describe('dream offers at the workbench', () => {
     ];
     const workOffers = hubertDreamActions(state, observation([targets[0]]), 0);
     expect(workOffers.map((offer) => offer.action)).toEqual(
-      expect.arrayContaining(['inspect', 'interact', 'work']),
+      expect.arrayContaining(['inspect', 'interact']),
     );
     const varied = hubertDreamActions(state, observation(targets), 0);
     expect(new Set(varied.map((offer) => offer.targetId)).size).toBe(4);

@@ -20,7 +20,7 @@ export function browserFixtureAction(
           return value !== undefined && (values === 'any' || values.includes(String(value)));
         }),
     );
-  const propose = (offer: HubertTargetOffer | undefined, type: 'inspect' | 'work') => {
+  const propose = (offer: HubertTargetOffer | undefined, type: 'inspect') => {
     if (!offer) return;
     const action: CharacterCommand | undefined = offer.ready.includes(type)
       ? { type, targetId: offer.id }

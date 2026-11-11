@@ -55,7 +55,10 @@ export class CharacterGitHubError extends Error {
       | 'unavailable'
       | 'invalid_response'
       | 'input'
+      | 'not_found'
       | 'protected_branch',
+    /** The provider's HTTP status when it refused a request; never its body. */
+    readonly status?: number,
   ) {
     super(`Character GitHub connection: ${code}.`);
   }
@@ -87,7 +90,7 @@ function privateKey(path: string) {
 async function responseJson(response: Response) {
   if (!response.ok) {
     await response.body?.cancel();
-    throw new CharacterGitHubError('unavailable');
+    throw new CharacterGitHubError('unavailable', response.status);
   }
   const reader = response.body?.getReader();
   if (!reader) throw new CharacterGitHubError('invalid_response');
@@ -235,6 +238,17 @@ export class CharacterGitHub {
     if (!path.success) throw new CharacterGitHubError('input');
     const token = await this.token(repository.id, 'read');
     await this.metadata(repository, token);
+    let body: unknown;
+    try {
+      body = await this.request(
+        `/repos/${repository.fullName}/contents/${path.data.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repository.branch)}`,
+        token,
+      );
+    } catch (error) {
+      if (error instanceof CharacterGitHubError && error.status === 404)
+        throw new CharacterGitHubError('not_found');
+      throw error;
+    }
     const file = z
       .object({
         type: z.literal('file'),
@@ -243,12 +257,7 @@ export class CharacterGitHub {
         content: z.string().max(180000),
         size: z.number().max(100000),
       })
-      .safeParse(
-        await this.request(
-          `/repos/${repository.fullName}/contents/${path.data.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(repository.branch)}`,
-          token,
-        ),
-      );
+      .safeParse(body);
     if (!file.success) throw new CharacterGitHubError('invalid_response');
     const content = Buffer.from(file.data.content, 'base64');
     if (content.length !== file.data.size || content.length > 100000)

@@ -142,7 +142,9 @@ const publicPursuitEntry = (entry: PublicPursuitEntry): PublicPursuitEntry => {
         kind: 'made',
         creationId: entry.creationId.slice(0, 128),
         path: entry.path.slice(0, 240),
+        title: entry.title.slice(0, 180),
         url: httpsUrl(entry.url) ?? '',
+        commitSha: entry.commitSha.slice(0, 64),
       };
     case 'tried':
       return {

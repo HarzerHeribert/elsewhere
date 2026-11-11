@@ -486,6 +486,8 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
               : await options.expression!(expression!, dispatch.signal, (text) => {
                   if (dispatch.signal.aborted || response.destroyed || response.writableEnded)
                     return;
+                  // A file is only ever sent whole, in the completing frame.
+                  if (expression!.form === 'work') return;
                   if (typeof text !== 'string' || streamedText.length + text.length > 360) {
                     invalidExpressionDelta = true;
                     return;
@@ -522,8 +524,8 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
         let value: unknown;
         if (expression) {
           try {
-            value = validatePublicExpression(result.value);
-            if (streamedText && validatePublicExpression(streamedText) !== value)
+            value = validatePublicExpression(result.value, expression.form);
+            if (streamedText && validatePublicExpression(streamedText, expression.form) !== value)
               throw Error('Mismatched note.');
           } catch {
             throw new RequestFailure(400, 'invalid_expression');
