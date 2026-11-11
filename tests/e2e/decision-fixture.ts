@@ -35,7 +35,7 @@ export function browserFixtureAction(
   };
   if (scenario === 'birds') {
     const bird = state.actionOffers.find((offer) => offer.id === 'courtyard-sparrow');
-    return propose(bird, 'inspect') ?? navigate('courtyard') ?? { type: 'reflect' };
+    return propose(bird, 'inspect') ?? navigate('courtyard') ?? { type: 'rest' };
   }
   // Fresh, genuinely encountered objects provide distinct receipts for the memory UI.
   for (const offer of state.actionOffers.filter(
@@ -44,5 +44,5 @@ export function browserFixtureAction(
     const action = propose(offer, 'inspect');
     if (action) return action;
   }
-  return { type: 'reflect' };
+  return { type: 'rest' };
 }

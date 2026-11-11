@@ -1,7 +1,5 @@
-import type { PublicSnapshot, PublicWish } from '@elsewhere/character-interfaces';
-import type { PublicWishInput } from '../../../packages/adapters/src/models/expression';
+import type { PublicWish } from '@elsewhere/character-interfaces';
 import type { HubertState } from './index';
-import { isPublicMemoryEpisode } from './memoryQuality';
 
 export type WishStatus = 'pending' | 'fulfilled' | 'declined';
 /**
@@ -25,16 +23,9 @@ export interface WishReceipt {
   at: number;
 }
 
-/** How often the resident is given the chance to wish; saying nothing is an ordinary answer. */
-export const WISH_ASK_INTERVAL_MS = 24 * 60 * 60 * 1_000;
-/** Quiet time after a wish was made. */
-export const WISH_COOLDOWN_MS = 48 * 60 * 60 * 1_000;
-/** At most this many wishes in any rolling seven real days. */
-export const WISHES_PER_WEEK = 3;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1_000;
+/** At most this many wishes can wait for the owner's answer at once. */
 export const WISHES_OPEN = 3;
 export const WISHES_KEPT = 24;
-const EXPERIENCES_NEEDED = 3;
 
 const finiteTime = (now: number) => {
   if (!Number.isFinite(now) || now < 0)
@@ -52,62 +43,15 @@ function normalize(input: HubertState): HubertState {
   return state;
 }
 
-/** Whether the resident may be given the chance to wish now. Reads only; uses real time. */
-export function wishDue(state: HubertState, wallNow: number): boolean {
-  finiteTime(wallNow);
-  const wishes = (state.wishes ?? []).filter(authored);
-  if (wishes.filter((wish) => wish.status === 'pending').length >= WISHES_OPEN) return false;
-  if (wishes.some((wish) => wallNow - wish.createdAt < WISH_COOLDOWN_MS)) return false;
-  if (wishes.filter((wish) => wallNow - wish.createdAt < WEEK_MS).length >= WISHES_PER_WEEK)
-    return false;
-  if (wallNow - (state.wishesAskedAtReal ?? -Infinity) < WISH_ASK_INTERVAL_MS) return false;
-  // A life with nothing behind it yet has had no chance to miss anything. One receipt counts once.
-  const lived = new Set(
-    state.memories
-      .filter(
-        (memory) =>
-          memory.source === 'world-outcome' &&
-          isPublicMemoryEpisode(memory) &&
-          (!memory.experience || memory.experience.status === 'completed'),
-      )
-      .map((memory) => memory.sourceEventId),
-  );
-  return lived.size >= EXPERIENCES_NEEDED;
+/** Why a further wish cannot be made now, in words the resident can read; undefined when it can. */
+export function wishProblem(state: HubertState): string | undefined {
+  const waiting = (state.wishes ?? []).filter(authored).filter((wish) => wish.status === 'pending');
+  return waiting.length >= WISHES_OPEN
+    ? `You already have ${WISHES_OPEN} wishes that nobody has answered yet. Wait for an answer before wishing again.`
+    : undefined;
 }
 
-/** Explicit projection: never pass a HubertState or decision context into public authoring. */
-export function wishInput(snapshot: PublicSnapshot): PublicWishInput {
-  const note = snapshot.pursuits
-    .flatMap((pursuit) => pursuit.entries)
-    .filter((entry) => entry.kind === 'note')
-    .sort((a, b) => a.at - b.at)
-    .at(-1);
-  const memory = snapshot.memories.at(-1);
-  const names = (items: Array<{ name: string }>) => items.map((item) => item.name).join(', ');
-  return {
-    form: 'wish',
-    facts: [
-      {
-        id: 'elsewhere',
-        summary:
-          `Already in Elsewhere. Places: ${names(snapshot.world.places)}. Things: ${names(snapshot.world.objects)}.`.slice(
-            0,
-            600,
-          ),
-      },
-      ...(note ? [{ id: note.id, summary: note.text.slice(0, 600) }] : []),
-      ...(memory ? [{ id: memory.id, summary: memory.summary.slice(0, 600) }] : []),
-    ],
-    questions: snapshot.pursuits
-      .filter((pursuit) => pursuit.status !== 'set-aside')
-      .sort((a, b) => b.lastAt - a.lastAt)
-      .slice(0, 4)
-      .map((pursuit) => pursuit.question.slice(0, 80)),
-    recentNotes: (snapshot.wishes ?? []).slice(-2).map((wish) => wish.text.slice(0, 360)),
-  };
-}
-
-/** Called by the trusted host with text the resident authored and the host validated. */
+/** Called by the trusted host with a wish the resident wrote with the `wish` command. */
 export function recordWish(
   input: HubertState,
   wish: { id: string; text: string },
@@ -182,8 +126,6 @@ export function preserveWishLedger(fresh: HubertState, previous: HubertState): H
   const kept = normalize(previous);
   state.wishes = kept.wishes;
   state.wishReceipts = kept.wishReceipts;
-  if (previous.wishesAskedAtReal !== undefined)
-    state.wishesAskedAtReal = previous.wishesAskedAtReal;
   return state;
 }
 

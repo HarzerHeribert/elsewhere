@@ -32,7 +32,6 @@ describe('Responses decision generation boundary', () => {
       'pin_creation',
       'draft_mail',
       'draft_mail',
-      'reflect',
       'pursue',
       'pursue',
       'set_aside',
@@ -43,6 +42,8 @@ describe('Responses decision generation boundary', () => {
       'note',
       'note',
       'note',
+      'wish',
+      'reply',
     ]);
     for (const item of alternatives) {
       expect(item.required).toEqual(Object.keys(item.properties));

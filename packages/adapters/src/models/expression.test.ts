@@ -46,6 +46,5 @@ describe('authoring one file', () => {
     expect(() => validatePublicWork('```\n```')).toThrow();
     expect(() => validatePublicWork('x'.repeat(16001))).toThrow();
     expect(validatePublicWork('x'.repeat(16000))).toHaveLength(16000);
-    expect(() => validatePublicExpression('x'.repeat(361))).toThrow();
   });
 });

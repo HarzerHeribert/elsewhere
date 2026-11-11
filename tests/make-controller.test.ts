@@ -73,6 +73,40 @@ const maker =
     return { type: 'move' as const, targetId: offer('workbench') ? 'workbench' : 'workshop' };
   };
 
+/**
+ * Follows a question, works the sundial, notes it and sets the question aside; then, with
+ * nothing open, goes to the workbench and makes one file.
+ */
+const afterSetAside = (context: DecisionContext): CharacterCommand => {
+  const state = context.state as unknown as {
+    pursuits: {
+      active: { id: string; entries: Array<{ kind: string }> } | null;
+      others: unknown[];
+    };
+    actionOffers: Array<{ id: string; ready: string[] }>;
+  };
+  const offer = (id: string) => state.actionOffers.find((item) => item.id === id);
+  const { active, others } = state.pursuits;
+  if (active) {
+    const kinds = active.entries.map((entry) => entry.kind);
+    if (!kinds.includes('tried'))
+      return offer('sundial')?.ready.includes('use')
+        ? { type: 'use', targetId: 'sundial', control: 'read' }
+        : { type: 'move', targetId: 'sundial' };
+    if (!kinds.includes('note'))
+      return { type: 'note', text: 'The shadow was about 40 cm.', surprised: false };
+    return { type: 'set_aside', pursuitId: active.id, reason: 'Answered well enough.' };
+  }
+  if (!others.length)
+    return {
+      type: 'pursue',
+      question: 'How long is the sundial shadow?',
+      why: 'I want to know what it tells me.',
+    };
+  if (offer('workbench')?.ready.includes('make')) return make;
+  return { type: 'move', targetId: offer('workbench') ? 'workbench' : 'workshop' };
+};
+
 function expression(text: string | (() => string) = AUTHORED) {
   const express = vi.fn(async (_input: unknown) => (typeof text === 'string' ? text : text()));
   const provider: ExpressionProvider = {
@@ -310,5 +344,75 @@ describe('making a file of the resident’s own site', () => {
     expect(existsSync(join(directory, 'notes'))).toBe(false);
     expect(saved.creations ?? []).toEqual([]);
     expect(saved.hubert.trail.filter((entry) => entry.kind === 'make')).toEqual([]);
+  });
+});
+
+describe('making with nothing open', () => {
+  it('uses the pursuit touched last and the readings log, and records the file there', async () => {
+    const directory = folder();
+    const provider = scriptedProvider([], { fallback: afterSetAside });
+    const authored = expression();
+    const { controller, store } = await create(provider, {
+      studio: createFolderStudio(directory, SITE),
+      expressionProvider: authored.provider,
+    });
+    await untilMade(controller, store);
+    const saved = store.saved!.value;
+    expect(saved.hubert.pursuits.activeId).toBeUndefined();
+    expect(saved.hubert.pursuits.items).toHaveLength(1);
+    const input = authored.express.mock.calls[0][0] as {
+      material: {
+        question?: string;
+        notes: string[];
+        readings: string[];
+        openQuestions: string[];
+      };
+    };
+    expect(input.material.question).toBe('How long is the sundial shadow?');
+    expect(input.material.notes).toEqual(['The shadow was about 40 cm.']);
+    expect(input.material.readings.length).toBeGreaterThan(0);
+    expect(input.material.readings[0]).toMatch(/^Tried read on/);
+    // A reading on the pursuit and the same one in the log are listed once.
+    expect(new Set(input.material.readings).size).toBe(input.material.readings.length);
+    const pursuit = saved.hubert.pursuits.items[0];
+    expect(pursuit.status).toBe('set-aside');
+    expect(pursuit.entries.at(-1)).toMatchObject({
+      kind: 'made',
+      path: make.path,
+      title: make.title,
+    });
+    expect(saved.creations![0].origin).toMatchObject({ pursuitId: pursuit.id });
+  });
+
+  it('uses the readings log alone when no pursuit was ever opened', async () => {
+    const directory = folder();
+    const toSundialThenMake = (context: DecisionContext): CharacterCommand => {
+      const state = context.state as unknown as {
+        readings?: unknown[];
+        actionOffers: Array<{ id: string; ready: string[] }>;
+      };
+      const offer = (id: string) => state.actionOffers.find((item) => item.id === id);
+      if (!state.readings?.length)
+        return offer('sundial')?.ready.includes('use')
+          ? { type: 'use', targetId: 'sundial', control: 'read' }
+          : { type: 'move', targetId: 'sundial' };
+      if (offer('workbench')?.ready.includes('make')) return make;
+      return { type: 'move', targetId: offer('workbench') ? 'workbench' : 'workshop' };
+    };
+    const authored = expression();
+    const { controller, store } = await create(
+      scriptedProvider([], { fallback: toSundialThenMake }),
+      { studio: createFolderStudio(directory, SITE), expressionProvider: authored.provider },
+    );
+    await untilMade(controller, store);
+    const input = authored.express.mock.calls[0][0] as {
+      material: { question?: string; notes: string[]; readings: string[] };
+    };
+    expect(input.material).not.toHaveProperty('question');
+    expect(input.material.notes).toEqual([]);
+    expect(input.material.readings).toHaveLength(1);
+    expect(input.material.readings[0]).toMatch(/^Tried read on/);
+    expect(store.saved!.value.hubert.pursuits.items).toEqual([]);
+    expect(store.saved!.value.creations![0].origin).not.toHaveProperty('pursuitId');
   });
 });

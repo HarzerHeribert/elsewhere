@@ -3,10 +3,20 @@ import type { FormEvent } from 'react';
 import { HubertPortrait } from '../HubertPortrait';
 import { Icon } from '../Icon';
 import { formatTime } from '../formatTime';
+import { useWallTime } from '../worldClock';
+
+/** One of the signed-in visitor's own messages; the reply is only ever returned to them. */
+export interface OwnMessage {
+  id: string;
+  at: number;
+  text: string;
+  reply?: { text: string; at: number };
+}
 
 export function MessagesPanel({
   message,
   receipts,
+  own,
   sending,
   connected,
   messageStatus,
@@ -15,12 +25,14 @@ export function MessagesPanel({
 }: {
   message: string;
   receipts: ReadonlyArray<{ at: number; text: string }>;
+  own?: ReadonlyArray<OwnMessage>;
   sending: boolean;
   connected: boolean;
   messageStatus: string;
   onMessageChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const toWall = useWallTime();
   return (
     <>
       <div className="recipient">
@@ -37,12 +49,27 @@ export function MessagesPanel({
           : 'You can leave Hubert a note when the live world reconnects. Your draft stays in this window.'}
       </p>
       <div className="delivery-history">
-        {receipts.map((r) => (
-          <div className="sent-message" key={r.at}>
-            <p>{r.text}</p>
-            <span>Delivered · {formatTime(r.at)}</span>
-          </div>
-        ))}
+        {own
+          ? own.map((m) => (
+              <div key={m.id}>
+                <div className="sent-message">
+                  <p>{m.text}</p>
+                  <span>Delivered · {formatTime(toWall(m.at))}</span>
+                </div>
+                {m.reply && (
+                  <div className="reply-message">
+                    <p>{m.reply.text}</p>
+                    <span>Hubert replied · {formatTime(toWall(m.reply.at))}</span>
+                  </div>
+                )}
+              </div>
+            ))
+          : receipts.map((r) => (
+              <div className="sent-message" key={r.at}>
+                <p>{r.text}</p>
+                <span>Delivered · {formatTime(r.at)}</span>
+              </div>
+            ))}
       </div>
       <form className="message-form" onSubmit={onSubmit}>
         <label htmlFor="visitor-note">Your note to Hubert</label>

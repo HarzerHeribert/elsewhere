@@ -263,6 +263,15 @@ export interface PublicCharacterState {
   status: string;
   currentThought?: string;
   lastReflection?: string;
+  /** What the character last wrote about itself after resting, in its own words. */
+  portrait?: PublicPortrait;
+  /** The portraits before the current one, oldest first. */
+  portraits?: PublicPortrait[];
+}
+export interface PublicPortrait {
+  text: string;
+  /** World time. */
+  at: number;
 }
 export interface PublicRuntimeState {
   mode: 'local' | 'compatible' | 'ollama';
@@ -287,8 +296,8 @@ export interface PublicRuntimeState {
 export interface PublicTrailEntry {
   id: string;
   at: number;
-  /** The command type of the step. */
-  kind: CommandType;
+  /** The command type of the step, or 'portrait' when the character wrote about itself. */
+  kind: CommandType | 'portrait';
   why?: string;
   pursuitId?: string;
   /** The query, note text, question, reason or page title for the step. */

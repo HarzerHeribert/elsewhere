@@ -28,7 +28,7 @@ import type { WorldControlAction, WorldControlCommand } from './sceneControls';
 import { ResidentsPanel } from './panels/ResidentsPanel';
 import { CharacterPanel, type CharacterTab } from './panels/CharacterPanel';
 import { MapPanel, PlacePanel, ObjectPanel, placeCenter } from './panels/ExplorePanels';
-import { MessagesPanel } from './panels/MessagesPanel';
+import { MessagesPanel, type OwnMessage } from './panels/MessagesPanel';
 import { ActivityPanel } from './panels/ActivityPanel';
 import { WishesPanel } from './panels/WishesPanel';
 import { ControlsPanel } from './panels/ControlsPanel';
@@ -103,6 +103,7 @@ export function App() {
     [messageStatus, setMessageStatus] = useState(''),
     [sending, setSending] = useState(false);
   const [receipts, setReceipts] = useState<Array<{ at: number; text: string }>>([]),
+    [replies, setReplies] = useState<OwnMessage[]>([]),
     [notices, setNotices] = useState<Array<{ id: string; title: string; text: string }>>([]);
   const [settings, setSettings] = useState<SettingsSection | null>(null);
   const [fullscreen, setFullscreen] = useState(false),
@@ -434,6 +435,22 @@ export function App() {
       setControlStatus('Fullscreen is unavailable in this browser. The world fills this window.');
     }
   }
+  // A signed-in visitor's own messages, each with the resident's private answer once given.
+  const accountId = account?.id;
+  const messagesOpen = panel === 'messages';
+  useEffect(() => {
+    if (!accountId || !messagesOpen) {
+      if (!accountId) setReplies([]);
+      return;
+    }
+    let live = true;
+    requestJson<{ messages: OwnMessage[] }>('/api/messages')
+      .then((result) => live && setReplies(result.messages))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [accountId, messagesOpen, receipts.length, snapshot?.runtime.simulatedAt]);
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
     if (!message.trim() || sending) return;
@@ -768,6 +785,7 @@ export function App() {
                 <MessagesPanel
                   message={message}
                   receipts={receipts}
+                  own={account ? replies : undefined}
                   sending={sending}
                   connected={connection === 'live'}
                   messageStatus={messageStatus}

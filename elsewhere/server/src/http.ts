@@ -96,6 +96,13 @@ export interface ApiDependencies {
     text: string,
     actor?: { userId: string; displayName: string },
   ): Promise<{ accepted: boolean }>;
+  /** Only the signed-in account's own messages, each with the resident's private reply. */
+  listMessages?(userId: string): Array<{
+    id: string;
+    at: number;
+    text: string;
+    reply?: { text: string; at: number };
+  }>;
   getArtifact?(id: string): { contentType: string; body: string } | null;
   resolveWish?(id: string, decision: 'fulfill' | 'decline'): Promise<PublicSnapshot>;
 }
@@ -178,6 +185,11 @@ const publicTrailEntry = (entry: PublicTrailEntry): PublicTrailEntry => ({
   ...(Number.isSafeInteger(entry.times) && entry.times! > 1 ? { times: entry.times } : {}),
 });
 
+const publicPortrait = (portrait: { text: string; at: number }) => ({
+  text: portrait.text.slice(0, 1200),
+  at: portrait.at,
+});
+
 /** Explicitly project public fields: never serialize a controller or private character state. */
 export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
   const character = snapshot.character;
@@ -221,6 +233,10 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
       socialAppetite: character.socialAppetite,
       activity: character.activity,
       status: character.status,
+      ...(character.portrait ? { portrait: publicPortrait(character.portrait) } : {}),
+      ...(character.portraits?.length
+        ? { portraits: character.portraits.slice(-5).map(publicPortrait) }
+        : {}),
     },
     events: snapshot.events.map(
       ({ id, at, type, message, characterId, objectId, entityId, placeId }) => ({
@@ -1012,6 +1028,12 @@ export function createApiServer(deps: ApiDependencies) {
         );
         res.setHeader('Content-Disposition', `inline; filename="${id}.svg"`);
         sendBody(200, artifact.body);
+        return;
+      }
+      if (req.method === 'GET' && pathname === '/api/messages') {
+        const account = deps.auth ? await deps.auth.getAccount(req) : null;
+        res.setHeader('Cache-Control', 'private, no-store');
+        send(200, { messages: account ? (deps.listMessages?.(account.id) ?? []) : [] });
         return;
       }
       if (req.method === 'POST' && pathname === '/api/messages') {

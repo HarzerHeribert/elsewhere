@@ -9,6 +9,8 @@ export function hubertActivityDurationMs(command: CharacterCommand, energy?: num
     case 'read':
       return 30_000;
     case 'note':
+    case 'wish':
+    case 'reply':
       return 10_000;
     case 'pursue':
     case 'set_aside':

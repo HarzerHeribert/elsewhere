@@ -17,7 +17,7 @@ afterEach(async () => {
   for (const directory of directories.splice(0))
     rmSync(directory, { recursive: true, force: true });
 });
-function response(content = '{"type":"reflect"}') {
+function response(content = '{"type":"rest"}') {
   return new Response(
     JSON.stringify({
       choices: [{ message: { content } }],

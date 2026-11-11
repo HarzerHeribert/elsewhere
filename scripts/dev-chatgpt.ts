@@ -32,7 +32,7 @@ try {
   );
   const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
   console.log(
-    `Owner-only ChatGPT plan runtime: ${values.model}, at most ${values['max-calls']} calls/day shared by decisions and dreams.\nPrivate inputs may be sent to OpenAI. Check the app limit at https://chatgpt.com/settings/usage.`,
+    `Owner-only ChatGPT plan runtime: ${values.model}, at most ${values['max-calls']} calls/day shared by decisions, portraits and files.\nPrivate inputs may be sent to OpenAI. Check the app limit at https://chatgpt.com/settings/usage.`,
   );
   await runServices([
     {

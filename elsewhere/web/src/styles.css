@@ -378,6 +378,11 @@ svg {
   color: var(--ew-text-muted);
   padding: 6px var(--ew-space-2);
 }
+.portrait-text > p:not(.eyebrow) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .memory-glimpse {
   padding: 17px;
   border-radius: var(--ew-radius-control);
@@ -671,6 +676,25 @@ svg {
   font-size: var(--ew-text-caption);
   color: var(--ew-text-muted);
   text-align: right;
+  margin-top: 7px;
+}
+.reply-message {
+  padding: 13px;
+  background: var(--ew-surface);
+  border: 1px solid var(--ew-border, currentColor);
+  border-radius: 10px 10px 10px 2px;
+  margin: 8px 15px 0 0;
+}
+.reply-message p {
+  font-size: var(--ew-text-small);
+  line-height: 1.7;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.reply-message span {
+  display: block;
+  font-size: var(--ew-text-caption);
+  color: var(--ew-text-muted);
   margin-top: 7px;
 }
 .panel-tabs {

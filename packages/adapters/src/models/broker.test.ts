@@ -142,7 +142,7 @@ it('keeps authorization failures paused and never prints raw service diagnostics
   expect(fetcher).toHaveBeenCalledOnce();
 });
 
-it('bounds response bodies and refuses unvalidated actions or dream targets', async () => {
+it('bounds response bodies and refuses unvalidated actions or a portrait that is not text', async () => {
   await expect(
     new BrokerDecisionProvider(client(async () => new Response('x'.repeat(64001)))).propose(
       context,
@@ -154,17 +154,16 @@ it('bounds response bodies and refuses unvalidated actions or dream targets', as
     ).propose(context),
   ).rejects.toThrow();
   const reflection = new BrokerReflectionProvider(
-    client(async () =>
-      Response.json({
-        value: {
-          vignette: 'I imagined a bird.',
-          impulses: [{ affordanceId: 'unknown', reason: 'do it' }],
-        },
-      }),
-    ),
+    client(async () => Response.json({ value: { vignette: 'I imagined a bird.' } })),
   );
   await expect(
-    reflection.reflect({ identity: 'Hubert', episodes: [], affordances: [] }),
+    reflection.reflect({
+      form: 'portrait',
+      identity: 'Hubert',
+      pursuits: [],
+      creations: [],
+      readings: [],
+    }),
   ).rejects.toThrow('invalid_reflection');
 });
 

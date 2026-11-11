@@ -4,21 +4,27 @@ import { modelPolicy, modelProfile, routingConfig } from '../../../../tests/mode
 import {
   CompatibleReflectionProvider,
   OllamaReflectionProvider,
-  REFLECTION_FORMAT,
   RoutedReflectionProvider,
   type ReflectionInput,
 } from './reflection';
 import { RoutedDecisionProvider } from './routed';
 
 const input: ReflectionInput = {
+  form: 'portrait',
   identity: 'You are a curious creature who enjoys birds.',
-  episodes: [{ id: 'source-1', summary: 'A duck flew away. PRIVATE-SOURCE-CANARY' }],
-  affordances: [{ id: 'watch-pond', description: 'Watch from the currently reachable pond edge.' }],
+  pursuits: [
+    {
+      question: 'How do sparrows decide where to land?',
+      why: 'They seem to agree without a signal.',
+      status: 'active',
+      notes: ['A duck flew away. PRIVATE-SOURCE-CANARY'],
+    },
+  ],
+  creations: [{ title: 'Landing notes', url: 'https://example.invalid/landing' }],
+  readings: ['Tried gain 3 on the horn. It hummed lower.'],
 };
-const proposal = {
-  vignette: 'In an imagined pond, sparrows land on a teacup runway.',
-  impulses: [{ affordanceId: 'watch-pond', reason: 'Quiet watching could offer new evidence.' }],
-};
+const proposal =
+  'I have been following how sparrows choose a place to land, and I keep returning to it.';
 
 const transports = [
   {
@@ -26,7 +32,7 @@ const transports = [
     create: (fetcher: typeof fetch, onUsage: (input: number, output: number) => void = vi.fn()) =>
       new OllamaReflectionProvider({ fetcher, onUsage }),
     payload: (value: unknown) => ({
-      message: { content: typeof value === 'string' ? value : JSON.stringify(value) },
+      message: { content: value },
       prompt_eval_count: 40,
       eval_count: 20,
     }),
@@ -42,44 +48,40 @@ const transports = [
         onUsage,
       }),
     payload: (value: unknown) => ({
-      choices: [
-        { message: { content: typeof value === 'string' ? value : JSON.stringify(value) } },
-      ],
+      choices: [{ message: { content: value } }],
       usage: { prompt_tokens: 40, completion_tokens: 20 },
     }),
   },
 ];
 
 describe.each(transports)('$name private reflection boundary', (transport) => {
-  it('generates bounded fictional JSON, keeping sources in data and credentials out of it', async () => {
+  it('asks for the portrait as plain text, keeping the record in data and credentials out of it', async () => {
     const onUsage = vi.fn();
     const fetcher = vi.fn(
       async (_url: Parameters<typeof fetch>[0], _init?: RequestInit) =>
         new Response(JSON.stringify(transport.payload(proposal))),
     );
-    expect(await transport.create(fetcher as typeof fetch, onUsage).reflect(input)).toEqual(
-      proposal,
-    );
+    expect(await transport.create(fetcher as typeof fetch, onUsage).reflect(input)).toBe(proposal);
     const init = fetcher.mock.calls[0][1];
     const body = String(init?.body);
     const sent = JSON.parse(body);
     expect(sent.messages[0].content).toContain(input.identity);
-    expect(sent.messages[0].content).toContain('explicitly fictional');
-    expect(sent.messages[0].content).toContain('Keep this output private');
-    expect(sent.messages[0].content).toContain('You have no tools');
+    expect(sent.messages[0].content).toContain('You have just rested. Write a short portrait');
+    expect(sent.messages[0].content).toContain('At most 1200 characters. Return only the text.');
     expect(sent.messages[0].content).not.toContain('PRIVATE-SOURCE-CANARY');
     expect(JSON.parse(sent.messages[1].content)).toEqual({
-      episodes: input.episodes,
-      affordances: input.affordances,
+      pursuits: input.pursuits,
+      creations: input.creations,
+      readings: input.readings,
     });
     expect(body).not.toContain('PRIVATE-KEY-CANARY');
     expect(sent).not.toHaveProperty('tools');
     expect(sent).not.toHaveProperty('tool_choice');
+    expect(sent).not.toHaveProperty('format');
     expect(init?.redirect).toBe('error');
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(onUsage).toHaveBeenCalledWith(40, 20);
     if (transport.name === 'ollama') {
-      expect(sent.format).toEqual(REFLECTION_FORMAT);
       expect(sent.options.num_predict).toBe(500);
       expect(sent.think).toBe(false);
       expect(sent.stream).toBe(false);
@@ -90,34 +92,22 @@ describe.each(transports)('$name private reflection boundary', (transport) => {
     }
   });
 
-  it.each([
-    { ...proposal, impulses: [{ affordanceId: 'invented-tool', reason: 'Do it.' }] },
-    { ...proposal, impulses: [proposal.impulses[0], proposal.impulses[0]] },
-    { ...proposal, impulses: [...proposal.impulses, ...proposal.impulses, ...proposal.impulses] },
-    { ...proposal, vignette: 'x'.repeat(1201) },
-    { ...proposal, vignette: ' ' },
-    { ...proposal, impulses: [{ affordanceId: 'watch-pond', reason: 'x'.repeat(241) }] },
-    { ...proposal, impulses: [{ affordanceId: 'watch-pond', reason: 'Watch.', action: 'move' }] },
-    { ...proposal, memoryWeights: { 'source-1': 100 } },
-    { type: 'rest', durationMs: 60_000 },
-  ])(
-    'rejects unauthorized or unbounded proposal fields and still records usage: %j',
-    async (value) => {
-      const onUsage = vi.fn();
-      const fetcher = (async () =>
-        new Response(JSON.stringify(transport.payload(value)))) as typeof fetch;
-      await expect(transport.create(fetcher, onUsage).reflect(input)).rejects.toThrow();
-      expect(onUsage).toHaveBeenCalledWith(40, 20);
-    },
-  );
+  it('keeps at most 1200 characters, strips a fence and returns nothing for blank text', async () => {
+    const answer = (text: string) =>
+      (async () => new Response(JSON.stringify(transport.payload(text)))) as typeof fetch;
+    expect(await transport.create(answer('x'.repeat(2000))).reflect(input)).toHaveLength(1200);
+    expect(await transport.create(answer('```\nA portrait.\n```')).reflect(input)).toBe(
+      'A portrait.',
+    );
+    expect(await transport.create(answer('  ')).reflect(input)).toBe('');
+  });
 
-  it('allows a vignette without any waking impulse', async () => {
-    const value = { vignette: 'Imagined clouds fold themselves into paper birds.', impulses: [] };
+  it('refuses a reply that is not text, still recording usage', async () => {
+    const onUsage = vi.fn();
     const fetcher = (async () =>
-      new Response(
-        JSON.stringify(transport.payload(`\`\`\`json\n${JSON.stringify(value)}\n\`\`\``)),
-      )) as typeof fetch;
-    expect(await transport.create(fetcher).reflect({ ...input, affordances: [] })).toEqual(value);
+      new Response(JSON.stringify(transport.payload(null)))) as typeof fetch;
+    await expect(transport.create(fetcher, onUsage).reflect(input)).rejects.toThrow();
+    expect(onUsage).toHaveBeenCalledWith(40, 20);
   });
 
   it('validates host input before any request and does not retry an offline call', async () => {
@@ -126,10 +116,13 @@ describe.each(transports)('$name private reflection boundary', (transport) => {
     });
     const provider = transport.create(fetcher as typeof fetch);
     await expect(
-      provider.reflect({ ...input, episodes: Array(25).fill(input.episodes[0]) }),
+      provider.reflect({ ...input, pursuits: Array(13).fill(input.pursuits[0]) }),
     ).rejects.toThrow();
     await expect(
-      provider.reflect({ ...input, affordances: [...input.affordances, ...input.affordances] }),
+      provider.reflect({ ...input, readings: Array(13).fill('A reading.') }),
+    ).rejects.toThrow();
+    await expect(
+      provider.reflect({ ...input, episodes: [] } as unknown as ReflectionInput),
     ).rejects.toThrow();
     expect(fetcher).not.toHaveBeenCalled();
     await expect(provider.reflect(input)).rejects.toThrow('offline');
@@ -185,24 +178,20 @@ describe('routed reflection allowance and privacy', () => {
   const config = () =>
     routingConfig({ policies: { decision: modelPolicy(), reflection: modelPolicy() } });
 
-  it('shares waking reservations, charges each fresh dream and never replays dream output', async () => {
+  it('shares waking reservations, charges each fresh portrait and never replays its output', async () => {
     const events: string[] = [];
     const sharedBudget = budget(events);
-    let dreams = 0;
+    let portraits = 0;
     const fetcher = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const sent = JSON.parse(String(init?.body));
-      const isReflection = sent.messages[0].content.includes('explicitly fictional');
+      const isReflection = sent.messages[0].content.includes('You have just rested');
       events.push(isReflection ? 'fetch:reflection' : 'fetch:decision');
       return new Response(
         JSON.stringify({
           choices: [
             {
               message: {
-                content: JSON.stringify(
-                  isReflection
-                    ? { ...proposal, vignette: `Imagined bird ${++dreams}.` }
-                    : { type: 'reflect' },
-                ),
+                content: isReflection ? `Portrait ${++portraits}.` : '{"type":"rest"}',
               },
             },
           ],
@@ -228,7 +217,7 @@ describe('routed reflection allowance and privacy', () => {
     });
     const first = await resting.reflect(input);
     const second = await resting.reflect(input);
-    expect(first.vignette).not.toBe(second.vignette);
+    expect(first).not.toBe(second);
     expect(events).toEqual([
       'reserve:decision',
       'fetch:decision',
@@ -276,7 +265,7 @@ describe('routed reflection allowance and privacy', () => {
       const sharedBudget = budget(events);
       const fetcher = (async () =>
         new Response(
-          JSON.stringify({ choices: [{ message: { content: '{"type":"rest"}' } }], usage }),
+          JSON.stringify({ choices: [{ message: { content: 42 } }], usage }),
         )) as typeof fetch;
       const provider = new RoutedReflectionProvider(
         config(),
@@ -318,8 +307,8 @@ describe('routed reflection allowance and privacy', () => {
       { fetcher: fetcher as typeof fetch },
     );
     expect(provider.localOnly).toBe(true);
-    expect(await provider.reflect(input)).toEqual(proposal);
-    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).format).toEqual(REFLECTION_FORMAT);
+    expect(await provider.reflect(input)).toBe(proposal);
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).not.toHaveProperty('format');
   });
 
   it('requires an explicit reflection policy and avoids cached responses or retries at Cloudflare', async () => {

@@ -284,16 +284,7 @@ export class ChatGPTReflectionProvider implements ReflectionProvider {
     return this.client.isAvailable();
   }
   async reflect(input: ReflectionInput) {
-    const text = await this.client.text(reflectionMessages(input));
-    return validateReflectionProposal(
-      JSON.parse(
-        text
-          .trim()
-          .replace(/^```(?:json)?\s*/, '')
-          .replace(/\s*```$/, ''),
-      ),
-      input,
-    );
+    return validateReflectionProposal(await this.client.text(reflectionMessages(input)), input);
   }
 }
 
@@ -313,7 +304,7 @@ export class ChatGPTExpressionProvider implements ExpressionProvider {
         expressionMessages(this.identity, input),
         undefined,
         (text) => {
-          // A file is returned whole; only a wish is passed on as it is written.
+          // A file is returned whole; nothing is passed on as it is written.
           if (input.form === 'work') return;
           length += text.length;
           if (length > 360) return; // Consume the bounded terminal event so known usage is retained.

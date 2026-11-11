@@ -9,6 +9,19 @@ import {
 } from '../packages/inference/src/index';
 import { SqliteSnapshotStore } from '../packages/persistence/src/index';
 import { ChatGPTSession, PROVIDER_ERROR_NAME } from '../packages/security/src/chatgpt';
+
+function caughtName(error: unknown): string {
+  const code = (error as { code?: unknown })?.code;
+  if (typeof code === 'string' && PROVIDER_ERROR_NAME.test(code)) return code;
+  const name = error instanceof Error ? error.name : typeof error;
+  return (
+    name
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 64) || 'unknown'
+  );
+}
 import { ChatGPTStore } from '../packages/security/src/chatgpt-store';
 import { ChatGPTClient } from '../packages/adapters/src/models/chatgpt';
 import { parseResponsesAction } from '../packages/adapters/src/models/responses-action';
@@ -53,22 +66,12 @@ try {
   const dispatch = async (input: DecisionContext | ReflectionInput, signal: AbortSignal) => {
     usage = undefined;
     let text: string | undefined;
-    const dream = 'episodes' in input;
+    const portrait = 'form' in input;
     try {
-      text = dream
+      text = portrait
         ? await client.text(reflectionMessages(input), signal)
         : await client.decisionText(input, signal);
-      const value = dream
-        ? validateReflectionProposal(
-            JSON.parse(
-              text
-                .trim()
-                .replace(/^```(?:json)?\s*/, '')
-                .replace(/\s*```$/, ''),
-            ),
-            input,
-          )
-        : parseResponsesAction(text);
+      const value = portrait ? validateReflectionProposal(text, input) : parseResponsesAction(text);
       return { value, usage };
     } catch (error) {
       let diagnostic: InferenceDiagnostic;
@@ -77,7 +80,8 @@ try {
           code: error.code === 'invalid_json' ? 'invalid_json' : 'invalid_action',
           fields: error.fields,
         };
-      else if (text !== undefined && dream) diagnostic = { code: 'invalid_reflection', fields: [] };
+      else if (text !== undefined && portrait)
+        diagnostic = { code: 'invalid_reflection', fields: [] };
       else {
         const candidate = {
           code: 'provider_response',
@@ -94,8 +98,11 @@ try {
           JSON.stringify({
             event: 'provider_failure',
             at: new Date().toISOString(),
-            workload: dream ? 'reflection' : 'decision',
+            workload: portrait ? 'reflection' : 'decision',
             code: diagnostic.providerCode ?? 'unclassified',
+            // A failure outside the allowlisted codes is still named, by its own code or by the
+            // kind of error that was thrown; never by message text.
+            ...(diagnostic.providerCode ? {} : { caught: caughtName(error) }),
             ...(Number.isInteger(failure.status) ? { status: failure.status } : {}),
             ...(typeof failure.requestId === 'string' && /^[\w-]{1,200}$/.test(failure.requestId)
               ? { requestId: failure.requestId }

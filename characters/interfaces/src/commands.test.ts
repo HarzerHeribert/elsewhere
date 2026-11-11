@@ -187,7 +187,7 @@ describe('turn-specific action choices', () => {
     expect(narrowActionFormat()).toBe(MODEL_ACTION_FORMAT);
     expect(narrowActionFormat([])).toBe(MODEL_ACTION_FORMAT);
     // An unusable entry does not discard the usable ones.
-    expect(typesOf([{ type: 'say' }, { type: 'reflect' }])).toEqual(['reflect']);
+    expect(typesOf([{ type: 'say' }, { type: 'rest' }])).toEqual(['rest']);
   });
 
   it('only ever admits commands the canonical parser accepts', () => {
@@ -197,6 +197,7 @@ describe('turn-specific action choices', () => {
       { type: 'look', where: { targetId: ['bench'] } },
       { type: 'rest' },
       { type: 'reflect' },
+      { type: 'wish', where: { text: 'any' } },
       { type: 'pin_creation', where: { creationId: ['chart'] } },
       { type: 'draft_mail', where: { kind: ['newsletter'], entryIds: ['note-1'] } },
       { type: 'pursue', where: { question: 'any', why: 'any' } },
@@ -206,6 +207,7 @@ describe('turn-specific action choices', () => {
       { type: 'note', where: { text: 'any' } },
       { type: 'read', where: { sourceId: [`source-${'b'.repeat(24)}`] } },
     ]);
+    // reflect is never offered to the model, so its choice adds no alternative.
     expect(format).toHaveLength(13);
     for (const alternative of format) {
       const command = Object.fromEntries(

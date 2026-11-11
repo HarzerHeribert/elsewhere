@@ -12,7 +12,6 @@ import {
 import { BrokerModelError } from '../packages/adapters/src/models/broker';
 import { displayMemorySummary } from '../characters/hubert/src/memoryQuality';
 import {
-  validatePublicWish,
   validatePublicWork,
   type ExpressionProvider,
 } from '../packages/adapters/src/models/expression';
@@ -22,6 +21,7 @@ import hubertAppearance from '../characters/hubert/appearance.json' with { type:
 import type {
   ProviderIssue,
   PublicCreation,
+  PublicTrailEntry,
   PublicSnapshot,
   WorldState,
 } from '@elsewhere/character-interfaces';
@@ -38,10 +38,12 @@ import {
   advanceHubert,
   appendTrail,
   applyExternalEvent,
+  applyReply,
   applyNote,
   applyOutcome,
   applyPursue,
   applySetAside,
+  applyWish,
   isMindCommand,
   isMindType,
   atMakingPlace,
@@ -51,27 +53,19 @@ import {
   publicCharacter,
   publicMemories,
   recalledMemory,
-  wishDue,
-  wishInput,
-  recordWish,
+  portraitDue,
+  portraitInput,
+  recordPortrait,
   preserveWishLedger,
   publicWishes,
   resolveWish as resolveCharacterWish,
   type HubertState,
 } from '@elsewhere/hubert';
 import {
-  abandonDreamConsolidation,
-  beginDreamConsolidation,
-  completeDreamConsolidation,
-  pruneDreamState,
+  recentReadings,
   type DecisionProvider,
   type JsonObject,
 } from '@elsewhere/character-runtime';
-import {
-  hubertDreamActions,
-  hubertDreamInterpretations,
-  hubertDreamSources,
-} from '../characters/hubert/src/dreams';
 import { HUBERT_IDENTITY } from '../characters/hubert/src/persona';
 import { hubertActivityDurationMs } from '../characters/hubert/src/pacing';
 import {
@@ -142,8 +136,8 @@ export interface ControllerState {
     providerWorkloadRetries?: Array<'reflection'>;
     /** Type of the last command carried out; mind steps are followed up without the usual wait. */
     lastCommandType?: CharacterCommand['type'];
-    /** Continuous observed rest only; a restart or pause begins a new session. */
-    dreamRest?: { id: string; startedAt: number; startedAtReal: number };
+    /** The start of the rest the last self-portrait attempt was made for: one attempt per rest. */
+    portraitRest?: number;
   };
   modelAllowance: ModelAllowance;
   modelRouting?: RoutingLedger;
@@ -260,17 +254,16 @@ export class ElsewhereController {
         upgradedHubert.intent =
           'An interrupted research request has been left for later. Its allowance remains charged.';
       }
-      // Never resume an in-flight creative call or count offline time as observed rest.
-      upgradedHubert.dreams = abandonDreamConsolidation(upgradedHubert.dreams);
-      const interruptedRest = this.state.runtime.dreamRest !== undefined;
-      delete this.state.runtime.dreamRest;
+      // Dreams are gone; a saved life that still carries their bookkeeping keeps the rest.
+      const retiredRest = 'dreamRest' in this.state.runtime;
+      delete (this.state.runtime as Record<string, unknown>).dreamRest;
       const freezeArtifact =
         this.state.artifactCreatedAt != null && this.state.artifactSamples === undefined;
       const changed =
         JSON.stringify(upgraded) !== JSON.stringify(this.state.world) ||
         JSON.stringify(upgradedHubert) !== JSON.stringify(this.state.hubert) ||
         freezeArtifact ||
-        interruptedRest;
+        retiredRest;
       this.state.world = upgraded;
       this.state.hubert = preserveWishLedger(upgradedHubert, upgradedHubert);
       // A world upgrade may retire an object; the resident cannot go on choosing it.
@@ -462,7 +455,7 @@ export class ElsewhereController {
         issue.workload && issue.workload !== 'decision' ? [issue.workload] : [],
       );
       if (active.some((issue) => issue.workload === 'reflection'))
-        delete this.state.runtime.dreamRest;
+        delete this.state.runtime.portraitRest;
       await this.commit();
       return { accepted: true };
     });
@@ -591,89 +584,57 @@ export class ElsewhereController {
     for (const issue of this.state.runtime.providerIssues ?? [])
       if (issue.workload === workload && !issue.resolvedAt) issue.resolvedAt = this.wallNow();
   }
-  private async dreamDuringRest() {
+  /**
+   * When a rest of at least ten minutes ends, the character may write a short portrait of
+   * itself from its own record. One reflection request, one attempt for each rest; when the
+   * allowance refuses, nothing happens.
+   */
+  private async portraitAfterRest(now: number) {
     const s = this.state;
-    const nowReal = this.wallNow();
-    if (s.hubert.activity.kind !== 'rest' || !this.options.reflectionProvider) {
-      delete s.runtime.dreamRest;
-      return;
-    }
-    const rest = (s.runtime.dreamRest ??= {
-      id: `rest:${nowReal}:${s.hubert.turn}`,
-      startedAt: s.runtime.simulatedAt,
-      startedAtReal: nowReal,
-    });
-    if (
-      s.runtime.providerIssues?.some(
-        (issue) => issue.workload === 'reflection' && !issue.resolvedAt,
-      ) &&
-      !s.runtime.providerWorkloadRetries?.includes('reflection')
-    )
-      return;
-    const sources = hubertDreamSources(s.hubert);
-    const begin = beginDreamConsolidation({
-      state: s.hubert.dreams,
-      sources,
-      rest: { ...rest, voluntary: true, endedAt: s.runtime.simulatedAt, endedAtReal: nowReal },
-      nowReal,
-    });
-    s.hubert.dreams = begin.state;
-    if (!begin.request) return;
-    // Reserve the rest/source window before any inference. A crash abandons this opportunity.
-    await this.commit();
-    const observation = observeWorld(s.world, 'hubert', s.runtime.simulatedAt);
-    const actions = hubertDreamActions(s.hubert, observation, nowReal, begin.request.sources);
-    s.runtime.providerWorkloadRetries = s.runtime.providerWorkloadRetries?.filter(
-      (workload) => workload !== 'reflection',
-    );
-    let proposal;
     const provider = this.options.reflectionProvider;
-    if (provider && provider.isAvailable?.() !== false) {
-      const managed = provider.managesAllowance === true;
-      const reservation = this.reserveCall(nowReal);
-      const allowance = managed
-        ? s.modelAllowance
-        : 'allowance' in reservation
-          ? reservation.allowance
-          : undefined;
-      if (allowance) {
-        s.modelAllowance = allowance;
-        if (!managed) await this.commit();
-        this.modelDispatchActive = true;
-        try {
-          proposal = await provider.reflect({
-            identity: HUBERT_IDENTITY,
-            episodes: begin.request.sources.map(({ id, summary }) => ({ id, summary })),
-            affordances: actions.map(({ id, description }) => ({ id, description })),
-          });
-          this.resolveProviderIssue('reflection');
-        } catch {
-          if (this.halted) throw new Error('Dream dispatch stopped after a persistence failure.');
-          this.reportProviderIssue('failed', 'reflection');
-        } finally {
-          this.modelDispatchActive = false;
-        }
-      } else if (!('refused' in reservation) || reservation.refused === 'daily')
-        this.reportProviderIssue('allowance', 'reflection');
-      // An hourly pause is not trouble; the dream is simply not begun this hour.
-    } else this.reportProviderIssue('unavailable', 'reflection');
-    if (!proposal) {
-      s.hubert.dreams = abandonDreamConsolidation(s.hubert.dreams);
-      await this.commit();
-      return;
+    if (!provider || !portraitDue(s.hubert, now)) return;
+    if (s.runtime.portraitRest === s.hubert.activity.startedAt) return;
+    if (provider.isAvailable?.() === false) return;
+    const managed = provider.managesAllowance === true;
+    const reservation = this.reserveCall(this.wallNow());
+    const allowance = managed
+      ? s.modelAllowance
+      : 'allowance' in reservation
+        ? reservation.allowance
+        : undefined;
+    if (!allowance) return;
+    s.runtime.portraitRest = s.hubert.activity.startedAt;
+    s.modelAllowance = allowance;
+    await this.commit(); // One durable reservation; an abandoned request is never replayed.
+    let text = '';
+    this.modelDispatchActive = true;
+    try {
+      text = await provider.reflect(
+        portraitInput(
+          s.hubert,
+          HUBERT_IDENTITY,
+          (s.creations ?? []).filter((creation) => creation.characterId === s.hubert.id),
+        ),
+      );
+      this.resolveProviderIssue('reflection');
+    } catch {
+      if (this.halted) throw new Error('Portrait stopped after a persistence failure.');
+      this.reportProviderIssue('failed', 'reflection');
+    } finally {
+      this.modelDispatchActive = false;
     }
-    const completed = completeDreamConsolidation({
-      state: s.hubert.dreams,
-      requestKey: begin.request.idempotencyKey,
-      currentSources: hubertDreamSources(s.hubert),
-      proposal,
-      nowReal: this.wallNow(),
-      availableActions: actions,
-      interpretations: hubertDreamInterpretations(begin.request.sources),
-    });
-    s.hubert.dreams = completed.state;
-    if (completed.receipt) s.hubert.activity.label = 'Dreaming quietly';
-    // One snapshot atomically publishes all private derived records; none enter world events.
+    text = text.trim();
+    const privateTexts = s.hubert.outsideMessages.map((message) => message.text);
+    if (text && !reproducesPrivateText(text, privateTexts)) {
+      s.hubert = recordPortrait(s.hubert, text, now);
+      this.recordTrail(
+        { type: 'portrait' },
+        '',
+        observeWorld(s.world, 'hubert', now).placeId,
+        now,
+        { text: s.hubert.portrait!.text },
+      );
+    }
     await this.commit();
   }
   /**
@@ -714,7 +675,6 @@ export class ElsewhereController {
     s.runtime.tick++;
     s.world = advanceWorld(s.world, now);
     s.hubert = advanceHubert(s.hubert, now);
-    await this.dreamDuringRest();
     const resident = s.world.residents.find((r) => r.id === 'hubert');
     const ready =
       resident &&
@@ -745,6 +705,7 @@ export class ElsewhereController {
       }
       delete s.runtime.providerRetryRequested;
       delete s.runtime.providerRetryAt;
+      await this.portraitAfterRest(now);
       let decision;
       const provider = this.options.modelProvider;
       if (!provider) this.reportProviderIssue('unconfigured');
@@ -985,48 +946,11 @@ export class ElsewhereController {
       s.runtime.lastDecisionAt = now;
     }
     await this.commit();
-    await this.makeWish();
     return this.getSnapshot();
-  }
-  /**
-   * Now and then the resident is given the chance to say what they wish for. The words are
-   * theirs, authored from the public snapshot alone; an empty answer is no wish.
-   * A wish installs nothing and reaches no one but the owner's wish list.
-   */
-  private async makeWish() {
-    const provider = this.options.expressionProvider;
-    if (!provider || this.halted || this.state.runtime.paused) return;
-    if (provider.isAvailable?.() === false) return;
-    const now = this.wallNow();
-    if (!wishDue(this.state.hubert, now)) return;
-    const snapshot = this.getSnapshot();
-    if (snapshot.character.status === 'resting') return;
-    // Wishes never spend the last fifth of the day's calls.
-    const reservation = this.reserveCall(now, 0.8);
-    if (!('allowance' in reservation)) return;
-    this.state.modelAllowance = reservation.allowance;
-    this.state.hubert.wishesAskedAtReal = now;
-    await this.commit(); // One durable request reservation; an abandoned wish is never replayed.
-    this.modelDispatchActive = true;
-    try {
-      const text = validatePublicWish(await provider.express(wishInput(snapshot)));
-      if (text)
-        this.state.hubert = recordWish(
-          this.state.hubert,
-          { id: 'wish-' + randomUUID(), text },
-          now,
-        );
-    } catch {
-      if (this.halted) throw Error('Wish stopped after persistence failure.');
-      // A wish that fails or does not validate is simply not made; the next chance comes later.
-    } finally {
-      this.modelDispatchActive = false;
-    }
-    await this.commit();
   }
   /** One step on the public trail: what was done, why, on which pursuit and where. */
   private recordTrail(
-    command: CharacterCommand,
+    command: { type: PublicTrailEntry['kind'] },
     why: string,
     placeId: string,
     now: number,
@@ -1048,7 +972,7 @@ export class ElsewhereController {
   private async mindStep(
     command: Extract<
       CharacterCommand,
-      { type: 'pursue' | 'set_aside' | 'search' | 'read' | 'note' }
+      { type: 'pursue' | 'set_aside' | 'search' | 'read' | 'note' | 'wish' | 'reply' }
     >,
     why: string,
     observation: Observation,
@@ -1083,6 +1007,16 @@ export class ElsewhereController {
         s.hubert = applyNote(s.hubert, command, 'note-' + randomUUID(), now);
         outcome('completed', 'Wrote a note.', 'Writing a note');
         trail(command.text);
+      } else if (command.type === 'wish') {
+        // The ledger keeps real times, like the owner's answers to it.
+        s.hubert = applyWish(s.hubert, command, 'wish-' + randomUUID(), this.wallNow());
+        outcome('completed', 'Made a wish.', 'Making a wish');
+        trail(command.text);
+      } else if (command.type === 'reply') {
+        // Private: the answer stays on the message; the trail records only that one was given.
+        s.hubert = applyReply(s.hubert, command, now);
+        outcome('completed', 'Answered a message.', 'Answering a message');
+        trail();
       } else await this.researchStep(command, why, observation, now, outcome);
     } catch {
       if (this.halted) throw Error('Mind step stopped after persistence failure.');
@@ -1152,8 +1086,24 @@ export class ElsewhereController {
       if (this.halted) throw Error('Make stopped after persistence failure.');
       return failed('the studio could not be read');
     }
-    const active = activePursuit(s.hubert.pursuits);
-    const entries = active?.entries ?? [];
+    // The question it is on now, or else the one it touched last.
+    const focus =
+      activePursuit(s.hubert.pursuits) ??
+      s.hubert.pursuits.items.reduce<(typeof s.hubert.pursuits.items)[number] | undefined>(
+        (latest, item) => (!latest || item.lastAt > latest.lastAt ? item : latest),
+        undefined,
+      );
+    const entries = focus?.entries ?? [];
+    const readings = [
+      ...entries.flatMap((entry) =>
+        entry.kind === 'tried' ? [{ at: entry.at, text: entry.text }] : [],
+      ),
+      ...recentReadings(s.hubert.readings, 30).map(({ at, text }) => ({ at, text })),
+    ]
+      .filter((reading, index, all) => all.findIndex((one) => one.text === reading.text) === index)
+      .sort((a, b) => a.at - b.at)
+      .slice(-30)
+      .map((reading) => reading.text);
     const own = (s.creations ?? []).filter(
       (creation) => creation.characterId === s.hubert.id && creation.origin,
     );
@@ -1169,14 +1119,12 @@ export class ElsewhereController {
           ...(existing ? { existing: existing.text.slice(0, STUDIO_TEXT_LIMIT) } : {}),
           siteUrl: studio.site().url,
           material: {
-            ...(active ? { question: active.question, why: active.why } : {}),
+            ...(focus ? { question: focus.question, why: focus.why } : {}),
             notes: entries
               .flatMap((entry) => (entry.kind === 'note' ? [entry.text] : []))
               .slice(-12),
-            readings: entries
-              .flatMap((entry) => (entry.kind === 'tried' ? [entry.text] : []))
-              .slice(-30),
-            openQuestions: active?.questions ?? [],
+            readings,
+            openQuestions: focus?.questions ?? [],
           },
           shelf: own.slice(-32).map((creation) => ({
             path: creation.origin!.path,
@@ -1220,7 +1168,7 @@ export class ElsewhereController {
           createdAt: now,
           provenance: 'character',
           origin: {
-            ...(active ? { pursuitId: active.id } : {}),
+            ...(focus ? { pursuitId: focus.id } : {}),
             path: command.path,
             commitSha: written.commitSha,
           },
@@ -1234,10 +1182,10 @@ export class ElsewhereController {
     } catch {
       // The file is public all the same; only the shelf could not take it.
     }
-    if (active)
+    if (focus)
       s.hubert.pursuits = recordPursuitEntry(
         s.hubert.pursuits,
-        active.id,
+        focus.id,
         {
           kind: 'made',
           id: 'made-' + randomUUID(),
@@ -1379,7 +1327,6 @@ export class ElsewhereController {
   pause() {
     return this.serialize(async () => {
       this.state.runtime.paused = true;
-      delete this.state.runtime.dreamRest;
       await this.commit();
       return this.getSnapshot();
     });
@@ -1394,7 +1341,7 @@ export class ElsewhereController {
   }
   /**
    * A new life in a new world. Everything that is not the fictional life stays: the real call
-   * allowance and routing ledger, creations, provider trouble, the wish ledger and dreams.
+   * allowance and routing ledger, creations, provider trouble and the wish ledger.
    */
   private freshLife(previous: ControllerState, paused: boolean): ControllerState {
     const fresh = initialState(this.wallNow());
@@ -1415,7 +1362,6 @@ export class ElsewhereController {
       fresh.runtime.providerRetryAt = previous.runtime.providerRetryAt;
     if (previous.modelRouting) fresh.modelRouting = structuredClone(previous.modelRouting);
     fresh.hubert = preserveWishLedger(fresh.hubert, previous.hubert);
-    fresh.hubert.dreams = pruneDreamState(previous.hubert.dreams, []);
     fresh.world.version = Math.max(fresh.world.version, (previous.world?.version ?? 0) + 1);
     fresh.runtime.paused = paused;
     return fresh;
@@ -1439,6 +1385,15 @@ export class ElsewhereController {
       await this.commit();
       return { accepted: true };
     });
+  }
+  /** One signed-in account's own messages with the answers to them; nobody else's. */
+  listMessages(userId: string) {
+    const source = 'user:' + userId;
+    const s = this.lastCommitted;
+    if (!s) throw new Error('Controller has no committed state.');
+    return s.hubert.outsideMessages
+      .filter((message) => message.source === source)
+      .map(({ id, at, text, reply }) => ({ id, at, text, ...(reply ? { reply } : {}) }));
   }
   resolveWish(id: string, decision: 'fulfill' | 'decline') {
     return this.serialize(async () => {

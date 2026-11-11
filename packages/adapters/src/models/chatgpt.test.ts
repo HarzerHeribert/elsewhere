@@ -384,25 +384,19 @@ it('records usage even when a completed output violates the character command sc
   await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toThrow();
   expect(fixture.usage).toHaveBeenCalledTimes(1);
 });
-it('keeps dream proposals private and rejects invented waking affordances', async () => {
-  const fixture = client(() =>
-    stream(
-      frame(
-        completed(
-          '{"vignette":"I imagined a paper bird.","impulses":[{"affordanceId":"invented","reason":"do it"}]}',
-        ),
-      ),
-    ),
-  );
+it('keeps the portrait request private and refuses a reply that is not text', async () => {
+  const fixture = client(() => stream(frame(completed('I follow how birds land.'))));
   await expect(
     new ChatGPTReflectionProvider(fixture.api).reflect({
+      form: 'portrait',
       identity: 'Hubert',
-      episodes: [{ id: 'e1', summary: 'Saw a bird' }],
-      affordances: [{ id: 'watch', description: 'Watch birds from a bench' }],
+      pursuits: [],
+      creations: [],
+      readings: ['Tried gain 3 on the horn.'],
     }),
-  ).rejects.toThrow('unavailable');
+  ).resolves.toBe('I follow how birds land.');
   const body = JSON.parse(fixture.fetcher.mock.calls[1][1]!.body as string);
-  expect(body.instructions).toContain('Keep this output private');
+  expect(body.instructions).toContain('You have just rested');
   expect(body).not.toHaveProperty('text');
 });
 it('does not fall back to unconstrained text or retry when structured output is rejected', async () => {

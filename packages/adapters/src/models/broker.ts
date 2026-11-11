@@ -106,14 +106,10 @@ export class BrokerModelClient {
   resetAvailability() {
     this.pausedUntil = 0;
   }
-  private async readExpression(
-    response: Response,
-    form: 'wish' | 'work',
-    onDelta?: (text: string) => void,
-  ) {
-    // A file arrives whole in one frame; a wish may arrive as a short stream.
-    const lineLimit = form === 'work' ? 120000 : 4000;
-    const byteLimit = form === 'work' ? 160000 : 64000;
+  private async readExpression(response: Response, form: 'work', onDelta?: (text: string) => void) {
+    // A file arrives whole in one frame.
+    const lineLimit = 120000;
+    const byteLimit = 160000;
     if (response.headers.get('content-type')?.split(';')[0] !== 'application/x-ndjson')
       throw new BrokerModelError('invalid_response');
     const reader = response.body?.getReader();
@@ -177,7 +173,7 @@ export class BrokerModelClient {
     workload: InferenceWorkload,
     body: unknown,
     onDelta?: (text: string) => void,
-    form: 'wish' | 'work' = 'wish',
+    form: 'work' = 'work',
   ): Promise<unknown> {
     if (!this.isAvailable()) throw new BrokerModelError('paused');
     const encoded = JSON.stringify(body);

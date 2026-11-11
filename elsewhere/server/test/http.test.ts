@@ -806,6 +806,32 @@ describe('local public/owner API separation', () => {
     expect(tick).not.toHaveBeenCalled();
   });
 
+  it('lists only the signed-in account its own messages, with replies', async () => {
+    const listMessages = vi.fn((userId: string) => [
+      { id: 'm1', at: 5, text: 'mine', reply: { text: 'for ' + userId, at: 6 } },
+    ]);
+    const account = { id: 'ann', name: 'Ann' } as AccountSummary;
+    let signedIn = false;
+    const { url } = await start({
+      listMessages,
+      auth: {
+        handle: async () => {},
+        isWorldAdmin: async () => false,
+        getAccount: async () => (signedIn ? account : null),
+      },
+    });
+    const guest = await (await fetch(`${url}/api/messages`)).json();
+    expect(guest).toEqual({ messages: [] });
+    expect(listMessages).not.toHaveBeenCalled();
+    signedIn = true;
+    const own = await fetch(`${url}/api/messages`);
+    expect(own.headers.get('cache-control')).toContain('no-store');
+    expect(await own.json()).toEqual({
+      messages: [{ id: 'm1', at: 5, text: 'mine', reply: { text: 'for ann', at: 6 } }],
+    });
+    expect(listMessages).toHaveBeenCalledWith('ann');
+  });
+
   it('validates and rate-limits public messages without accepting extra instructions', async () => {
     const { url, submitMessage } = await start();
     const send = (value: unknown) =>

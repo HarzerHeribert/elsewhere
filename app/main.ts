@@ -108,6 +108,7 @@ const server = createApiServer({
   resume: () => controller!.resume(),
   reset: () => controller!.reset(),
   submitMessage: (text, actor) => controller!.submitMessage(text, actor),
+  listMessages: (userId) => controller!.listMessages(userId),
   getArtifact: (id) => controller!.getArtifact(id),
   createCreation: (input) => controller!.createCreation(input),
   pinCreation: (id, pinned) => controller!.pinCreation(id, pinned),
