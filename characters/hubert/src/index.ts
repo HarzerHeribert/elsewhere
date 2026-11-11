@@ -985,6 +985,18 @@ function messageSender(message: HubertState['outsideMessages'][number]): string 
   return message.source.startsWith('mail:') ? 'someone by mail' : 'a visitor';
 }
 
+/** A note that says again what one of the last notes on the pursuit already says is refused. */
+export function noteProblem(state: HubertState, text: string): string | undefined {
+  const active = state.pursuits.items.find((item) => item.id === state.pursuits.activeId);
+  const earlier = (active?.entries ?? [])
+    .filter((entry) => entry.kind === 'note')
+    .slice(-4)
+    .map((entry) => (entry.kind === 'note' ? entry.text : ''));
+  return reproducesPrivateText(text, earlier, 80)
+    ? 'You already noted this. A note should add something the earlier ones do not say.'
+    : undefined;
+}
+
 /** Why this message cannot be answered, or undefined when it can. */
 export function replyProblem(state: HubertState, messageId: string): string | undefined {
   const message = state.outsideMessages.find((item) => item.id === messageId);
@@ -1053,6 +1065,8 @@ function mindStepProblem(
       return wishProblem(state);
     case 'reply':
       return replyProblem(state, action.messageId);
+    case 'note':
+      return noteProblem(state, action.text);
     case 'reflect':
       return 'Reflecting is not something you can choose. Choose one of the listed actions.';
     case 'work':

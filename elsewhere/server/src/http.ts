@@ -185,6 +185,11 @@ const publicTrailEntry = (entry: PublicTrailEntry): PublicTrailEntry => ({
   ...(Number.isSafeInteger(entry.times) && entry.times! > 1 ? { times: entry.times } : {}),
 });
 
+const publicPortrait = (portrait: { text: string; at: number }) => ({
+  text: portrait.text.slice(0, 1200),
+  at: portrait.at,
+});
+
 /** Explicitly project public fields: never serialize a controller or private character state. */
 export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
   const character = snapshot.character;
@@ -228,6 +233,10 @@ export function publicSnapshot(snapshot: PublicSnapshot): PublicSnapshot {
       socialAppetite: character.socialAppetite,
       activity: character.activity,
       status: character.status,
+      ...(character.portrait ? { portrait: publicPortrait(character.portrait) } : {}),
+      ...(character.portraits?.length
+        ? { portraits: character.portraits.slice(-5).map(publicPortrait) }
+        : {}),
     },
     events: snapshot.events.map(
       ({ id, at, type, message, characterId, objectId, entityId, placeId }) => ({
