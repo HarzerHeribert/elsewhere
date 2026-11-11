@@ -5,27 +5,24 @@ import type {
   MailPreferences,
   PublicCharacterMail,
 } from '../../../../characters/interfaces/src/mail';
-import { NotebookDraft, NotebookPanel } from './NotebookPanel';
+import { NotebookPanel } from './NotebookPanel';
 import { MemoriesPanel } from './MemoriesPanel';
-import { ResearchList, ResearchSteps, ResearchStory } from './ResearchDetails';
 import { CreationsPanel } from './CreationsPanel';
 import { Button } from '../ui/Button';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { HubertPortrait } from '../HubertPortrait';
-import { CharacterInterests } from '../WildlifePanel';
 import { Icon } from '../Icon';
 import { Meter } from '../Meter';
 import { activityRows } from '../activityFeed';
-import { currentThought, researchInProgress } from '../activityStory';
+import { trailLabel } from '../trailLabels';
 import { formatTime } from '../formatTime';
 import { useWallTime } from '../worldClock';
 
-export type CharacterTab = 'now' | 'notebook' | 'memories' | 'research' | 'about';
+export type CharacterTab = 'now' | 'notebook' | 'memories' | 'about';
 const tabs: Array<{ id: CharacterTab; label: string }> = [
   { id: 'now', label: 'Right now' },
   { id: 'notebook', label: 'My notebook' },
   { id: 'memories', label: 'My memories' },
-  { id: 'research', label: 'My research' },
   { id: 'about', label: 'About me' },
 ];
 
@@ -42,15 +39,11 @@ export function CharacterPanel({
   onMailPreferences = async () => false,
   recalledMemory,
   creations,
-  notebook,
   events = [],
   memories = [],
-  research = [],
-  thoughts,
-  now,
+  trail = [],
+  pursuits = [],
   places = [],
-  researchId,
-  onResearch = () => undefined,
   onShowPlace,
   onMessage,
   onViewpoint,
@@ -70,16 +63,11 @@ export function CharacterPanel({
   recalledMemory?: PublicSnapshot['recalledMemory'];
   artifacts?: PublicSnapshot['artifacts'];
   creations?: PublicSnapshot['creations'];
-  notebook?: PublicSnapshot['notebook'];
   events?: PublicSnapshot['events'];
   memories?: PublicSnapshot['memories'];
-  research?: PublicSnapshot['research'];
-  thoughts?: PublicSnapshot['thoughts'];
-  /** World time, used to tell a current thought from an earlier one. */
-  now?: number;
+  trail?: PublicSnapshot['trail'];
+  pursuits?: PublicSnapshot['pursuits'];
   places?: ReadonlyArray<{ id: string; name: string }>;
-  researchId?: string | null;
-  onResearch?: (id: string | null) => void;
   onShowPlace?: (placeId: string) => void;
   onMessage: () => void;
   onViewpoint: () => void;
@@ -107,22 +95,13 @@ export function CharacterPanel({
     if (active && bar)
       bar.scrollLeft = Math.max(0, active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2);
   }, [tab]);
-  const latest = research?.at(-1);
-  const live = researchInProgress(latest) ? latest : undefined;
-  const opened = research?.find((episode) => episode.id === researchId);
-  const thinking = now === undefined ? undefined : currentThought(thoughts?.entries, now);
-  // Only what the world already publishes: shared thoughts, finished notes and what he was seen
-  // doing. The current thought is shown on its own below.
+  // Only what the world already publishes: the latest steps of the trail and what was seen.
   const earlier = [
-    ...(thoughts?.entries ?? [])
-      .filter((entry) => entry.id !== thinking?.id)
-      .slice(-3)
-      .map((entry) => ({ id: 'thought:' + entry.id, at: entry.at, note: entry.text, seen: '' })),
-    ...(notebook?.entries ?? []).slice(thoughts?.entries.length ? -1 : -3).map((entry) => ({
-      id: 'note:' + entry.id,
+    ...trail.slice(-3).map((entry) => ({
+      id: 'step:' + entry.id,
       at: entry.at,
-      note: entry.text,
-      seen: '',
+      note: entry.why || entry.text || '',
+      seen: entry.why || entry.text ? '' : trailLabel(entry),
     })),
     ...activityRows(events)
       .slice(0, 3)
@@ -130,7 +109,7 @@ export function CharacterPanel({
   ]
     .sort((a, b) => a.at - b.at)
     .slice(-5);
-  const attention = [...character.interests].sort((a, b) => b.strength - a.strength).slice(0, 3);
+  const following = pursuits.filter((pursuit) => pursuit.status !== 'set-aside').slice(0, 3);
   return (
     <>
       <div className="page-tabs" role="group" aria-label={character.name + '’s pages'} ref={pages}>
@@ -144,9 +123,7 @@ export function CharacterPanel({
       {tab === 'now' && (
         <div className="now-stream">
           <p className="stream-note">
-            {thoughts?.enabled
-              ? 'What I’m doing, thinking and writing, as it happens. I share these thoughts myself; the rest stays my own.'
-              : 'What I’m doing and writing, as it happens. My thoughts stay my own until I write them down.'}
+            What I’m doing and following, as it happens, in my own words.
             {onDay && (
               <>
                 {' '}
@@ -173,55 +150,22 @@ export function CharacterPanel({
               </p>
             ),
           )}
-          {thinking && (
-            <figure className="now-thinking" aria-label="What I’m thinking">
-              <figcaption>
-                <Icon name="thought" />
-                I’m thinking · {formatTime(toWall(thinking.at))}
-              </figcaption>
-              <p>{thinking.text}</p>
-            </figure>
-          )}
           <section className="now-focus" aria-label="Right now">
-            {notebook?.draft ? (
-              <NotebookDraft draft={notebook.draft} />
-            ) : live ? (
-              <>
-                <p className="now-label">
-                  <i />
-                  I’m researching
-                </p>
-                <h3>{live.topic}</h3>
-                <ResearchSteps episode={live} />
-                <button
-                  className="follow-link"
-                  onClick={() => {
-                    choose('research');
-                    onResearch(live.id);
-                  }}
-                >
-                  Follow along <Icon name="arrow" />
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="now-label">
-                  <i />
-                  Right now
-                </p>
-                <h3>{character.activity}</h3>
-              </>
-            )}
+            <p className="now-label">
+              <i />
+              Right now
+            </p>
+            <h3>{character.activity}</h3>
           </section>
           <div className="stats now-stats">
             <Meter label="Mood" value={character.mood} />
             <Meter label="Energy" value={character.energy} />
           </div>
-          {attention.length > 0 && (
+          {following.length > 0 && (
             <p className="attention">
-              <span>What I’m paying attention to</span>
-              {attention.map((interest) => (
-                <b key={interest.id}>{interest.name}</b>
+              <span>What I’m following</span>
+              {following.map((pursuit) => (
+                <b key={pursuit.id}>{pursuit.question}</b>
               ))}
             </p>
           )}
@@ -237,16 +181,10 @@ export function CharacterPanel({
           </div>
         </div>
       )}
-      {tab === 'notebook' && <NotebookPanel notebook={notebook} onShowPlace={onShowPlace} />}
+      {tab === 'notebook' && <NotebookPanel pursuits={pursuits} />}
       {tab === 'memories' && (
         <MemoriesPanel memories={memories} places={places} onShowPlace={onShowPlace} />
       )}
-      {tab === 'research' &&
-        (opened ? (
-          <ResearchStory episode={opened} />
-        ) : (
-          <ResearchList episodes={research ?? []} onOpen={onResearch} />
-        ))}
       {tab === 'about' && (
         <>
           <div className="character-profile">
@@ -257,8 +195,8 @@ export function CharacterPanel({
             </div>
           </div>
           <div className="panel-section">
-            <p className="eyebrow">Interests</p>
-            <CharacterInterests interests={character.interests} />
+            <p className="eyebrow">Questions I follow</p>
+            <PursuitList pursuits={pursuits} />
           </div>
           {recalledMemory && (
             <div className="memory-glimpse">
@@ -288,5 +226,29 @@ export function CharacterPanel({
         </>
       )}
     </>
+  );
+}
+
+/** Each pursuit with what it has gathered, without its notes (those live in the notebook). */
+export function PursuitList({ pursuits }: { pursuits: PublicSnapshot['pursuits'] }) {
+  if (!pursuits.length) return <p className="muted-copy">I have not taken up a question yet.</p>;
+  return (
+    <div className="character-interests">
+      {pursuits.map((pursuit) => (
+        <div className="interest-row" key={pursuit.id}>
+          <div>
+            <strong>{pursuit.question}</strong>
+            <span>{pursuit.status === 'set-aside' ? 'set aside' : pursuit.status}</span>
+          </div>
+          {pursuit.why && <small>{pursuit.why}</small>}
+          <small>
+            {pursuit.entries.filter((entry) => entry.kind === 'note').length} notes ·{' '}
+            {pursuit.entries.filter((entry) => entry.kind === 'tried').length} tries ·{' '}
+            {pursuit.questions.length} open questions
+          </small>
+          {pursuit.setAsideReason && <small>{pursuit.setAsideReason}</small>}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -29,14 +29,14 @@ function client(fetcher: typeof fetch, options = {}) {
 it('preserves the shared context contract when optional object values are undefined', async () => {
   const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => {
     expect(JSON.parse(init!.body as string).context.state).toEqual({ energy: 60 });
-    return Response.json({ value: { type: 'reflect' } });
+    return Response.json({ value: { action: { type: 'reflect' }, why: '' } });
   });
   await expect(
     new BrokerDecisionProvider(client(fetcher as typeof fetch)).propose({
       ...context,
       state: { energy: 60, optional: undefined },
     }),
-  ).resolves.toEqual({ type: 'reflect' });
+  ).resolves.toEqual({ action: { type: 'reflect' }, why: '' });
 });
 
 it('carries turn choices inside state so a service released before them still accepts the request', async () => {
@@ -51,11 +51,13 @@ it('carries turn choices inside state so a service released before them still ac
       'state',
     ]);
     expect(body.context.state).toEqual({ energy: 60, actionChoices: choices });
-    return Response.json({ value: { type: 'look', targetId: 'bench' } });
+    return Response.json({
+      value: { action: { type: 'look', targetId: 'bench' }, why: 'I want to see' },
+    });
   });
   await expect(
     new BrokerDecisionProvider(client(fetcher as typeof fetch)).propose({ ...context, choices }),
-  ).resolves.toEqual({ type: 'look', targetId: 'bench' });
+  ).resolves.toEqual({ action: { type: 'look', targetId: 'bench' }, why: 'I want to see' });
 });
 
 it('sends typed context to a fixed private service without persona, actor selectors or provider credentials', async () => {
@@ -66,11 +68,11 @@ it('sends typed context to a fixed private service without persona, actor select
     expect(body.context.outsideMessages).toEqual(context.outsideMessages);
     expect(new Headers(init!.headers).get('authorization')).toBe(`Bearer ${token}`);
     expect(init!.redirect).toBe('error');
-    return Response.json({ value: { type: 'reflect' } });
+    return Response.json({ value: { action: { type: 'reflect' }, why: '' } });
   });
   expect(
     await new BrokerDecisionProvider(client(fetcher as typeof fetch)).propose(context),
-  ).toEqual({ type: 'reflect' });
+  ).toEqual({ action: { type: 'reflect' }, why: '' });
   expect(String(fetcher.mock.calls[0][0])).toBe('https://inference.example/v1/decision');
 });
 
@@ -194,7 +196,7 @@ it('rechecks a repaired broker connection only after explicit owner recovery', a
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(Response.json({ error: 'not_authorized' }, { status: 403 }))
-    .mockResolvedValue(Response.json({ value: { type: 'reflect' } }));
+    .mockResolvedValue(Response.json({ value: { action: { type: 'reflect' }, why: '' } }));
   const api = client(fetcher);
   const provider = new BrokerDecisionProvider(api);
   await expect(provider.propose(context)).rejects.toThrow();
@@ -203,7 +205,10 @@ it('rechecks a repaired broker connection only after explicit owner recovery', a
   expect(fetcher).toHaveBeenCalledOnce();
   provider.resetAvailability();
   expect(provider.isAvailable()).toBe(true);
-  await expect(provider.propose(context)).resolves.toEqual({ type: 'reflect' });
+  await expect(provider.propose(context)).resolves.toEqual({
+    action: { type: 'reflect' },
+    why: '',
+  });
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 

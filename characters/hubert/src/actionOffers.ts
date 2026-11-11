@@ -3,6 +3,7 @@ import type {
   ActionChoice,
   CharacterCommand,
   Observation,
+  WorldControl,
   WorldEntity,
   WorldObject,
   WorldOutcome,
@@ -13,7 +14,7 @@ import type { HubertState } from './index';
 const OBJECT_REACH = 1.5;
 const ENTITY_INSPECT_RANGE = 8;
 const OBJECT_REUSE_COOLDOWN = 90_000;
-const SUPPORTED_OBJECT_ACTIONS = ['inspect', 'interact', 'work'] as const;
+const SUPPORTED_OBJECT_ACTIONS = ['inspect', 'interact', 'work', 'use'] as const;
 type ObjectAction = (typeof SUPPORTED_OBJECT_ACTIONS)[number];
 
 export type HubertTargetOffer = {
@@ -27,6 +28,8 @@ export type HubertTargetOffer = {
   /** Moving is a proposal: the authoritative world still checks its path and destination. */
   approachFor?: ObjectAction[];
   nextAction?: { type: 'move'; targetId: string };
+  /** What can be done to this object with `use`; never what governs the result. */
+  controls?: WorldControl[];
   cooldownUntil?: number;
   projectCompleted?: boolean;
   inspections?: number;
@@ -126,9 +129,11 @@ export function hubertActionOffers(
       const distance = distanceTo(observation, object);
       const cooldownUntil = (state.lastObjectUse[object.id] ?? -Infinity) + OBJECT_REUSE_COOLDOWN;
       const supported = SUPPORTED_OBJECT_ACTIONS.filter((action) =>
-        object.affordances.includes(action),
+        action === 'use' ? Boolean(object.controls?.length) : object.affordances.includes(action),
       );
-      const available = supported.filter((action) => action === 'inspect' || now >= cooldownUntil);
+      const available = supported.filter(
+        (action) => action === 'inspect' || action === 'use' || now >= cooldownUntil,
+      );
       const withinReach = visible && distance <= object.radius + OBJECT_REACH;
       return {
         id: object.id,
@@ -138,6 +143,7 @@ export function hubertActionOffers(
         distance,
         inspections: state.inspections[object.id] ?? 0,
         interactions: state.interactions[object.id] ?? 0,
+        ...(object.controls?.length ? { controls: structuredClone(object.controls) } : {}),
         ready: [...(visible ? (['look'] as const) : []), ...(withinReach ? available : [])],
         ...(!withinReach
           ? { nextAction: { type: 'move' as const, targetId: object.id }, approachFor: available }
@@ -195,7 +201,7 @@ export function hubertActionOffers(
   return [...objectOffers, ...entityOffers, ...places];
 }
 
-const SPATIAL_ACTIONS = ['move', 'look', 'inspect', 'interact', 'work'] as const;
+const SPATIAL_ACTIONS = ['move', 'look', 'inspect', 'interact', 'work', 'use'] as const;
 type SpatialAction = (typeof SPATIAL_ACTIONS)[number];
 
 /** The single admission rule behind prompts, output constraints and proposal validation. */
@@ -222,7 +228,11 @@ export function hubertSpatialChoices(offers: readonly HubertTargetOffer[]): Acti
       const targetId = offers
         .filter((offer) => offerAdmits(offer, type) !== 'unavailable')
         .map((offer) => offer.id);
-      return targetId.length ? [{ type, where: { targetId } }] : [];
+      if (!targetId.length) return [];
+      // The control is chosen from the object's listed controls; a number is optional.
+      const where: Record<string, string[] | 'any'> =
+        type === 'use' ? { targetId, control: 'any' } : { targetId };
+      return [{ type, where }];
     }),
     // Free movement stays a proposal; geometry and path admission belong to the world.
     { type: 'move', where: { position: 'any' } },

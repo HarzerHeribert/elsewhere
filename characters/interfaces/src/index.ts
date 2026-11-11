@@ -14,17 +14,24 @@ export {
 
 /** The wire contract is independent of Hubert's personality and hosting provider. */
 export const PROTOCOL_VERSION = '0.1.0';
-import { PositionSchema, type Position, type CharacterCommand } from './commands';
+import { PositionSchema, type Position, type CharacterCommand, type CommandType } from './commands';
 export {
   PositionSchema,
   CharacterCommandSchema,
+  CharacterDecisionSchema,
   MODEL_ACTION_FORMAT,
   MODEL_ACTION_INSTRUCTIONS,
   ActionChoiceSchema,
   ActionChoicesSchema,
   narrowActionFormat,
 } from './commands';
-export type { Position, CharacterCommand, CommandType, ActionChoice } from './commands';
+export type {
+  Position,
+  CharacterCommand,
+  CharacterDecision,
+  CommandType,
+  ActionChoice,
+} from './commands';
 
 export interface Place {
   id: string;
@@ -46,6 +53,12 @@ export interface Obstacle extends Bounds {
   shape?: 'rectangle' | 'ellipse';
   sightApertures?: Array<Bounds & { minY: number; maxY: number }>;
 }
+/** One thing a resident can do to an object with `use`. It says what the act is, never what governs the result. */
+export type WorldControl = {
+  id: string;
+  description: string;
+  value?: { min: number; max: number; step?: number; meaning: string };
+};
 export interface WorldObject {
   id: string;
   name: string;
@@ -61,6 +74,7 @@ export interface WorldObject {
   elevation?: number;
   observationHeight?: number;
   footprint?: Bounds;
+  controls?: WorldControl[];
 }
 /** A living world entity has identity and an observable state, independent of resident agents. */
 export interface WorldEntity extends WorldObject {
@@ -136,11 +150,13 @@ export interface WorldState {
   events: WorldEvent[];
   visitors?: WorldVisitor[];
   entities?: WorldEntity[];
+  /** Hidden per-object mechanism state. Never projected publicly or to a model. */
+  mechanisms?: Record<string, Record<string, number>>;
 }
 /** Public objects intentionally omit inspection-only/private detail. */
 export type PublicWorldObject = Omit<WorldObject, 'detail'>;
 export type PublicWorldEntity = Omit<WorldEntity, 'detail'>;
-export type PublicWorldState = Omit<WorldState, 'objects' | 'entities'> & {
+export type PublicWorldState = Omit<WorldState, 'objects' | 'entities' | 'mechanisms'> & {
   objects: PublicWorldObject[];
   entities?: PublicWorldEntity[];
 };
@@ -173,7 +189,7 @@ export interface ProviderIssue {
   code?: string;
   fields?: string[];
   retrying?: boolean;
-  workload?: 'decision' | 'notebook' | 'reflection';
+  workload?: 'decision' | 'reflection';
   since: number;
   lastAt: number;
   message: string;
@@ -244,7 +260,6 @@ export interface PublicCharacterState {
   socialAppetite: number;
   activity: string;
   status: string;
-  interests: Array<{ id: string; name: string; strength: number; encounters?: number }>;
   currentThought?: string;
   lastReflection?: string;
 }
@@ -267,58 +282,39 @@ export interface PublicRuntimeState {
   costKnown?: boolean;
   simulationRate?: number;
 }
-export interface PublicNotebookEntry {
+/** One step on the character's public trail. Text is what the character itself wrote or read. */
+export interface PublicTrailEntry {
   id: string;
   at: number;
-  text: string;
-  sourceIds: string[];
-  /** What the note drew on, recorded by the host from the facts it supplied when it was written. */
-  topics?: PublicNoteTopic[];
-}
-export interface PublicNoteTopic {
-  kind: 'place' | 'reading' | 'interest';
-  id: string;
-  label: string;
-}
-/** A short authored remark made from public facts only; never a transcript of decision reasoning. */
-export interface PublicThought {
-  id: string;
-  at: number;
-  text: string;
+  /** The command type of the step. */
+  kind: CommandType;
+  why?: string;
+  pursuitId?: string;
+  /** The query, note text, question, reason or page title for the step. */
+  text?: string;
+  url?: string;
   placeId?: string;
+  /** How often the same step was repeated in a row; absent for a single step. */
+  times?: number;
 }
-export interface PublicThoughts {
-  /** A provider that can author thoughts is connected. */
-  available: boolean;
-  /** Available and switched on by the character's owner. */
-  enabled: boolean;
-  entries: PublicThought[];
-}
-export interface PublicNotebook {
-  enabled: boolean;
-  entries: PublicNotebookEntry[];
-  draft?: { id: string; at: number; text: string };
-}
-export interface PublicResearchEpisode {
+export type PublicPursuitEntry = { id: string; at: number } & (
+  | { kind: 'search'; query: string; sourceCount: number }
+  | { kind: 'read'; sourceId: string; url: string; title: string }
+  | { kind: 'note'; text: string; surprised: boolean; sourceIds: string[] }
+  | { kind: 'made'; creationId: string; path: string; url: string }
+  | { kind: 'tried'; text: string; objectId: string }
+);
+/** A question the character chose to follow, with what it searched, read and noted. */
+export interface PublicPursuit {
   id: string;
-  at: number;
-  topic: string;
-  query: string;
-  context: string;
-  status: 'searching' | 'sources-found' | 'reading' | 'read' | 'deferred';
-  sources: Array<{
-    id: string;
-    url: string;
-    title: string;
-    snippet: string;
-    status: 'returned' | 'read' | 'deferred';
-    excerpt?: string;
-    retrievedAt?: number;
-  }>;
-  outcome?: string;
-  nextStep?: string;
-  /** The listed source being read while status is `reading`. */
-  readingSourceId?: string;
+  question: string;
+  why: string;
+  status: 'active' | 'open' | 'set-aside';
+  openedAt: number;
+  lastAt: number;
+  questions: string[];
+  setAsideReason?: string;
+  entries: PublicPursuitEntry[];
 }
 export interface PublicCreation {
   id: string;
@@ -334,7 +330,6 @@ export interface PublicCreation {
 export interface PublicSnapshot {
   mail?: PublicCharacterMail;
   creations?: PublicCreation[];
-  research?: PublicResearchEpisode[];
   world: PublicWorldState;
   character: PublicCharacterState;
   events: WorldEvent[];
@@ -343,8 +338,9 @@ export interface PublicSnapshot {
   runtime: PublicRuntimeState;
   artifacts?: PublicArtifact[];
   wishes?: PublicWish[];
-  notebook?: PublicNotebook;
-  thoughts?: PublicThoughts;
+  /** Newest 120 steps, oldest first. */
+  trail: PublicTrailEntry[];
+  pursuits: PublicPursuit[];
 }
 
 export interface PublicArtifact {

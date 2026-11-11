@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { activityRows } from './activityFeed';
-import { ResearchStory } from './panels/ResearchDetails';
-import { currentThought, dayStories, filterStory } from './activityStory';
+import { ActivityPanel } from './panels/ActivityPanel';
+import { dayStories, filterStory } from './activityStory';
 
 describe('compact public activity', () => {
   it('coalesces identical routines while retaining changed evidence and separate milestones', () => {
@@ -29,45 +29,41 @@ describe('compact public activity', () => {
     expect(rows.filter((row) => row.event.type === 'work')).toHaveLength(2);
     expect(events).toEqual(before);
   });
-  it('shows query, source evidence, unread status, and honest follow-up while blocking unsafe links', () => {
+  it('shows the trail with its why and text, and links only to safe pages', () => {
     const html = renderToStaticMarkup(
-      createElement(ResearchStory, {
-        episode: {
-          id: 'search',
-          at: 1000,
-          topic: 'Robins',
-          query: 'robin behavior',
-          context: 'Following up on a robin encountered in Elsewhere.',
-          status: 'read',
-          sources: [
-            {
-              id: 'read',
-              url: 'https://example.org/robin',
-              title: 'Robin study',
-              snippet: 'Bird behavior.',
-              status: 'read',
-              excerpt: '<script>unsafe</script>',
-            },
-            {
-              id: 'unread',
-              url: 'javascript:alert(1)',
-              title: 'Not opened',
-              snippet: '',
-              status: 'returned',
-            },
-          ],
-          nextStep: 'No follow-up action has been recorded for this research.',
-        },
+      createElement(ActivityPanel, {
+        events: [],
+        memories: [],
+        notices: [],
+        now: 2_000,
+        initialFilter: 'trail',
+        trail: [
+          {
+            id: 's',
+            at: 1_000,
+            kind: 'search',
+            why: 'I want the exception',
+            text: 'robin behavior',
+          },
+          {
+            id: 'r',
+            at: 1_100,
+            kind: 'read',
+            text: 'Robin <b>study</b>',
+            url: 'https://example.org/robin',
+          },
+          { id: 'u', at: 1_200, kind: 'read', text: 'Unsafe', url: 'javascript:alert(1)' },
+          { id: 'n', at: 1_300, kind: 'note', text: 'A tally beats an impression.' },
+        ],
       }),
     );
+    expect(html).toContain('I searched the web');
+    expect(html).toContain('I want the exception');
     expect(html).toContain('robin behavior');
-    expect(html).toContain('Source excerpt');
-    expect(html).toContain('Found, not opened');
-    expect(html).toContain('What I searched for');
-    expect(html).toContain('No follow-up action');
     expect(html).toContain('href="https://example.org/robin"');
     expect(html).not.toContain('href="javascript:');
-    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('<b>study</b>');
+    expect(html).toContain('A tally beats an impression.');
   });
   it('tells each world day as milestones first, with routine movement folded away', () => {
     const day = 86_400_000;
@@ -86,8 +82,7 @@ describe('compact public activity', () => {
         cues: [],
         salience: n,
       })),
-      notes: [{ id: 'note', at: 50, text: 'A note.', sourceIds: [] }],
-      research: [],
+      trail: [{ id: 'note', at: 50, kind: 'note', text: 'A note.' }],
     });
     expect(stories.map((story) => story.day)).toEqual([2, 1]);
     const first = stories[1]!;
@@ -95,7 +90,7 @@ describe('compact public activity', () => {
     expect(first.routine).toHaveLength(1);
     expect(first.items.map((item) => item.kind)).not.toContain('event');
     expect(filterStory(first, 'made').map((item) => item.id)).toEqual(['event:made']);
-    expect(filterStory(first, 'notes')).toHaveLength(1);
+    expect(filterStory(first, 'trail')).toHaveLength(1);
     const highlights = filterStory(first, 'highlights');
     expect(highlights.filter((item) => item.kind === 'memory').map((item) => item.id)).toEqual([
       'memory:memory-4',
@@ -104,37 +99,19 @@ describe('compact public activity', () => {
     ]);
     expect(filterStory(first, 'all').filter((item) => item.kind === 'memory')).toHaveLength(4);
   });
-  it('keeps shared thoughts in the day, the latest few in highlights and one as current', () => {
-    const minute = 60_000;
-    const thoughts = [1, 2, 3, 4, 5].map((n) => ({
-      id: 't' + n,
-      at: n * 10 * minute,
-      text: 'Thought ' + n,
-    }));
-    const [story] = dayStories({
-      dayOf: () => 1,
-      events: [],
-      memories: [],
-      notes: [],
-      research: [],
-      thoughts,
-    });
-    expect(filterStory(story!, 'thoughts').map((item) => item.id)).toEqual([
-      'thought:t5',
-      'thought:t4',
-      'thought:t3',
-      'thought:t2',
-      'thought:t1',
+  it('keeps steps of the mind in the highlights and every step in the trail', () => {
+    const trail = [
+      { id: 'a', at: 10, kind: 'pursue' as const, text: 'Why do herons stand still?' },
+      { id: 'b', at: 20, kind: 'move' as const },
+      { id: 'c', at: 30, kind: 'note' as const, text: 'They wait.' },
+    ];
+    const [story] = dayStories({ dayOf: () => 1, events: [], memories: [], trail });
+    expect(filterStory(story!, 'trail').map((item) => item.id)).toEqual([
+      'step:c',
+      'step:b',
+      'step:a',
     ]);
-    expect(filterStory(story!, 'highlights').map((item) => item.id)).toEqual([
-      'thought:t5',
-      'thought:t4',
-      'thought:t3',
-    ]);
-    expect(currentThought(thoughts, 55 * minute)?.id).toBe('t5');
-    expect(currentThought(thoughts, 81 * minute)).toBeUndefined();
-    // A thought from another life (after a reset to an earlier clock) is not current.
-    expect(currentThought(thoughts, 10 * minute)).toBeUndefined();
-    expect(currentThought([], 0)).toBeUndefined();
+    expect(filterStory(story!, 'highlights').map((item) => item.id)).toEqual(['step:c', 'step:a']);
+    expect(filterStory(story!, 'all')).toHaveLength(3);
   });
 });

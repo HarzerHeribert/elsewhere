@@ -24,7 +24,9 @@ services:
       - key: MODEL_PROVIDER
         value: broker
       - key: MODEL_MAX_CALLS_PER_DAY
-        value: '20'
+        value: '150'
+      - key: MODEL_MAX_CALLS_PER_HOUR
+        value: '60'
       - key: MODEL_TIMEOUT_MS
         value: '40000'
       - key: HUBERT_OWNER_USER_ID

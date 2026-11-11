@@ -59,7 +59,13 @@ describe('replaceable real-model boundary', () => {
       async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) =>
         new Response(
           JSON.stringify({
-            choices: [{ message: { content: '{"type":"rest","durationMs":60000}' } }],
+            choices: [
+              {
+                message: {
+                  content: '{"action":{"type":"rest","durationMs":60000},"why":"I am tired"}',
+                },
+              },
+            ],
             usage: { prompt_tokens: 32, completion_tokens: 8 },
           }),
           { status: 200 },
@@ -72,7 +78,11 @@ describe('replaceable real-model boundary', () => {
       fetcher: fetcher as typeof fetch,
       onUsage: usage,
     });
-    expect(await adapter.propose(context)).toEqual({ type: 'rest', durationMs: 60000 });
+    expect(await adapter.propose(context)).toEqual({
+      action: { type: 'rest', durationMs: 60000 },
+      why: 'I am tired',
+    });
+    // The older bare action reply is still understood.
     expect(usage).toHaveBeenCalledWith(32, 8);
     expect(String(fetcher.mock.calls[0]?.[0])).toBe('https://provider.example/v1/chat/completions');
   });

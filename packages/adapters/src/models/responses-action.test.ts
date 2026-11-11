@@ -12,11 +12,13 @@ describe('Responses decision generation boundary', () => {
     const root = RESPONSES_ACTION_FORMAT.schema;
     expect(root.type).toBe('object');
     expect(root).not.toHaveProperty('anyOf');
-    expect(root.required).toEqual(['action']);
+    expect(root.required).toEqual(['action', 'why']);
+    expect(root.properties.why).toEqual({ type: 'string', maxLength: 200 });
     expect(root.additionalProperties).toBe(false);
     const alternatives = root.properties.action.anyOf;
-    // Rest duration and a correspondence recipient each have absent/present complete branches.
-    expect(alternatives).toHaveLength(MODEL_ACTION_FORMAT.anyOf.length + 2);
+    // Rest duration, the number of a use, a correspondence recipient and the two optional note fields each have
+    // absent/present complete branches.
+    expect(alternatives).toHaveLength(MODEL_ACTION_FORMAT.anyOf.length + 1 + 1 + 1 + 3);
     expect(alternatives.map((item) => item.properties.type.const)).toEqual([
       'move',
       'move',
@@ -25,14 +27,22 @@ describe('Responses decision generation boundary', () => {
       'rest',
       'rest',
       'interact',
+      'use',
+      'use',
       'work',
       'pin_creation',
       'draft_mail',
       'draft_mail',
       'reflect',
-      'research',
+      'pursue',
+      'pursue',
+      'set_aside',
+      'search',
       'read',
-      'reconsider',
+      'note',
+      'note',
+      'note',
+      'note',
     ]);
     for (const item of alternatives) {
       expect(item.required).toEqual(Object.keys(item.properties));
@@ -71,7 +81,11 @@ describe('Responses decision generation boundary', () => {
       recipientUserId: 'contact-example',
     },
   ])('unwraps only the transport envelope without changing the command: %j', (action) => {
-    expect(parseResponsesAction(JSON.stringify({ action }))).toEqual(action);
+    expect(parseResponsesAction(JSON.stringify({ action, why: 'because' }))).toEqual({
+      action,
+      why: 'because',
+    });
+    expect(parseResponsesAction(JSON.stringify({ action }))).toEqual({ action, why: '' });
   });
 
   it.each([

@@ -38,10 +38,11 @@ const snapshot: PublicSnapshot = {
     socialAppetite: 30,
     activity: 'idle',
     status: 'exploring',
-    interests: [],
   },
   events: [],
   memories: [],
+  pursuits: [],
+  trail: [],
   runtime: {
     mode: 'local',
     paused: false,

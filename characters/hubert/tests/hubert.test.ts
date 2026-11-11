@@ -4,7 +4,6 @@ import {
   advanceHubert,
   applyExternalEvent,
   applyOutcome,
-  chooseAction,
   chooseActionWithProvider,
   createInitialHubert,
   publicCharacter,
@@ -12,6 +11,7 @@ import {
   recalledMemory,
   workingContext,
 } from '../src/index';
+import { scriptedProvider } from '../../../tests/scripted-provider';
 
 const observation: Observation = {
   characterId: 'hubert',
@@ -47,20 +47,11 @@ const inspected: WorldOutcome = {
 };
 
 describe('Hubert', () => {
-  it('makes deterministic decisions from the same state without mutating input', () => {
-    const state = createInitialHubert(0);
-    const before = structuredClone(state);
-    expect(chooseAction(state, observation, 1_000)).toEqual(
-      chooseAction(state, observation, 1_000),
-    );
-    expect(state).toEqual(before);
-  });
-  it('prioritizes rest when tired and restores energy only when time actually passes', () => {
+  it('restores energy only when time actually passes, never through repeated rest commands', () => {
     const initial = createInitialHubert(0);
     initial.stats.energy = 12;
-    const decision = chooseAction(initial, observation, 0);
-    expect(decision.action.type).toBe('rest');
-    let state = decision.state;
+    initial.activity = { kind: 'rest', label: 'Resting for a while', startedAt: 0 };
+    let state = initial;
     for (let i = 0; i < 100; i++) {
       state = applyOutcome(
         state,
@@ -97,12 +88,19 @@ describe('Hubert', () => {
     expect(state.stats.mood).toBe(initial.stats.mood);
     expect(state.memories).toHaveLength(0);
   });
-  it('records actual evidence once and keeps the original episode after state changes', () => {
+  it('records actual evidence once and keeps the original episode after state changes', async () => {
     const initial = createInitialHubert(0);
     const remembered = applyOutcome(initial, inspected, observation, 0);
     const again = applyOutcome(remembered, inspected, observation, 0);
     expect(again).toEqual(remembered);
-    const later = chooseAction(remembered, observation, 120_000).state;
+    const later = (
+      await chooseActionWithProvider(
+        remembered,
+        observation,
+        120_000,
+        scriptedProvider([{ type: 'look', targetId: 'bench' }]),
+      )
+    ).state;
     expect(later.memories).toEqual(remembered.memories);
     expect(recalledMemory(later, 120_000)?.summary).toBe(inspected.summary);
     expect(recalledMemory(later, 240_000)).toBeNull();
@@ -146,10 +144,15 @@ describe('Hubert', () => {
     for (const number of Object.values(state.stats)) expect(number).toBeLessThanOrEqual(100);
     expect(advanceHubert(state, 0).updatedAt).toBe(state.updatedAt);
   });
-  it('rejects another resident observation', () => {
-    expect(() =>
-      chooseAction(createInitialHubert(0), { ...observation, characterId: 'stranger' }, 0),
-    ).toThrow(/another character/);
+  it('rejects another resident observation', async () => {
+    await expect(
+      chooseActionWithProvider(
+        createInitialHubert(0),
+        { ...observation, characterId: 'stranger' },
+        0,
+        scriptedProvider([{ type: 'rest' }]),
+      ),
+    ).rejects.toThrow(/another character/);
   });
   it('caps a finite project at three milestones and does not reward repeating completed work', () => {
     let state = createInitialHubert(0);
@@ -243,37 +246,31 @@ describe('Hubert', () => {
     expect(state.project.verifiedWorkSessions).toBe(72);
   });
 
-  it('explores known public landmarks without knowing their hidden contents', () => {
+  it('shows the public map without knowing the contents of its places', () => {
     const state = createInitialHubert(0);
-    state.turn = 7;
-    state.inspections.bench = 1;
     const publicMap = {
       ...observation,
       knownPlaces: [{ id: 'orchard', name: 'The orchard', position: { x: -17, z: 13 } }],
     };
-    const decision = chooseAction(state, publicMap, 120_000);
-    expect(decision.action).toEqual({ type: 'move', targetId: 'orchard' });
-    expect(decision.explanation).toContain('public map');
-    expect(decision.state.knownObjects).not.toHaveProperty('orchard-contents');
-    expect(workingContext(decision.state, publicMap).observations.knownPlaces).toEqual(
+    expect(workingContext(state, publicMap).observations.knownPlaces).toEqual(
       publicMap.knownPlaces,
     );
-    expect(decision.state.visitedPlaces.courtyard).toBe(120_000);
-    expect(decision.state.visitedPlaces.orchard).toBeUndefined();
+    expect(state.knownObjects).not.toHaveProperty('orchard-contents');
   });
 
   it('validates model output before it can become a command', async () => {
     await expect(
       chooseActionWithProvider(createInitialHubert(0), observation, 0, {
         id: 'bad-model',
-        propose: async () => ({ type: 'shell', command: 'curl attacker' }),
+        propose: async () => ({ action: { type: 'shell', command: 'curl attacker' } }),
       }),
     ).rejects.toThrow();
     const valid = await chooseActionWithProvider(createInitialHubert(0), observation, 0, {
       id: 'good-model',
-      propose: async () => ({ type: 'look', targetId: 'bench' }),
+      propose: async () => ({ action: { type: 'look', targetId: 'bench' }, why: '' }),
     });
     expect(valid.action).toEqual({ type: 'look', targetId: 'bench' });
+    expect(valid.why).toBe('');
   });
 
   it('rejects an unknown model target without choosing a local substitute', async () => {
@@ -282,7 +279,7 @@ describe('Hubert', () => {
     await expect(
       chooseActionWithProvider(state, observation, 0, {
         id: 'guessing-model',
-        propose: async () => ({ type: 'move', targetId: 'reading-table' }),
+        propose: async () => ({ action: { type: 'move', targetId: 'reading-table' }, why: '' }),
       }),
     ).rejects.toThrow('Provider proposed an unavailable action');
     expect(state).toEqual(before);
@@ -304,7 +301,7 @@ describe('Hubert', () => {
       };
       const decision = await chooseActionWithProvider(state, publicMap, 0, {
         id: 'grounded-model',
-        propose: async () => ({ type: 'move', targetId }),
+        propose: async () => ({ action: { type: 'move', targetId }, why: '' }),
       });
       expect(decision.action).toEqual({ type: 'move', targetId });
     },
@@ -313,7 +310,7 @@ describe('Hubert', () => {
   it('lets the model choose even during low energy and ongoing rest', async () => {
     const initial = createInitialHubert(0);
     initial.stats.energy = 12;
-    const propose = vi.fn(async () => ({ type: 'look', targetId: 'bench' }));
+    const propose = vi.fn(async () => ({ action: { type: 'look', targetId: 'bench' }, why: '' }));
     const decision = await chooseActionWithProvider(initial, observation, 0, {
       id: 'stub',
       propose,
@@ -339,7 +336,7 @@ describe('Hubert', () => {
       count: 3,
       alternativesLimit: 2,
     };
-    const propose = vi.fn(async () => ({ type: 'look', targetId: 'bench' }));
+    const propose = vi.fn(async () => ({ action: { type: 'look', targetId: 'bench' }, why: '' }));
     const decision = await chooseActionWithProvider(state, observation, 0, {
       id: 'stub',
       propose,
@@ -377,7 +374,7 @@ describe('Hubert', () => {
     await expect(
       chooseActionWithProvider(state, observation, 10_000, {
         id: 'stub',
-        propose: async () => ({ type: 'work', targetId: 'workbench' }),
+        propose: async () => ({ action: { type: 'work', targetId: 'workbench' }, why: '' }),
       }),
     ).rejects.toThrow('Provider proposed an unavailable action');
   });

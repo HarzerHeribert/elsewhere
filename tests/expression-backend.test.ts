@@ -29,8 +29,9 @@ const binding = {
 };
 const input: PublicExpressionInput = {
   facts: [{ id: 'public-chime', summary: 'Hubert inspected five copper wind-chime tubes.' }],
-  interests: ['Sounds', 'Small mechanisms'],
+  questions: ['Why do the tubes ring differently?', 'How does a small mechanism work?'],
   recentNotes: [],
+  form: 'wish',
 };
 const usage = { inputTokens: 121, outputTokens: 18, cachedInputTokens: 50 };
 const brokers = new Set<Awaited<ReturnType<typeof createInferenceBroker>>>();
@@ -70,7 +71,7 @@ async function start(overrides: Partial<InferenceBrokerOptions> = {}) {
     identity: 'Hubert is an odd, curious nonhuman creature.',
     store,
     now: () => Date.UTC(2026, 10, 9, 12),
-    decision: async () => ({ value: { type: 'reflect' }, usage }),
+    decision: async () => ({ value: { action: { type: 'reflect' }, why: '' }, usage }),
     reflection: async () => ({ value: { vignette: 'A private dream.', impulses: [] }, usage }),
     ...overrides,
   });
@@ -355,17 +356,23 @@ it('consumes an overflowing provider note to preserve reported usage without blo
       observations: {},
       outsideMessages: [],
     }),
-  ).toEqual({ type: 'reflect' });
+  ).toEqual({ action: { type: 'reflect' }, why: '' });
   expect(h.broker.getState().allowance.calls).toBe(2);
 });
 
 describe('a wish is asked for, never supplied', () => {
-  const wish: PublicExpressionInput = { ...input, form: 'wish' };
+  const wish: PublicExpressionInput = input;
   it('accepts the wish form, keeps it out of the data and leaves the wish to the resident', () => {
     expect(PublicExpressionInputSchema.safeParse(wish).success).toBe(true);
     expect(PublicExpressionInputSchema.safeParse({ ...input, form: 'catalog' }).success).toBe(
       false,
     );
+    // The retired thought and notebook forms are no longer accepted.
+    expect(PublicExpressionInputSchema.safeParse({ ...input, form: 'thought' }).success).toBe(
+      false,
+    );
+    const { form: _form, ...noForm } = input;
+    expect(PublicExpressionInputSchema.safeParse(noForm).success).toBe(false);
     const [system, user] = expressionMessages('Hubert.', wish);
     expect(user.content).not.toContain('"form"');
     expect(user.content).toContain('public-chime');
@@ -375,7 +382,6 @@ describe('a wish is asked for, never supplied', () => {
     expect(system.content).toContain('return an empty response');
     // No object, name or example of a wish is suggested to the resident.
     expect(system.content).not.toMatch(/telescope|weather station|for example|such as/i);
-    expect(system.content).not.toBe(expressionMessages('Hubert.', input)[0].content);
   });
   it('publishes one short paragraph or nothing', () => {
     expect(validatePublicWish(' “I would like a bench by the pond.” ')).toBe(

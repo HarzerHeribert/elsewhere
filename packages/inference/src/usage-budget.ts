@@ -4,7 +4,7 @@ import type { ModelUsage } from '../../models/src/contracts';
 export const DEFAULT_INFERENCE_TOKEN_BUDGET = Object.freeze({
   maxInputTokensPerDay: 3_500_000,
   maxOutputTokensPerDay: 100_000,
-  maxInputTokensPerRequest: 32_000,
+  maxInputTokensPerRequest: 128_000,
   outputTokenReserve: 2_000,
   // A timeout or a broken stream ends without a usage report (a request the provider refuses
   // outright reports zero instead). Their retained reservations stay charged against the

@@ -107,7 +107,6 @@ describe('character creations shelf', () => {
       socialAppetite: 30,
       activity: 'Reading',
       status: 'exploring',
-      interests: [],
     };
     const noop = () => undefined;
     const html = renderToStaticMarkup(

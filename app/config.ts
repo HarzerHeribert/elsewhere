@@ -37,7 +37,8 @@ const schema = z.object({
     .regex(/^[a-z][a-z0-9-]{0,47}$/)
     .default('default'),
   CHATGPT_AUTH_ROOT: z.string().min(1).optional(),
-  MODEL_MAX_CALLS_PER_DAY: z.coerce.number().int().min(1).max(1000).default(100),
+  MODEL_MAX_CALLS_PER_DAY: z.coerce.number().int().min(1).max(1000).default(150),
+  MODEL_MAX_CALLS_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(60),
   MODEL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15000),
 });
 

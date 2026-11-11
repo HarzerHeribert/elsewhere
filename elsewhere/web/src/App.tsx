@@ -33,7 +33,6 @@ import { ActivityPanel } from './panels/ActivityPanel';
 import { WishesPanel } from './panels/WishesPanel';
 import { ControlsPanel } from './panels/ControlsPanel';
 import { MorePanel } from './panels/MorePanel';
-import { currentThought } from './activityStory';
 
 type Panel =
   | 'residents'
@@ -57,7 +56,6 @@ interface PanelStop {
   panel: Panel;
   label: string;
   tab: CharacterTab;
-  researchId: string | null;
   placeId: string | null;
   selected: string | null;
   scroll: number;
@@ -99,7 +97,6 @@ export function App() {
     [focus, setFocus] = useState<Position | null>(null),
     [resetKey, setResetKey] = useState(0);
   const [characterTab, setCharacterTab] = useState<CharacterTab>('now'),
-    [researchId, setResearchId] = useState<string | null>(null),
     // Where the visitor came from, so every jump from one panel to another has a way back.
     [trail, setTrail] = useState<PanelStop[]>([]),
     [message, setMessage] = useState(''),
@@ -305,7 +302,6 @@ export function App() {
               panel,
               label: titles[panel],
               tab: characterTab,
-              researchId,
               placeId,
               selected,
               scroll: panelScroll.current?.scrollTop ?? 0,
@@ -316,7 +312,6 @@ export function App() {
     scrollNext.current = 0;
     scrollBeforeStory.current = 0;
     setSettings(null);
-    setResearchId(null);
     setSheetFull(false);
     if (p === 'character' && panel !== 'character') setCharacterTab('now');
     setPanel(p);
@@ -328,17 +323,10 @@ export function App() {
     setTrail(trail.slice(0, -1));
     setSettings(null);
     setCharacterTab(stop.tab);
-    setResearchId(stop.researchId);
     setPlaceId(stop.placeId);
     setSelected(stop.selected);
     setPanel(stop.panel);
     scrollNext.current = stop.scroll;
-  }
-  /** A research story opens over its list and closes back to where the list was left. */
-  function openResearch(id: string | null) {
-    if (id) scrollBeforeStory.current = panelScroll.current?.scrollTop ?? 0;
-    scrollNext.current = id ? 0 : scrollBeforeStory.current;
-    setResearchId(id);
   }
   function togglePanel(p: Panel) {
     if (panel === p && !settings) setPanel(null);
@@ -540,12 +528,7 @@ export function App() {
     </button>
   );
   const wide = panel === 'character' || panel === 'activity';
-  // One way back from every panel: out of an open story, to the panel a link was followed
-  // from, or up to the list this panel belongs to.
-  const story =
-    !!researchId &&
-    (panel === 'activity' || (panel === 'character' && characterTab === 'research')) &&
-    !!snapshot?.research?.some((episode) => episode.id === researchId);
+  // One way back from every panel: to the panel a link was followed from, or up to its list.
   const parent: Panel | undefined =
     panel === 'character'
       ? 'residents'
@@ -556,16 +539,11 @@ export function App() {
           : undefined;
   const back = !panel
     ? null
-    : story
-      ? {
-          label: panel === 'character' ? 'My research' : 'All activity',
-          go: () => openResearch(null),
-        }
-      : trail.length
-        ? { label: trail.at(-1)!.label, go: goBack }
-        : parent
-          ? { label: titles[parent], go: () => openPanel(parent) }
-          : null;
+    : trail.length
+      ? { label: trail.at(-1)!.label, go: goBack }
+      : parent
+        ? { label: titles[parent], go: () => openPanel(parent) }
+        : null;
 
   return (
     <WallTimeProvider value={toWall}>
@@ -734,8 +712,6 @@ export function App() {
                   tab={characterTab}
                   onTabChange={(tab) => {
                     setCharacterTab(tab);
-                    setResearchId(null);
-                    scrollBeforeStory.current = 0;
                   }}
                   mail={snapshot?.mail}
                   accountMail={accountSession.characterMail.find(
@@ -751,15 +727,11 @@ export function App() {
                   recalledMemory={snapshot?.recalledMemory}
                   artifacts={snapshot?.artifacts}
                   creations={snapshot?.creations}
-                  notebook={snapshot?.notebook}
                   events={snapshot?.events}
                   memories={snapshot?.memories}
-                  research={snapshot?.research}
-                  thoughts={snapshot?.thoughts}
-                  now={snapshot?.runtime.simulatedAt}
+                  trail={snapshot?.trail}
+                  pursuits={snapshot?.pursuits}
                   places={snapshot?.world.places}
-                  researchId={researchId}
-                  onResearch={openResearch}
                   onShowPlace={showPlace}
                   onMessage={() => openPanel('messages', 'link')}
                   onViewpoint={() => camera('hubert')}
@@ -813,15 +785,11 @@ export function App() {
                 <ActivityPanel
                   events={snapshot.events ?? []}
                   memories={snapshot.memories ?? []}
-                  notebook={snapshot.notebook}
-                  research={snapshot.research}
-                  thoughts={snapshot.thoughts}
+                  trail={snapshot.trail}
                   notices={notices}
                   activity={character?.activity}
                   now={snapshot.runtime.simulatedAt}
                   places={snapshot.world.places}
-                  researchId={researchId}
-                  onResearch={openResearch}
                   onMemories={() => {
                     openPanel('character', 'link');
                     setCharacterTab('memories');
@@ -867,12 +835,6 @@ export function App() {
               onLook={visitor.look}
               onStop={visitor.stop}
               focus={focus}
-              thought={
-                snapshot?.thoughts?.enabled
-                  ? (currentThought(snapshot.thoughts.entries, snapshot.runtime.simulatedAt)
-                      ?.text ?? null)
-                  : null
-              }
               control={controlCommand}
               paused={inputPaused}
               onSelectCharacter={(id) => pickCharacter(id)}

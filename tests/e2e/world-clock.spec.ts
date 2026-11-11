@@ -46,17 +46,35 @@ function fixture(): PublicSnapshot {
       modelCalls: 0,
       simulationRate: 1,
     },
-    notebook: {
-      enabled: true,
-      entries: [
-        {
-          id: 'note-1',
-          at: worldNow - 5 * minute,
-          text: 'The orchard rows look longer in the morning.',
-          sourceIds: ['memory:one'],
-        },
-      ],
-    },
+    pursuits: [
+      {
+        id: 'pursuit-1',
+        question: 'Why do the orchard rows look longer in the morning?',
+        why: 'I keep noticing it.',
+        status: 'active',
+        openedAt: worldNow - 30 * minute,
+        lastAt: worldNow - 5 * minute,
+        questions: [],
+        entries: [
+          {
+            kind: 'note',
+            id: 'note-1',
+            at: worldNow - 5 * minute,
+            text: 'The orchard rows look longer in the morning.',
+            surprised: false,
+            sourceIds: [],
+          },
+        ],
+      },
+    ],
+    trail: [
+      {
+        id: 'step-1',
+        at: worldNow - 5 * minute,
+        kind: 'note',
+        text: 'The orchard rows look longer in the morning.',
+      },
+    ],
   };
 }
 const panel = (page: Page) => page.getByLabel('World panel', { exact: true });

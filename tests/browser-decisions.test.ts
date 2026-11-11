@@ -16,7 +16,7 @@ describe('explicit browser decision scenarios', () => {
             calls++;
             if (!enabled)
               throw new Error('Fixture provider is disabled until explicitly selected.');
-            return browserFixtureAction(context, scenario);
+            return { action: browserFixtureAction(context, scenario), why: '' };
           },
         },
       }).init();
@@ -29,7 +29,7 @@ describe('explicit browser decision scenarios', () => {
         expect(calls, 'Reset must preserve the provider failure until an explicit retry').toBe(1);
         await controller.retryCharacterProvider();
         let snapshot = controller.getSnapshot();
-        expect(snapshot.character.interests).toEqual([]);
+        expect(snapshot.pursuits).toEqual([]);
         expect(snapshot.memories).toEqual([]);
         const finished = () =>
           scenario === 'birds'
@@ -52,9 +52,6 @@ describe('explicit browser decision scenarios', () => {
           ),
         ).toBe(true);
         if (scenario === 'birds') {
-          expect(
-            snapshot.character.interests.find((interest) => interest.id === 'birds')?.encounters,
-          ).toBeGreaterThan(0);
           expect(snapshot.events.some((event) => event.type === 'entity_observed')).toBe(true);
         }
       } finally {

@@ -90,6 +90,7 @@ async function boot(tickIntervalMs = 60000) {
       MODEL_API_KEY: fixtureKey,
       MODEL_NAME: 'isolated-smoke-fixture',
       MODEL_MAX_CALLS_PER_DAY: '1000',
+      MODEL_MAX_CALLS_PER_HOUR: '1000',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

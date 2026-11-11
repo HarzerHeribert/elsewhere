@@ -60,7 +60,7 @@ function boundedJsonObject(value: Record<string, unknown>): boolean {
     const value = item.value;
     if (value === null || typeof value === 'boolean') continue;
     if (typeof value === 'string') {
-      if (value.length > 8000) return false;
+      if (value.length > 12_000) return false;
       continue;
     }
     if (typeof value === 'number') {

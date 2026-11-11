@@ -5,6 +5,7 @@ export const routineTypes = new Set([
   'arrival',
   'inspect',
   'interact',
+  'use',
   'look',
   'rest',
   'reflect',

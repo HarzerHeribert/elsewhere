@@ -1,8 +1,8 @@
-import { narrowActionFormat, type CharacterCommand } from '@elsewhere/character-interfaces';
+import { narrowActionFormat, type CharacterDecision } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import {
   decisionMessages,
-  parseModelAction,
+  parseModelDecision,
   readModelPayload,
   reportedUsage,
   usageCount,
@@ -23,7 +23,7 @@ export interface OllamaOptions {
 }
 
 /** Native local Ollama, with constrained output and thinking disabled for the small test model. */
-export class OllamaDecisionProvider implements DecisionProvider<CharacterCommand> {
+export class OllamaDecisionProvider implements DecisionProvider<CharacterDecision> {
   readonly id = 'ollama';
   readonly model: string;
   private readonly base: URL;
@@ -57,7 +57,7 @@ export class OllamaDecisionProvider implements DecisionProvider<CharacterCommand
       : [];
     return { available: models.includes(this.model), model: this.model, models };
   }
-  async propose(context: DecisionContext): Promise<CharacterCommand> {
+  async propose(context: DecisionContext): Promise<CharacterDecision> {
     const response = await this.fetcher(new URL('/api/chat', this.base), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -71,11 +71,18 @@ export class OllamaDecisionProvider implements DecisionProvider<CharacterCommand
         stream: false,
         think: false,
         keep_alive: '5m',
-        format: narrowActionFormat(context.choices),
+        format: {
+          type: 'object',
+          properties: {
+            action: narrowActionFormat(context.choices),
+            why: { type: 'string', maxLength: 200 },
+          },
+          required: ['action', 'why'],
+        },
         options: {
           temperature: 0.4,
           num_ctx: this.options.contextTokens ?? 8192,
-          num_predict: this.options.maxOutputTokens ?? 160,
+          num_predict: this.options.maxOutputTokens ?? 500,
         },
         messages: this.options.messages ?? decisionMessages(context),
       }),
@@ -87,6 +94,6 @@ export class OllamaDecisionProvider implements DecisionProvider<CharacterCommand
     };
     this.options.onUsage?.(usageCount(payload.prompt_eval_count), usageCount(payload.eval_count));
     this.options.onUsageDetails?.(reportedUsage(payload.prompt_eval_count, payload.eval_count));
-    return parseModelAction(payload.message?.content);
+    return parseModelDecision(payload.message?.content);
   }
 }

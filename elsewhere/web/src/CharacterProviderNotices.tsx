@@ -5,7 +5,7 @@ import './CharacterProviderNotices.css';
 
 const characterName = (id: string) => (id === 'hubert' ? 'Hubert' : id);
 const workloadName = (workload: ProviderIssue['workload']) =>
-  workload === 'notebook' ? 'Notebook' : workload === 'reflection' ? 'Reflection' : 'Decisions';
+  workload === 'reflection' ? 'Reflection' : 'Decisions';
 
 /** Explain the bounded host diagnostic, never a provider body or private reasoning. */
 function feedback(code: ProviderIssue['code']) {

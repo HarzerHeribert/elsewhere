@@ -80,6 +80,7 @@ try {
       MODEL_API_KEY: key,
       MODEL_NAME: 'isolated-browser-fixture',
       MODEL_MAX_CALLS_PER_DAY: '1000',
+      MODEL_MAX_CALLS_PER_HOUR: '1000',
     },
   }).completion;
 } finally {

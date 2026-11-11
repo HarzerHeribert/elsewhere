@@ -30,10 +30,11 @@ function fixture(): PublicSnapshot {
       socialAppetite: 30,
       activity: 'idle',
       status: 'Looking around',
-      interests: [],
     },
     events: [],
     memories: [],
+    pursuits: [],
+    trail: [],
     runtime: {
       mode: 'local',
       paused: false,

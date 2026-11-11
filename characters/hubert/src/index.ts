@@ -1,22 +1,22 @@
-import type { ActionChoice, PublicCreation } from '@elsewhere/character-interfaces';
-import { availableInterestChoices, type HubertInterestChoiceState } from './interestChoices';
-import { InvalidDecisionError, invalidDecisionFields } from '@elsewhere/character-runtime';
-import type { HubertNotebookState } from './notebook';
-import type { HubertThoughtState } from './thoughts';
+import type { ActionChoice, PublicCreation, PublicPursuit } from '@elsewhere/character-interfaces';
+import {
+  InvalidDecisionError,
+  invalidDecisionFields,
+  reproducesPrivateText,
+  createPursuitState,
+  activePursuit,
+  addPursuitQuestion,
+  openPursuit,
+  pursuitContext,
+  publicPursuits,
+  recordPursuitEntry,
+  resumePursuit,
+  setAsidePursuit,
+  type PursuitState,
+} from '@elsewhere/character-runtime';
 import { HUBERT_IDENTITY, bodyLanguage } from './persona';
 import { hubertDreamActions, hubertDreamSources } from './dreams';
-import {
-  followThrough,
-  settleHubertAttention,
-  trackHubertIntent,
-  wakeImpulseDecision,
-} from './attention';
-import {
-  developInterests,
-  seedBirdInterest,
-  relaxInterests,
-  type InterestEvidence,
-} from './interests';
+import { settleHubertAttention, trackHubertIntent } from './attention';
 import {
   appendNovelMemory,
   displayMemorySummary,
@@ -32,7 +32,12 @@ import {
   hubertSpatialChoices,
   type ActionOutcomeFeedback,
 } from './actionOffers';
-import { researchContext, type HubertResearchState } from './research';
+import {
+  createResearchState,
+  readableSources,
+  researchContext,
+  type HubertResearchState,
+} from './research';
 import type { CharacterWish, WishReceipt } from './wishes';
 export {
   wishDue,
@@ -45,10 +50,11 @@ export {
 export type { CharacterWish, WishReceipt, WishResolution, WishStatus } from './wishes';
 
 import {
-  CharacterCommandSchema,
+  CharacterDecisionSchema,
   type CharacterCommand,
   type Observation,
   type PublicCharacterState,
+  type PublicTrailEntry,
   type PublicMemory,
   type WorldObject,
   type WorldEntity,
@@ -73,18 +79,14 @@ import {
   type RecallRecord,
 } from '@elsewhere/character-runtime';
 
+export type TrailEntry = PublicTrailEntry;
+export const TRAIL_KEPT = 200;
 export interface HubertStats {
   mood: number;
   energy: number;
   boredom: number;
   frustration: number;
   socialAppetite: number;
-}
-export interface HubertInterest {
-  id: string;
-  name: string;
-  strength: number;
-  encounters: number;
 }
 export interface EntityObservationLedger {
   lastAt: number;
@@ -103,7 +105,6 @@ export interface HubertState {
   stats: HubertStats;
   activity: { kind: string; label: string; startedAt: number; objectId?: string };
   intent: string;
-  interests: HubertInterest[];
   memories: EpisodicMemory[];
   recallHistory: Record<string, RecallRecord>;
   lastRecallAt: number | null;
@@ -112,10 +113,6 @@ export interface HubertState {
   knownEntities: Record<string, WorldEntity & { lastSeenAt: number }>;
   entityObservations: Record<string, EntityObservationLedger>;
   watchAttention: { lastAt: number | null; times: number[] };
-  interestSchemaVersion: 1;
-  interestPolicyVersion?: 2;
-  dormantInterests: HubertInterest[];
-  interestEvidence: Record<string, InterestEvidence>;
   inspections: Record<string, number>;
   interactions: Record<string, number>;
   lastObjectUse: Record<string, number>;
@@ -145,10 +142,11 @@ export interface HubertState {
   activeWakeImpulse: string | null;
   lastOutcome?: ActionOutcomeFeedback;
   lastProposal?: { at: number; type: string; targetId?: string; adjustment: string };
-  research?: HubertResearchState;
-  notebook?: HubertNotebookState;
-  thoughts?: HubertThoughtState;
-  interestChoices?: HubertInterestChoiceState;
+  /** Questions this character chose to follow, with what it searched, read and noted. */
+  pursuits: PursuitState;
+  /** The newest steps taken, oldest first. */
+  trail: TrailEntry[];
+  research: HubertResearchState;
   lastDecisionProblem?: { at: number; code: string; message: string; fields: string[] };
 }
 export interface OutsideEvent {
@@ -163,6 +161,8 @@ export interface HubertDecision {
   state: HubertState;
   action: CharacterCommand;
   explanation: string;
+  /** The model's own public line about what it is after; empty when it gave none. */
+  why: string;
 }
 export type OutsideMessageClass = 'encouragement' | 'hostile' | 'question' | 'neutral';
 const clone = <T>(value: T): T => structuredClone(value);
@@ -190,7 +190,6 @@ export function createInitialHubert(now: number, ownerId = 'local-owner'): Huber
     stats: { mood: 66, energy: 82, boredom: 24, frustration: 8, socialAppetite: 35 },
     activity: { kind: 'arriving', label: 'Taking in Elsewhere', startedAt: now },
     intent: 'Find out what is here. I would like to make something of my own.',
-    interests: [],
     memories: [],
     recallHistory: {},
     lastRecallAt: null,
@@ -199,10 +198,6 @@ export function createInitialHubert(now: number, ownerId = 'local-owner'): Huber
     knownEntities: {},
     entityObservations: {},
     watchAttention: { lastAt: null, times: [] },
-    interestSchemaVersion: 1,
-    interestPolicyVersion: 2,
-    dormantInterests: [],
-    interestEvidence: {},
     inspections: {},
     interactions: {},
     lastObjectUse: {},
@@ -227,17 +222,18 @@ export function createInitialHubert(now: number, ownerId = 'local-owner'): Huber
     progressGuidance: null,
     progressDecision: null,
     activeWakeImpulse: null,
+    pursuits: createPursuitState(),
+    trail: [],
+    research: createResearchState(),
   };
 }
 
-/** Idempotent migration: a preference is seeded, never a fabricated past bird encounter. */
+/** Idempotent migration: fills in anything a saved state lacks. */
 export function upgradeHubertState(input: HubertState): HubertState {
   const state = clone(input);
   state.knownEntities ??= {};
   state.entityObservations ??= {};
   state.watchAttention ??= { lastAt: null, times: [] };
-  state.dormantInterests ??= [];
-  state.interestEvidence ??= {};
   state.visitedPlaces ??= {};
   state.dreams ??= createDreamState(state.id);
   state.dreams = pruneDreamState(state.dreams, hubertDreamSources(state));
@@ -245,7 +241,9 @@ export function upgradeHubertState(input: HubertState): HubertState {
   state.progressGuidance ??= null;
   state.progressDecision ??= null;
   state.activeWakeImpulse ??= null;
-  seedBirdInterest(state);
+  state.pursuits ??= createPursuitState();
+  state.trail ??= [];
+  state.research ??= createResearchState();
   return state;
 }
 
@@ -255,7 +253,6 @@ export function advanceHubert(input: HubertState, now: number): HubertState {
   const state = upgradeHubertState(input);
   const elapsed = Math.min(Math.max(0, now - state.updatedAt), 6 * 60 * 60 * 1_000);
   const hours = elapsed / 3_600_000;
-  relaxInterests(state, elapsed);
   const resting = state.activity.kind === 'rest';
   state.stats.mood += (62 - state.stats.mood) * (1 - Math.exp(-hours * 0.12));
   state.stats.energy += hours * (resting ? 120 : -1.5);
@@ -310,15 +307,24 @@ function rememberObservation(state: HubertState, observation: Observation, now: 
   }
 }
 
+/** Steps of the mind: they change what the character is following, never the world. */
+export const MIND_COMMANDS = ['pursue', 'set_aside', 'search', 'read', 'note'] as const;
+export type MindCommand = Extract<CharacterCommand, { type: (typeof MIND_COMMANDS)[number] }>;
+export const isMindType = (type: string) => (MIND_COMMANDS as readonly string[]).includes(type);
+export const isMindCommand = (action: CharacterCommand): action is MindCommand =>
+  isMindType(action.type);
+
 function recordIntent(
   state: HubertState,
   action: CharacterCommand,
   explanation: string,
   now: number,
   observation?: Observation,
+  why = '',
 ): HubertDecision {
   state.turn += 1;
-  trackHubertIntent(state, action, now, observation);
+  // Mind steps are not movement through the world; the progress ledger judges only world actions.
+  if (!isMindCommand(action)) trackHubertIntent(state, action, now, observation);
   state.lastDecisionAt = now;
   state.intent = explanation;
   state.activity = {
@@ -334,11 +340,21 @@ function recordIntent(
               ? 'Looking more closely'
               : action.type === 'reflect'
                 ? 'Putting things together'
-                : 'Exploring Elsewhere',
+                : action.type === 'search'
+                  ? 'Searching the web'
+                  : action.type === 'read'
+                    ? 'Reading'
+                    : action.type === 'note'
+                      ? 'Writing a note'
+                      : action.type === 'pursue'
+                        ? 'Following a question'
+                        : action.type === 'set_aside'
+                          ? 'Setting a question aside'
+                          : 'Exploring Elsewhere',
     startedAt: now,
     ...('targetId' in action && action.targetId ? { objectId: action.targetId } : {}),
   };
-  return { state, action, explanation };
+  return { state, action, explanation, why };
 }
 
 function recordWatchIntent(
@@ -347,6 +363,7 @@ function recordWatchIntent(
   explanation: string,
   now: number,
   observation?: Observation,
+  why = '',
 ): HubertDecision {
   const decision = recordIntent(
     state,
@@ -354,6 +371,7 @@ function recordWatchIntent(
     explanation,
     now,
     observation,
+    why,
   );
   decision.state.activity = {
     kind: 'watch',
@@ -366,13 +384,6 @@ function recordWatchIntent(
 
 const entitySignature = (entity: Pick<WorldEntity, 'kind' | 'species' | 'behavior'>) =>
   `${entity.kind}:${entity.species ?? 'unknown'}:${entity.behavior}`;
-export function needsRest(state: HubertState): boolean {
-  return state.stats.energy < 24 || (state.activity.kind === 'rest' && state.stats.energy < 68);
-}
-export function needsLocalFollowThrough(state: HubertState): boolean {
-  return state.progressGuidance != null;
-}
-
 function canWatch(
   state: HubertState,
   entity: WorldEntity,
@@ -381,244 +392,6 @@ function canWatch(
 ): boolean {
   return canInspectObservedEntity(state, entity, observation, now);
 }
-function chooseVisibleEntity(
-  state: HubertState,
-  observation: Observation,
-  now: number,
-): WorldEntity | undefined {
-  return (observation.visibleEntities ?? [])
-    .filter((entity) => canWatch(state, entity, observation, now))
-    .slice()
-    .sort((a, b) => {
-      const score = (entity: WorldEntity) => {
-        const speciesKey = (item: WorldEntity) => `${item.kind}:${item.species ?? item.id}`;
-        const newSpecies = !Object.values(state.knownEntities).some(
-          (known) => speciesKey(known) === speciesKey(entity) && state.entityObservations[known.id],
-        );
-        const novelBehavior = !state.entityObservations[entity.id]?.signatures.includes(
-          entitySignature(entity),
-        );
-        return (
-          (newSpecies ? 4 : 0) +
-          (state.entityObservations[entity.id] ? 1 : 3) +
-          (novelBehavior ? 2 : 0) +
-          Math.min(
-            1,
-            entity.tags.reduce(
-              (score, topic) =>
-                score +
-                (state.interests.find((interest) => interest.id === topic)?.strength ?? 0) /
-                  Math.max(1, entity.tags.length),
-              0,
-            ),
-          ) -
-          Math.hypot(
-            entity.position.x - observation.position.x,
-            entity.position.z - observation.position.z,
-          ) *
-            0.05
-        );
-      };
-      return score(b) - score(a) || a.id.localeCompare(b.id);
-    })[0];
-}
-
-/** A reproducible local planner: no paid provider or credentials are required. */
-export function chooseAction(
-  input: HubertState,
-  observation: Observation,
-  now: number,
-  nowReal = now,
-): HubertDecision {
-  const state = advanceHubert(input, now);
-  rememberObservation(state, observation, now);
-  const recordObservedIntent = (
-    s: HubertState,
-    action: CharacterCommand,
-    explanation: string,
-    at: number,
-  ) => recordIntent(s, action, explanation, at, observation);
-  const recordObservedWatch = (
-    s: HubertState,
-    entity: WorldEntity,
-    explanation: string,
-    at: number,
-  ) => recordWatchIntent(s, entity, explanation, at, observation);
-  if (needsRest(state)) {
-    return recordObservedIntent(
-      state,
-      { type: 'rest', durationMs: 60_000 },
-      'I will settle down and tuck my feelers in for a while. The unfinished things can wait.',
-      now,
-    );
-  }
-  const recovery = followThrough(state, observation, now, {
-    recordIntent: recordObservedIntent,
-    recordWatchIntent: recordObservedWatch,
-    chooseVisibleEntity,
-  });
-  if (recovery) return recovery;
-  const impulse = wakeImpulseDecision(state, observation, now, nowReal, recordObservedIntent);
-  if (impulse) return impulse;
-  if (state.turn > 0 && state.turn % 11 === 0) {
-    return recordObservedIntent(
-      state,
-      { type: 'reflect' },
-      'I want to put a few observations together before starting anything else.',
-      now,
-    );
-  }
-  const objects = Object.values(state.knownObjects);
-  const projectBench = state.knownObjects.workbench;
-  if (
-    projectBench &&
-    state.inspections.workbench &&
-    !state.project.completed &&
-    (state.project.verifiedWorkSessions > 0 || state.turn % 4 === 0) &&
-    now - (state.lastObjectUse.workbench ?? -Infinity) >= 90_000
-  ) {
-    const close =
-      Math.hypot(
-        projectBench.position.x - observation.position.x,
-        projectBench.position.z - observation.position.z,
-      ) <=
-        projectBench.radius + 1 &&
-      observation.visibleObjects.some((object) => object.id === projectBench.id);
-    return recordObservedIntent(
-      state,
-      close ? { type: 'work', targetId: 'workbench' } : { type: 'move', targetId: 'workbench' },
-      'There are more places to explore, but I would like to follow through on my little weather study first.',
-      now,
-    );
-  }
-  const entity = chooseVisibleEntity(state, observation, now);
-  const hasFreshObject = observation.visibleObjects.some(
-    (object) => !state.inspections[object.id] && object.affordances.includes('inspect'),
-  );
-  if (entity && (!hasFreshObject || state.activity.kind !== 'watch')) {
-    return recordObservedWatch(
-      state,
-      entity,
-      `I noticed ${entity.name.toLowerCase()} ${entity.behavior}. I want to lean a little closer and watch what it does.`,
-      now,
-    );
-  }
-  const uninspected = objects.filter((object) => !state.inspections[object.id]);
-  uninspected.sort((a, b) => {
-    const aDistance = Math.hypot(
-      a.position.x - observation.position.x,
-      a.position.z - observation.position.z,
-    );
-    const bDistance = Math.hypot(
-      b.position.x - observation.position.x,
-      b.position.z - observation.position.z,
-    );
-    return aDistance - bDistance || a.id.localeCompare(b.id);
-  });
-  if (uninspected[0]) {
-    const target = uninspected[0];
-    const close =
-      Math.hypot(
-        target.position.x - observation.position.x,
-        target.position.z - observation.position.z,
-      ) <=
-        target.radius + 1 && observation.visibleObjects.some((object) => object.id === target.id);
-    return recordObservedIntent(
-      state,
-      close ? { type: 'inspect', targetId: target.id } : { type: 'move', targetId: target.id },
-      `I noticed ${target.name.toLowerCase()}. I would like to see what it is like up close.`,
-      now,
-    );
-  }
-  // Public map landmarks are navigation knowledge, not knowledge of their hidden contents.
-  // Occasionally leave familiar activities long enough to discover a new part of Elsewhere.
-  const landmarks = observation.knownPlaces ?? [];
-  const unexplored = landmarks.filter(
-    (place) => place.id !== observation.placeId && state.visitedPlaces[place.id] === undefined,
-  );
-  const returning = landmarks
-    .filter((place) => place.id !== observation.placeId)
-    .slice()
-    .sort(
-      (a, b) =>
-        (state.visitedPlaces[a.id] ?? -Infinity) - (state.visitedPlaces[b.id] ?? -Infinity) ||
-        a.id.localeCompare(b.id),
-    );
-  const nextPlace =
-    state.turn % 7 === 0
-      ? unexplored[0]
-      : state.turn % 17 === 0 && !unexplored.length
-        ? returning[0]
-        : undefined;
-  if (nextPlace) {
-    state.explorationStep += 1;
-    return recordObservedIntent(
-      state,
-      { type: 'move', targetId: nextPlace.id },
-      unexplored.includes(nextPlace)
-        ? `The public map shows ${nextPlace.name.toLowerCase()}. I would like to go and find out what is there.`
-        : `I have not been back to ${nextPlace.name.toLowerCase()} for a while. I wonder what I will notice this time.`,
-      now,
-    );
-  }
-  const useful = objects.filter(
-    (object) =>
-      (object.id !== 'bench' || state.stats.energy < 58) &&
-      object.affordances.some(
-        (value) =>
-          ['interact', 'tend', 'sit'].includes(value) ||
-          (value === 'work' && !state.project.completed),
-      ) &&
-      now - (state.lastObjectUse[object.id] ?? -Infinity) >= 90_000,
-  );
-  useful.sort(
-    (a, b) =>
-      (state.interactions[a.id] ?? 0) - (state.interactions[b.id] ?? 0) || a.id.localeCompare(b.id),
-  );
-  if (useful[0]) {
-    const target = useful[0];
-    const close =
-      Math.hypot(
-        target.position.x - observation.position.x,
-        target.position.z - observation.position.z,
-      ) <=
-        target.radius + 1 && observation.visibleObjects.some((object) => object.id === target.id);
-    const command: CharacterCommand = close
-      ? target.affordances.includes('work') && !state.project.completed
-        ? { type: 'work', targetId: target.id }
-        : target.id === 'bench'
-          ? { type: 'rest', durationMs: 30_000 }
-          : { type: 'interact', targetId: target.id }
-      : { type: 'move', targetId: target.id };
-    return recordObservedIntent(
-      state,
-      command,
-      target.affordances.includes('work')
-        ? 'I have a few observations. I want to try making something from them.'
-        : `I feel like spending a little time with ${target.name.toLowerCase()}.`,
-      now,
-    );
-  }
-  // The walk is a route through public space, not knowledge of unseen objects or private interiors.
-  const walks = [
-    { x: 1, z: 0 },
-    { x: -3, z: 0 },
-    { x: -6, z: -1 },
-    { x: -6, z: 2 },
-    { x: 1, z: -3 },
-    { x: 5, z: -2 },
-    { x: 5, z: 4 },
-  ];
-  const destination = walks[state.explorationStep % walks.length];
-  state.explorationStep += 1;
-  return recordObservedIntent(
-    state,
-    { type: 'move', position: destination },
-    'I have been in one spot for a while. I will take a walk and see what catches my attention.',
-    now,
-  );
-}
-
 function applyEntityObservation(
   state: HubertState,
   outcome: WorldOutcome,
@@ -651,10 +424,6 @@ function applyEntityObservation(
   const previous = state.entityObservations[visible.id];
   const signature = entitySignature(visible);
   const familiar = previous?.signatures.includes(signature) ?? false;
-  const actualTopics = new Set(visible.tags);
-  if (visible.kind === 'bird') actualTopics.add('birds');
-  const topics = encounter.topics.filter((topic) => actualTopics.has(topic));
-  if (!familiar) developInterests(state, topics, `entity:${visible.id}`, signature, now);
   state.entityObservations[visible.id] = {
     lastAt: now,
     lastVersion: visible.observationVersion,
@@ -720,11 +489,10 @@ export function applyOutcome(
   if (outcome.status === 'started') return state;
   const targetId =
     outcome.objectId ?? ('targetId' in outcome.command ? outcome.command.targetId : undefined);
-  const target = targetId ? state.knownObjects[targetId] : undefined;
   if (outcome.status === 'rejected') {
     state.stats.frustration += 1;
     state.intent = 'That did not work. I will reconsider rather than pretend it succeeded.';
-    if (targetId) state.lastObjectUse[targetId] = now;
+    if (targetId && outcome.command.type !== 'use') state.lastObjectUse[targetId] = now;
     state.stats = normalizeStats(state.stats);
     appendNovelMemory(state.memories, {
       id: `memory:${outcome.id}`,
@@ -760,6 +528,7 @@ export function applyOutcome(
     inspect: 2,
     work: 9,
     interact: 3,
+    use: 1,
     look: 0.5,
     reflect: 1,
     say: 1,
@@ -771,13 +540,6 @@ export function applyOutcome(
     state.inspections[targetId] = (state.inspections[targetId] ?? 0) + 1;
     state.stats.boredom -= first ? 8 : state.inspections[targetId] <= 4 ? 1 : 0;
     state.stats.mood += first ? 1.5 : 0;
-    developInterests(
-      state,
-      target?.tags ?? [],
-      `object:${targetId}`,
-      `inspection:${targetId}`,
-      now,
-    );
   }
   if (['work', 'interact'].includes(outcome.command.type) && targetId) {
     const prior = state.interactions[targetId] ?? 0;
@@ -794,26 +556,33 @@ export function applyOutcome(
     if (newMilestone) {
       state.project.verifiedWorkSessions = Math.min(3, state.project.verifiedWorkSessions + 1);
       state.project.completed = state.project.verifiedWorkSessions >= 3;
-      developInterests(
-        state,
-        target?.tags ?? ['making'],
-        `project:${state.project.id}`,
-        `milestone:${state.project.verifiedWorkSessions}`,
-        now,
-        90_000,
-      );
     }
+  }
+  const following = activePursuit(state.pursuits);
+  if (outcome.command.type === 'use' && following && targetId && outcome.evidence) {
+    const { control, value } = outcome.command;
+    const name = state.knownObjects[targetId]?.name.toLowerCase() ?? 'an object';
+    state.pursuits = recordPursuitEntry(
+      state.pursuits,
+      following.id,
+      {
+        kind: 'tried',
+        id: `tried:${outcome.id}`,
+        at: now,
+        text: `Tried ${control}${value === undefined ? '' : ' ' + value} on ${name}. ${cleanOutsideText(outcome.evidence, 160)}`,
+        objectId: targetId,
+      },
+      now,
+    );
   }
   if (outcome.command.type === 'reflect') {
     state.stats.frustration -= 2;
-    state.lastReflection = state.memories.length
-      ? `I keep returning to ${
-          state.interests
-            .slice()
-            .sort((a, b) => b.strength - a.strength)[0]
-            ?.name.toLowerCase() ?? 'small discoveries'
-        }. I would like to see where that leads.`
-      : 'I am still getting to know this place. I do not need to decide what I like yet.';
+    const following = activePursuit(state.pursuits)?.question;
+    state.lastReflection = following
+      ? `I keep returning to a question: ${following} I would like to see where that leads.`
+      : state.memories.length
+        ? 'I keep returning to small discoveries. I would like to see where that leads.'
+        : 'I am still getting to know this place. I do not need to decide what I like yet.';
   }
   state.stats = normalizeStats(state.stats);
   let rememberedNewEpisode = false;
@@ -910,12 +679,6 @@ export function publicCharacter(state: HubertState): PublicCharacterState {
     ...clone(state.stats),
     activity: state.activity.label,
     status: state.activity.kind === 'rest' ? 'resting' : 'exploring',
-    interests: state.interests.map(({ id, name, strength, encounters }) => ({
-      id,
-      name,
-      strength,
-      encounters,
-    })),
   };
 }
 const toPublicMemory = (memory: EpisodicMemory): PublicMemory => ({
@@ -962,7 +725,6 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
     stats: { ...state.stats },
     activity: { ...state.activity },
     bodyLanguage: bodyLanguage(state, observation),
-    interests: state.interests.map((interest) => ({ ...interest })),
     project: {
       ...state.project,
       status: state.project.completed
@@ -1004,11 +766,6 @@ function planningSummary(state: HubertState, observation: Observation, nowReal: 
         retryCondition,
       })),
     actionOffers: hubertActionOffers(state, observation, now).map((offer) => ({ ...offer })),
-    recentNotebook: (state.notebook?.entries ?? []).slice(-2).map(({ id, text }) => ({
-      id,
-      text,
-      meaning: 'A previous public observation or question, not a verified event or an obligation.',
-    })),
     lastOutcome: state.lastOutcome ? { ...state.lastOutcome } : null,
     lastProposal: state.lastProposal ? { ...state.lastProposal } : null,
     lastDecisionProblem: state.lastDecisionProblem ? { ...state.lastDecisionProblem } : null,
@@ -1032,7 +789,6 @@ function actionChoices(
   state: HubertState,
   observation: Observation,
   research: ReturnType<typeof researchContext>,
-  interestChoices: ReturnType<typeof availableInterestChoices>,
   creationIds: readonly string[],
   mail: JsonObject,
 ): ActionChoice[] {
@@ -1053,29 +809,24 @@ function actionChoices(
     values.length ? [{ type, where: { ...also, [field]: values.slice(0, 64) } }] : [];
   const entryIds = mail.available === true ? ids(mail.publicEntries) : [];
   const contacts = ids(mail.contacts).slice(0, 64);
+  const pursuitIds = state.pursuits.items.map((item) => item.id);
   return [
     ...hubertSpatialChoices(hubertActionOffers(state, observation, observation.observedAt)),
     { type: 'rest' },
     { type: 'reflect' },
-    ...listed(
-      'research',
-      'targetId',
-      ('targets' in research ? (research.targets ?? []) : []).map((target) => target.id),
-    ),
+    { type: 'pursue', where: { question: 'any', why: 'any' } },
+    ...listed('pursue', 'pursuitId', pursuitIds),
+    ...listed('set_aside', 'pursuitId', pursuitIds, { reason: 'any' }),
+    ...(state.pursuits.activeId
+      ? [{ type: 'note' as const, where: { text: 'any' as const } }]
+      : []),
+    ...(research.available && state.pursuits.activeId
+      ? [{ type: 'search' as const, where: { query: 'any' as const } }]
+      : []),
     ...listed(
       'read',
       'sourceId',
-      ('sources' in research ? (research.sources ?? []) : []).map((source) => source.id),
-    ),
-    ...(['set-aside', 'pursue'] as const).flatMap((disposition) =>
-      listed(
-        'reconsider',
-        'interestId',
-        interestChoices
-          .filter((choice) => choice.disposition === disposition)
-          .map((choice) => choice.interestId),
-        { disposition: [disposition] },
-      ),
+      research.sources.map((source) => source.id),
     ),
     ...listed('pin_creation', 'creationId', creationIds),
     ...listed('draft_mail', 'entryIds', entryIds, {
@@ -1098,88 +849,135 @@ export function workingContext(
   creations: readonly PublicCreation[] = [],
   mail: JsonObject = { available: false },
 ): DecisionContext {
-  const research = researchContext(state, observation, nowReal, researchEnabled);
-  const interestChoices = availableInterestChoices(state, nowReal);
+  const research = researchContext(state, nowReal, researchEnabled);
   const ownCreations = creations.filter((creation) => creation.characterId === state.id).slice(-32);
-  return buildWorkingContext({
-    identity: HUBERT_IDENTITY,
-    choices: actionChoices(
-      state,
-      observation,
-      research,
-      interestChoices,
-      ownCreations.map((creation) => creation.id),
-      mail,
-    ),
-    state: {
-      ...planningSummary(state, observation, nowReal),
-      mail,
-      creations: ownCreations.map(
-        ({ id, title, description, url, kind, pinnedAt, provenance }) => ({
-          id,
-          title,
-          description,
-          url,
-          kind,
-          pinned: pinnedAt !== undefined,
-          provenance,
-        }),
+  return buildWorkingContext(
+    {
+      identity: HUBERT_IDENTITY,
+      choices: actionChoices(
+        state,
+        observation,
+        research,
+        ownCreations.map((creation) => creation.id),
+        mail,
       ),
-      research,
-      interestChoices: interestChoices.map((choice) => ({ ...choice })),
-    },
-    intentions: [
-      state.intent,
-      ...(!state.project.completed && state.project.verifiedWorkSessions > 0
-        ? [state.project.name]
-        : []),
-    ],
-    memories: state.activeRecall
-      ? state.memories
-          .filter((memory) => memory.id === state.activeRecall?.memoryId)
-          .map((memory) => ({
-            memoryId: memory.id,
-            summary: memory.summary,
-            sourceEventId: memory.sourceEventId,
-            score: 1,
-          }))
-      : [],
-    observations: {
-      placeId: observation.placeId,
-      position: observation.position,
-      facing: observation.facing,
-      observedAt: observation.observedAt,
-      knownPlaces: observation.knownPlaces ?? [],
-      visibleEntities: (observation.visibleEntities ?? []).slice(0, 8).map((entity) => ({
-        id: entity.id,
-        name: entity.name,
-        kind: entity.kind,
-        species: entity.species,
-        description: entity.description,
-        position: entity.position,
-        behavior: entity.behavior,
-        observationVersion: entity.observationVersion,
-        affordances: entity.affordances,
+      state: {
+        ...planningSummary(state, observation, nowReal),
+        mail,
+        creations: ownCreations.map(
+          ({ id, title, description, url, kind, pinnedAt, provenance }) => ({
+            id,
+            title,
+            description,
+            url,
+            kind,
+            pinned: pinnedAt !== undefined,
+            provenance,
+          }),
+        ),
+        research,
+        pursuits: pursuitContext(state.pursuits) as unknown as JsonObject,
+        recentTrail: state.trail.slice(-8).map(({ kind, why, text }) => ({
+          kind,
+          ...(why ? { why } : {}),
+          ...(text ? { text } : {}),
+        })),
+      },
+      intentions: [
+        state.intent,
+        ...(!state.project.completed && state.project.verifiedWorkSessions > 0
+          ? [state.project.name]
+          : []),
+      ],
+      memories: state.activeRecall
+        ? state.memories
+            .filter((memory) => memory.id === state.activeRecall?.memoryId)
+            .map((memory) => ({
+              memoryId: memory.id,
+              summary: memory.summary,
+              sourceEventId: memory.sourceEventId,
+              score: 1,
+            }))
+        : [],
+      observations: {
+        placeId: observation.placeId,
+        position: observation.position,
+        facing: observation.facing,
+        observedAt: observation.observedAt,
+        knownPlaces: observation.knownPlaces ?? [],
+        visibleEntities: (observation.visibleEntities ?? []).slice(0, 8).map((entity) => ({
+          id: entity.id,
+          name: entity.name,
+          kind: entity.kind,
+          species: entity.species,
+          description: entity.description,
+          position: entity.position,
+          behavior: entity.behavior,
+          observationVersion: entity.observationVersion,
+          affordances: entity.affordances,
+        })),
+        visibleObjects: observation.visibleObjects.slice(0, 12).map((object) => ({
+          id: object.id,
+          name: object.name,
+          description: object.description,
+          position: object.position,
+          radius: object.radius,
+          affordances: object.affordances,
+        })),
+        events: observation.events
+          .slice(-4)
+          .map((event) => ({ ...event, message: event.message.slice(0, 250) })),
+      },
+      outsideMessages: state.outsideMessages.map((message) => ({
+        source: message.senderName
+          ? message.senderName + ' (' + message.source + ')'
+          : message.source,
+        text: message.text,
       })),
-      visibleObjects: observation.visibleObjects.slice(0, 12).map((object) => ({
-        id: object.id,
-        name: object.name,
-        description: object.description,
-        position: object.position,
-        radius: object.radius,
-        affordances: object.affordances,
-      })),
-      events: observation.events
-        .slice(-4)
-        .map((event) => ({ ...event, message: event.message.slice(0, 250) })),
     },
-    outsideMessages: state.outsideMessages.map((message) => ({
-      source: message.senderName
-        ? message.senderName + ' (' + message.source + ')'
-        : message.source,
-      text: message.text,
-    })),
-  });
+    40_000,
+  );
+}
+
+/** Every piece of public text a decision would publish. */
+function publicTexts(why: string, action: CharacterCommand): string[] {
+  const fields: Array<string | undefined> = [why];
+  if (action.type === 'pursue') fields.push(action.question, action.why);
+  else if (action.type === 'set_aside') fields.push(action.reason);
+  else if (action.type === 'search') fields.push(action.query);
+  else if (action.type === 'note') fields.push(action.text, action.next);
+  return fields.filter((text): text is string => Boolean(text));
+}
+
+/** Why a mind step cannot be taken now, or undefined when it can. */
+function mindStepProblem(
+  state: HubertState,
+  action: CharacterCommand,
+  nowReal: number,
+  researchEnabled: boolean,
+): string | undefined {
+  const active = activePursuit(state.pursuits);
+  switch (action.type) {
+    case 'pursue':
+      return action.pursuitId && !state.pursuits.items.some((item) => item.id === action.pursuitId)
+        ? 'That pursuit does not exist. Use a pursuitId from state.pursuits.'
+        : undefined;
+    case 'set_aside':
+      return state.pursuits.items.some((item) => item.id === action.pursuitId)
+        ? undefined
+        : 'That pursuit does not exist. Use a pursuitId from state.pursuits.';
+    case 'note':
+      return active ? undefined : 'A note needs an active pursuit. Open one with pursue first.';
+    case 'search':
+      if (!researchEnabled) return 'Web search is not available.';
+      return active ? undefined : 'A search needs an active pursuit. Open one with pursue first.';
+    case 'read':
+      return readableSources(state, nowReal).some((offer) => offer.sourceId === action.sourceId)
+        ? undefined
+        : 'That source is not available to read. Use a sourceId from state.research.sources.';
+    default:
+      return undefined;
+  }
 }
 
 /** Models can propose schema-valid actions; the host must still authorize them before execution. */
@@ -1198,10 +996,26 @@ export async function chooseActionWithProvider(
   const result = await provider.propose(
     workingContext(state, observation, nowReal, researchEnabled, creations, mail),
   );
-  const parsed = CharacterCommandSchema.safeParse(result);
+  const parsed = CharacterDecisionSchema.safeParse(result);
   if (!parsed.success)
     throw new InvalidDecisionError('invalid_action', invalidDecisionFields(parsed.error));
-  const action = parsed.data;
+  const { action, why } = parsed.data;
+  const privateTexts = state.outsideMessages.map((message) => message.text);
+  if (publicTexts(why, action).some((text) => reproducesPrivateText(text, privateTexts)))
+    throw new InvalidDecisionError(
+      'unavailable_action',
+      [],
+      action,
+      'Provider proposed public text that repeats an outside message. Write it in your own words.',
+    );
+  const problem = mindStepProblem(state, action, nowReal, researchEnabled);
+  if (problem)
+    throw new InvalidDecisionError(
+      'unavailable_action',
+      [],
+      action,
+      `Provider proposed an unavailable action: ${problem}`,
+    );
   const assessment = assessHubertSpatialAction(state, observation, action, now);
   if (assessment.status === 'unavailable')
     throw new InvalidDecisionError(
@@ -1211,7 +1025,14 @@ export async function chooseActionWithProvider(
       `Provider proposed an unavailable action: ${assessment.reason}`,
     );
   if (assessment.status === 'approach') {
-    const adjusted = recordIntent(state, assessment.command, assessment.reason, now, observation);
+    const adjusted = recordIntent(
+      state,
+      assessment.command,
+      assessment.reason,
+      now,
+      observation,
+      why,
+    );
     adjusted.state.lastProposal = {
       at: now,
       type: action.type,
@@ -1221,7 +1042,7 @@ export async function chooseActionWithProvider(
     return adjusted;
   }
   delete state.lastProposal;
-  const explanation = 'I have chosen a next step from what I can currently observe.';
+  const explanation = why || 'I have chosen a next step from what I can currently observe.';
   const offered = wakingDreamImpulses(state.dreams, nowReal).find(
     (impulse) =>
       impulse.action === action.type &&
@@ -1237,7 +1058,88 @@ export async function chooseActionWithProvider(
     observation.visibleEntities?.some((entity) => entity.id === action.targetId)
   ) {
     const entity = observation.visibleEntities.find((entity) => entity.id === action.targetId)!;
-    return recordWatchIntent(state, entity, explanation, now, observation);
+    return recordWatchIntent(state, entity, explanation, now, observation, why);
   }
-  return recordIntent(state, action, explanation, now, observation);
+  return recordIntent(state, action, explanation, now, observation, why);
+}
+
+/** Mind steps taken by the character, applied to its own state; the host calls these. */
+export function applyPursue(
+  input: HubertState,
+  command: Extract<CharacterCommand, { type: 'pursue' }>,
+  id: string,
+  now: number,
+): HubertState {
+  const state = clone(input);
+  state.pursuits = command.pursuitId
+    ? resumePursuit(state.pursuits, command.pursuitId, now)
+    : openPursuit(
+        state.pursuits,
+        { id, question: command.question ?? '', why: command.why ?? '' },
+        now,
+      );
+  return state;
+}
+export function applySetAside(
+  input: HubertState,
+  command: Extract<CharacterCommand, { type: 'set_aside' }>,
+  now: number,
+): HubertState {
+  const state = clone(input);
+  state.pursuits = setAsidePursuit(state.pursuits, command.pursuitId, command.reason, now);
+  return state;
+}
+export function applyNote(
+  input: HubertState,
+  command: Extract<CharacterCommand, { type: 'note' }>,
+  entryId: string,
+  now: number,
+): HubertState {
+  const state = clone(input);
+  const active = activePursuit(state.pursuits);
+  if (!active) throw new Error('A note needs an active pursuit.');
+  const known = new Set(state.research.offers.map((offer) => offer.sourceId));
+  state.pursuits = recordPursuitEntry(
+    state.pursuits,
+    active.id,
+    {
+      kind: 'note',
+      id: entryId,
+      at: now,
+      text: command.text,
+      surprised: command.surprised,
+      sourceIds: (command.sourceIds ?? []).filter((id) => known.has(id)),
+    },
+    now,
+  );
+  if (command.next)
+    state.pursuits = addPursuitQuestion(state.pursuits, active.id, command.next, now);
+  return state;
+}
+
+const sameStep = (a: TrailEntry, b: TrailEntry) =>
+  a.kind === b.kind &&
+  a.why === b.why &&
+  a.pursuitId === b.pursuitId &&
+  a.text === b.text &&
+  a.url === b.url &&
+  a.placeId === b.placeId;
+
+/**
+ * Appends one step to the trail, keeping the newest entries. A step that repeats the one before
+ * it word for word is counted on that entry instead of being listed again.
+ */
+export function appendTrail(input: HubertState, entry: TrailEntry): HubertState {
+  const state = clone(input);
+  const last = state.trail.at(-1);
+  state.trail =
+    last && sameStep(last, entry)
+      ? [...state.trail.slice(0, -1), { ...last, at: entry.at, times: (last.times ?? 1) + 1 }]
+      : [...state.trail, entry].slice(-TRAIL_KEPT);
+  return state;
+}
+
+/** Public projection of the pursuits. */
+export function publicPursuitList(state: HubertState): PublicPursuit[] {
+  return publicPursuits(state.pursuits);
 }

@@ -29,6 +29,8 @@ export const ResearchSearchResultSchema = z
     sources: z.array(ResearchSourceSchema).max(5),
   })
   .strict();
+/** Longest page excerpt a read result may carry. */
+export const RESEARCH_EXCERPT_LIMIT = 12000;
 export const ResearchReadResultSchema = z
   .object({
     kind: z.literal('read'),
@@ -38,7 +40,7 @@ export const ResearchReadResultSchema = z
     title: z.string().max(180),
     fetchedAt: z.number().int().nonnegative(),
     cached: z.boolean(),
-    excerpt: z.string().max(4000),
+    excerpt: z.string().max(RESEARCH_EXCERPT_LIMIT),
     truncated: z.boolean(),
   })
   .strict();

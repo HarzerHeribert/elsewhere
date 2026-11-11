@@ -52,7 +52,7 @@ describe('creation links in the authoritative character life', () => {
     let creationId = '';
     const propose = vi.fn(async (context) => {
       expect(JSON.stringify(context.state.creations)).toContain('Bird guide');
-      return { type: 'pin_creation', creationId, pinned: true };
+      return { action: { type: 'pin_creation', creationId, pinned: true }, why: '' };
     });
     const controller = await new ElsewhereController(store, {
       now: () => epoch,

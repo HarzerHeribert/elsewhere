@@ -185,7 +185,7 @@ describe('fresh-context dream integration regressions', () => {
         state,
         observeWorld(world, 'hubert', now),
         now,
-        { id: 'fixture', propose: async () => ({ type: 'move', targetId }) },
+        { id: 'fixture', propose: async () => ({ action: { type: 'move', targetId }, why: '' }) },
         epoch,
       );
       expect(decision.action).toEqual({ type: 'move', targetId });
@@ -211,7 +211,13 @@ describe('fresh-context dream integration regressions', () => {
         h.state,
         h.observation,
         h.now,
-        { id: 'fixture', propose: async () => ({ type: 'move', targetId: 'unknown-destination' }) },
+        {
+          id: 'fixture',
+          propose: async () => ({
+            action: { type: 'move', targetId: 'unknown-destination' },
+            why: '',
+          }),
+        },
         epoch,
       ),
     ).rejects.toThrow('Provider proposed an unavailable action');
@@ -225,7 +231,7 @@ describe('fresh-context dream integration regressions', () => {
       h.state,
       h.observation,
       h.now,
-      { id: 'fixture', propose: async () => command },
+      { id: 'fixture', propose: async () => ({ action: command, why: '' }) },
       epoch,
     );
     expect(decision.state.activeWakeImpulse).toBe(h.state.dreams.impulses[0].id);
@@ -254,7 +260,7 @@ describe('fresh-context dream integration regressions', () => {
         id: 'rest-fixture',
         localOnly: true,
         managesAllowance: true,
-        propose: async () => ({ type: 'rest' }),
+        propose: async () => ({ action: { type: 'rest' }, why: '' }),
       },
     }).init();
     await controller.tick();
@@ -278,7 +284,7 @@ describe('fresh-context dream integration regressions', () => {
         id: 'rest-fixture',
         localOnly: true,
         managesAllowance: true,
-        propose: async () => ({ type: 'rest' }),
+        propose: async () => ({ action: { type: 'rest' }, why: '' }),
       },
     }).init();
     expect((await store.load())!.value.hubert.dreams.pending).toBeNull();
@@ -299,7 +305,7 @@ describe('fresh-context dream integration regressions', () => {
       modelProvider: {
         id: 'local-fixture',
         localOnly: true,
-        propose: async () => ({ type: 'look' }),
+        propose: async () => ({ action: { type: 'look' }, why: '' }),
       },
       reflectionProvider: {
         id: 'remote-fixture',

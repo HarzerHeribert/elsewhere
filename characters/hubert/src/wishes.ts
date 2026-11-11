@@ -77,7 +77,11 @@ export function wishDue(state: HubertState, wallNow: number): boolean {
 
 /** Explicit projection: never pass a HubertState or decision context into public authoring. */
 export function wishInput(snapshot: PublicSnapshot): PublicExpressionInput {
-  const note = snapshot.notebook?.entries.at(-1);
+  const note = snapshot.pursuits
+    .flatMap((pursuit) => pursuit.entries)
+    .filter((entry) => entry.kind === 'note')
+    .sort((a, b) => a.at - b.at)
+    .at(-1);
   const memory = snapshot.memories.at(-1);
   const names = (items: Array<{ name: string }>) => items.map((item) => item.name).join(', ');
   return {
@@ -94,11 +98,11 @@ export function wishInput(snapshot: PublicSnapshot): PublicExpressionInput {
       ...(note ? [{ id: note.id, summary: note.text.slice(0, 600) }] : []),
       ...(memory ? [{ id: memory.id, summary: memory.summary.slice(0, 600) }] : []),
     ],
-    interests: snapshot.character.interests
-      .slice()
-      .sort((a, b) => b.strength - a.strength)
+    questions: snapshot.pursuits
+      .filter((pursuit) => pursuit.status !== 'set-aside')
+      .sort((a, b) => b.lastAt - a.lastAt)
       .slice(0, 4)
-      .map((interest) => interest.name),
+      .map((pursuit) => pursuit.question.slice(0, 80)),
     recentNotes: (snapshot.wishes ?? []).slice(-2).map((wish) => wish.text.slice(0, 360)),
   };
 }

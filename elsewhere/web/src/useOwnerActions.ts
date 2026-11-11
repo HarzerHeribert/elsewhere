@@ -109,12 +109,6 @@ export function useOwnerActions(
             ? 'Hubert is paused.'
             : 'Hubert is running.',
       ),
-    shareThoughts: (enabled: boolean) =>
-      run(
-        enabled ? 'thoughts-on' : 'thoughts-off',
-        {},
-        enabled ? 'Hubert’s thoughts are shared again.' : 'Hubert’s thoughts are no longer shared.',
-      ),
     decideWish: (id: string, decision: 'fulfill' | 'decline') =>
       run(
         'wishes/' + encodeURIComponent(id),

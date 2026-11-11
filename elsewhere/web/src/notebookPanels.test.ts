@@ -1,18 +1,34 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { PublicCharacterState, PublicNotebook } from '@elsewhere/character-interfaces';
+import type { PublicCharacterState, PublicPursuit } from '@elsewhere/character-interfaces';
 import { ActivityPanel } from './panels/ActivityPanel';
 import { CharacterPanel } from './panels/CharacterPanel';
 import { NotebookPanel } from './panels/NotebookPanel';
 import { calendarDay, formatDay } from './formatTime';
 import { WallTimeProvider } from './worldClock';
 
-const entry = (id: string, text: string) => ({
+const pursuit = (
+  id: string,
+  notes: Array<{ id: string; at: number; text: string; surprised?: boolean }>,
+  overrides: Partial<PublicPursuit> = {},
+): PublicPursuit => ({
   id,
-  at: 1_000,
-  text,
-  sourceIds: ['observed:' + id],
+  question: 'Why do herons stand so still? (' + id + ')',
+  why: 'I want to know',
+  status: 'open',
+  openedAt: 0,
+  lastAt: Math.max(0, ...notes.map((note) => note.at)),
+  questions: [],
+  entries: notes.map((note) => ({
+    kind: 'note' as const,
+    id: note.id,
+    at: note.at,
+    text: note.text,
+    surprised: note.surprised ?? false,
+    sourceIds: [],
+  })),
+  ...overrides,
 });
 const character: PublicCharacterState = {
   id: 'hubert',
@@ -24,7 +40,6 @@ const character: PublicCharacterState = {
   socialAppetite: 30,
   activity: 'Listening to the wind chime',
   status: 'exploring',
-  interests: [],
   currentThought: 'TEMPLATE-THOUGHT-CANARY',
   lastReflection: 'TEMPLATE-REFLECTION-CANARY',
 };
@@ -34,15 +49,14 @@ describe('authored notebook presentation', () => {
   it('shows notes at the real time they were written, not at the world clock time', () => {
     const written = Date.UTC(2026, 10, 9, 7, 9);
     const real = Date.UTC(2026, 10, 10, 9, 38);
-    const notebook: PublicNotebook = {
-      enabled: true,
-      entries: [{ ...entry('late', 'Written after a long pause.'), at: written }],
-    };
+    const pursuits = [
+      pursuit('p', [{ id: 'late', at: written, text: 'Written after a long pause.' }]),
+    ];
     const html = renderToStaticMarkup(
       createElement(
         WallTimeProvider,
         { value: (at: number) => at + (real - written) },
-        createElement(NotebookPanel, { notebook }),
+        createElement(NotebookPanel, { pursuits }),
       ),
     );
     expect(html).toContain(formatDay(calendarDay(real)));
@@ -55,72 +69,74 @@ describe('authored notebook presentation', () => {
     const html = renderToStaticMarkup(createElement(NotebookPanel));
     expect(html).toContain('My notebook is quiet for now.');
     expect(html).not.toContain('<article');
-    expect(html).not.toContain('writing this now');
     expect(html).not.toMatch(/I have chosen|I keep returning/);
   });
-  it('bounds the notebook to 32 recent entries, grouped by calendar day, without mutating source order', () => {
-    const notebook: PublicNotebook = {
-      enabled: true,
-      entries: Array.from({ length: 40 }, (_, i) =>
-        entry('note-' + i, 'Authored note #' + i + '.'),
+  it('shows, per pursuit, its notes newest first and the questions still open', () => {
+    const pursuits = [
+      pursuit('old', [{ id: 'a', at: 1_000, text: 'First finding.' }]),
+      pursuit(
+        'new',
+        [
+          { id: 'b', at: 2_000, text: 'Second finding.' },
+          { id: 'c', at: 3_000, text: 'Third finding.', surprised: true },
+        ],
+        { questions: ['How long do they wait?'] },
       ),
-    };
-    const before = structuredClone(notebook);
-    const full = renderToStaticMarkup(createElement(NotebookPanel, { notebook }));
-    expect(full.match(/class="journal-page"/g)).toHaveLength(32);
-    expect(full.split(formatDay(calendarDay(1_000)))).toHaveLength(2);
-    expect(full).toContain('Authored note #39.');
-    expect(full).toContain('Authored note #8.');
-    expect(full).not.toContain('Authored note #7.');
-    expect(notebook).toEqual(before);
+      pursuit('quiet', []),
+    ];
+    const before = structuredClone(pursuits);
+    const html = renderToStaticMarkup(createElement(NotebookPanel, { pursuits }));
+    expect(html.indexOf('(new)')).toBeLessThan(html.indexOf('(old)'));
+    expect(html.indexOf('Third finding.')).toBeLessThan(html.indexOf('Second finding.'));
+    expect(html).toContain('That surprised me.');
+    expect(html).toContain('How long do they wait?');
+    expect(html).not.toContain('(quiet)');
+    expect(pursuits).toEqual(before);
   });
-  it('renders hostile draft and completed text as plain text, never as executable elements', () => {
-    const notebook: PublicNotebook = {
-      enabled: true,
-      entries: [entry('unsafe', '<script>window.NOT_EXECUTED=true</script>')],
-      draft: { id: 'draft', at: 2_000, text: '<img src=x onerror="window.NOT_EXECUTED=true">' },
-    };
-    const html = renderToStaticMarkup(createElement(NotebookPanel, { notebook }));
+  it('renders hostile note and question text as plain text, never as executable elements', () => {
+    const pursuits = [
+      pursuit('unsafe', [{ id: 'x', at: 1, text: '<script>window.NOT_EXECUTED=true</script>' }], {
+        questions: ['<img src=x onerror="window.NOT_EXECUTED=true">'],
+      }),
+    ];
+    const html = renderToStaticMarkup(createElement(NotebookPanel, { pursuits }));
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('&lt;img');
     expect(html).not.toContain('<script');
     expect(html).not.toContain('<img');
-    expect(html).toContain('role="status"');
-    expect(html).toContain('Notebook draft');
   });
-  it('uses authored notebook entries on Hubert’s profile without exposing old thought/reflection placeholders', () => {
+  it('shows what Hubert follows on his page without exposing old thought/reflection placeholders', () => {
     const html = renderToStaticMarkup(
       createElement(CharacterPanel, {
         character,
-        notebook: {
-          enabled: true,
-          entries: [entry('authored', 'The shortest tube has a surprisingly sharp sound.')],
-        },
+        pursuits: [pursuit('p', [], { status: 'active' })],
+        trail: [{ id: 't', at: 1, kind: 'search', why: 'The exception is out there.' }],
         onMessage: noop,
         onViewpoint: noop,
         onWishes: noop,
       }),
     );
     expect(html).toContain('Listening to the wind chime');
-    expect(html).toContain('The shortest tube has a surprisingly sharp sound.');
+    expect(html).toContain('Why do herons stand so still?');
+    expect(html).toContain('The exception is out there.');
     expect(html).toContain('My notebook');
     expect(html).not.toMatch(/TEMPLATE-THOUGHT-CANARY|TEMPLATE-REFLECTION-CANARY/);
   });
-  it('keeps notebook expression distinct from routine events and from the memory page', () => {
+  it('keeps the trail distinct from routine events and from the memory page', () => {
     const props = {
       events: [{ id: 'event', at: 1_000, type: 'inspect', message: 'EVENT-FEED-CANARY' }],
       memories: [{ id: 'memory', at: 1_000, summary: 'MEMORY-FEED-CANARY', cues: [] }],
-      notebook: { enabled: true, entries: [entry('authored', 'NOTEBOOK-FEED-CANARY')] },
+      trail: [{ id: 'step', at: 1_000, kind: 'note' as const, text: 'TRAIL-FEED-CANARY' }],
       notices: [],
       now: 2_000,
     };
-    const notes = renderToStaticMarkup(
-      createElement(ActivityPanel, { ...props, initialFilter: 'notes' }),
+    const trail = renderToStaticMarkup(
+      createElement(ActivityPanel, { ...props, initialFilter: 'trail' }),
     );
-    expect(notes).toContain('NOTEBOOK-FEED-CANARY');
-    expect(notes).not.toMatch(/EVENT-FEED-CANARY|MEMORY-FEED-CANARY/);
+    expect(trail).toContain('TRAIL-FEED-CANARY');
+    expect(trail).not.toMatch(/EVENT-FEED-CANARY|MEMORY-FEED-CANARY/);
     const highlights = renderToStaticMarkup(createElement(ActivityPanel, props));
-    expect(highlights).toContain('I wrote in my notebook');
+    expect(highlights).toContain('I wrote a note');
     expect(highlights).toContain('I kept a memory');
     expect(highlights).toContain('1 small moment');
     const memories = renderToStaticMarkup(
@@ -128,17 +144,17 @@ describe('authored notebook presentation', () => {
         character,
         tab: 'memories',
         memories: props.memories,
-        notebook: props.notebook,
+        trail: props.trail,
         onMessage: noop,
         onViewpoint: noop,
         onWishes: noop,
       }),
     );
     expect(memories).toContain('MEMORY-FEED-CANARY');
-    expect(memories).not.toContain('NOTEBOOK-FEED-CANARY');
+    expect(memories).not.toContain('TRAIL-FEED-CANARY');
   });
   it('never renders withheld thought or reflection text on any page', () => {
-    for (const tab of ['now', 'notebook', 'memories', 'research', 'about'] as const)
+    for (const tab of ['now', 'notebook', 'memories', 'about'] as const)
       expect(
         renderToStaticMarkup(
           createElement(CharacterPanel, {

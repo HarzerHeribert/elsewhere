@@ -49,14 +49,23 @@ export interface ModelAllowance {
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  /** UTC hour bucket (YYYY-MM-DDTHH); only maintained when an hourly maximum is used. */
+  hour?: string;
+  hourCalls?: number;
 }
 export function reserveModelCall(
   ledger: ModelAllowance,
   now: number,
   maximum: number,
+  hourlyMaximum?: number,
 ): ModelAllowance | null {
-  const day = new Date(now).toISOString().slice(0, 10);
+  const iso = new Date(now).toISOString();
+  const day = iso.slice(0, 10);
   const current = ledger.day >= day ? ledger : { day, calls: 0, inputTokens: 0, outputTokens: 0 };
   if (current.calls >= maximum) return null;
-  return { ...current, calls: current.calls + 1 };
+  if (hourlyMaximum === undefined) return { ...current, calls: current.calls + 1 };
+  const hour = iso.slice(0, 13);
+  const hourCalls = current.hour === hour ? (current.hourCalls ?? 0) : 0;
+  if (hourCalls >= hourlyMaximum) return null;
+  return { ...current, calls: current.calls + 1, hour, hourCalls: hourCalls + 1 };
 }

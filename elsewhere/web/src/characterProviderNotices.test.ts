@@ -57,7 +57,7 @@ describe('private character provider notices', () => {
   it('offers one retry per character even when several workloads failed, without offering retries for recovered or paced corrections', () => {
     const html = render([
       issue('decision'),
-      issue('notebook', { workload: 'notebook', kind: 'failed' }),
+      issue('decision-again', { kind: 'failed' }),
       issue('reflection', { workload: 'reflection', retrying: true }),
       issue('recovered', { resolvedAt: 4000 }),
     ]);

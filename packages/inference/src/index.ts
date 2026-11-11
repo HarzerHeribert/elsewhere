@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
-import { CharacterCommandSchema } from '@elsewhere/character-interfaces';
+import { CharacterDecisionSchema } from '@elsewhere/character-interfaces';
 import type { DecisionContext } from '@elsewhere/character-runtime';
 import {
   reflectionMessages,
@@ -530,7 +530,7 @@ export async function createInferenceBroker(options: InferenceBrokerOptions) {
           }
         } else
           value = decision
-            ? CharacterCommandSchema.parse(result.value)
+            ? CharacterDecisionSchema.parse(result.value)
             : validateReflectionProposal(result.value, reflection!);
         if (!dispatch.signal.aborted) {
           const completed = { value, ...(reported.success ? { usage: reported.data } : {}) };

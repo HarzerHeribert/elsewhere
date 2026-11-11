@@ -1,4 +1,4 @@
-import type { CharacterCommand } from '@elsewhere/character-interfaces';
+import type { CharacterDecision } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import { ChatGPTError } from '../../../security/src/chatgpt-store';
 import { boundedChatGPTJson, chatGPTFailure, ChatGPTSession } from '../../../security/src/chatgpt';
@@ -236,6 +236,10 @@ export class ChatGPTClient {
     } catch (error) {
       const failure =
         error instanceof ChatGPTError ? error : new ChatGPTError('network_or_stream_unavailable');
+      // Name what was caught (a timeout, a dropped connection, a programming error) for the
+      // service log; the name is an identifier, never message text.
+      if (!(error instanceof ChatGPTError) && error instanceof Error && !failure.providerError)
+        failure.providerError = error.name.replace(/[^\w.-]/g, '').slice(0, 60) || undefined;
       // A request stopped before it was sent (no usable model or session) used nothing either.
       if (!sent) this.options.onUsageDetails?.(NOTHING_USED);
       // A quota/policy failure stops future autonomous requests until an operator resumes.
@@ -246,7 +250,7 @@ export class ChatGPTClient {
   }
 }
 
-export class ChatGPTDecisionProvider implements DecisionProvider<CharacterCommand> {
+export class ChatGPTDecisionProvider implements DecisionProvider<CharacterDecision> {
   readonly id = 'chatgpt';
   constructor(readonly client: ChatGPTClient) {}
   isAvailable() {

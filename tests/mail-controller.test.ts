@@ -20,20 +20,30 @@ async function fixture() {
   const world = new MemoryStore<ControllerState>();
   const first = await new ElsewhereController(world, { now: () => epoch }).init();
   await first.close();
-  world.saved!.value.hubert.notebook = {
-    day: '2026-11-10',
-    calls: 0,
-    lastAtReal: epoch,
-    latestAtReal: epoch,
-    sourceIds: [],
-    entries: [
+  world.saved!.value.hubert.pursuits = {
+    items: [
       {
-        id: 'public-note',
-        at: epoch,
-        text: 'I wonder why the crooked fin catches on the axle.',
-        sourceIds: ['receipt'],
+        id: 'pursuit-1',
+        question: 'Why does the crooked fin catch on the axle?',
+        why: 'It keeps happening',
+        status: 'active',
+        openedAt: epoch,
+        lastAt: epoch,
+        entries: [
+          {
+            kind: 'note',
+            id: 'public-note',
+            at: epoch,
+            text: 'I wonder why the crooked fin catches on the axle.',
+            surprised: false,
+            sourceIds: [],
+          },
+        ],
+        questions: [],
       },
     ],
+    activeId: 'pursuit-1',
+    reading: [],
   };
   world.saved!.value.hubert.outsideMessages = [
     { id: 'private', source: 'visitor', text: 'PRIVATE-VISITOR-CANARY', at: epoch },
@@ -71,7 +81,7 @@ describe('mail in the character decision loop', () => {
     vi.spyOn(mail, 'getPlanning').mockRejectedValueOnce(new Error('PRIVATE-MAIL-ERROR-CANARY'));
     const propose = vi.fn(async (context) => {
       expect(context.state.mail).toEqual({ available: false });
-      return { type: 'rest', durationMs: 30000 };
+      return { action: { type: 'rest', durationMs: 30000 }, why: '' };
     });
     const controller = await new ElsewhereController(world, {
       now: () => epoch,
@@ -99,7 +109,10 @@ describe('mail in the character decision loop', () => {
         { id: 'public-note', text: 'I wonder why the crooked fin catches on the axle.' },
       ]);
       expect(JSON.stringify(context.state.mail)).not.toContain('@example.com');
-      return { type: 'draft_mail', kind: 'newsletter', entryIds: ['public-note'] };
+      return {
+        action: { type: 'draft_mail', kind: 'newsletter', entryIds: ['public-note'] },
+        why: '',
+      };
     });
     const controller = await new ElsewhereController(world, {
       now: () => epoch,
@@ -137,7 +150,10 @@ describe('mail in the character decision loop', () => {
       mail,
       modelProvider: {
         id: 'fixture',
-        propose: async () => ({ type: 'draft_mail', kind: 'maker', entryIds: ['private'] }),
+        propose: async () => ({
+          action: { type: 'draft_mail', kind: 'maker', entryIds: ['private'] },
+          why: '',
+        }),
       },
     }).init();
     try {

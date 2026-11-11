@@ -49,7 +49,7 @@ describe('model-driven life without a local substitute', () => {
     const propose = vi
       .fn()
       .mockRejectedValueOnce(new Error('PRIVATE-PROVIDER-SECRET-CANARY'))
-      .mockResolvedValue({ type: 'reflect' });
+      .mockResolvedValue({ action: { type: 'reflect' }, why: '' });
     const options = { now: () => now, modelProvider: { id: 'fixture', propose } };
     const first = await new ElsewhereController(store, options).init();
     await first.step();
@@ -115,7 +115,9 @@ it('owner retry rechecks broker authorization after repair while retaining charg
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(Response.json({ error: 'not_authorized' }, { status: 403 }))
-    .mockImplementation(async () => Response.json({ value: { type: 'reflect' } }));
+    .mockImplementation(async () =>
+      Response.json({ value: { action: { type: 'reflect' }, why: '' } }),
+    );
   const provider = new BrokerDecisionProvider(
     new BrokerModelClient({
       baseUrl: 'https://inference.example',
@@ -169,7 +171,7 @@ it('waits for a normal turn after an unusable reply and lets the model correct i
         { status: 400 },
       ),
     )
-    .mockResolvedValue(Response.json({ value: { type: 'reflect' } }));
+    .mockResolvedValue(Response.json({ value: { action: { type: 'reflect' }, why: '' } }));
   const provider = new BrokerDecisionProvider(
     new BrokerModelClient({
       baseUrl: 'https://inference.example',
@@ -222,8 +224,8 @@ it('paces declined world proposals across restart instead of stopping the charac
   const store = new MemoryStore();
   const propose = vi.fn(
     async (): Promise<unknown> => ({
-      type: 'inspect',
-      targetId: 'unknown-fixture-target',
+      action: { type: 'inspect', targetId: 'unknown-fixture-target' },
+      why: '',
     }),
   );
   const options = {
@@ -274,7 +276,7 @@ it('paces declined world proposals across restart instead of stopping the charac
     expect(await ticksUntilNextCall(next)).toBe(24);
     expect(propose).toHaveBeenCalledTimes(6);
     expect(next.getCharacterIssues()).toMatchObject([{ retrying: true }]);
-    propose.mockResolvedValue({ type: 'reflect' });
+    propose.mockResolvedValue({ action: { type: 'reflect' }, why: '' });
     expect(await ticksUntilNextCall(next)).toBe(24);
     expect(next.getCharacterIssues()[0].resolvedAt).toBe(epoch);
     expect(store.saved!.value.runtime.declinedDecisionCount).toBe(0);
@@ -291,7 +293,10 @@ it('still stops after three unreadable replies, and a declined proposal does not
     .fn(async (): Promise<unknown> => ({ type: 'teleport' }))
     .mockResolvedValueOnce({ type: 'teleport' })
     .mockResolvedValueOnce({ type: 'teleport' })
-    .mockResolvedValueOnce({ type: 'inspect', targetId: 'unknown-fixture-target' });
+    .mockResolvedValueOnce({
+      action: { type: 'inspect', targetId: 'unknown-fixture-target' },
+      why: '',
+    });
   const options = { now: () => epoch, modelProvider: { id: 'fixture', propose } };
   const controller = await new ElsewhereController(store, options).init();
   try {
@@ -391,7 +396,7 @@ it('waits longer after each consecutive failed request and recovers without the 
     );
     expect(controller.getSnapshot().character.activity).toBe('Currently unavailable');
     expect(store.saved!.value.hubert.turn).toBe(0);
-    propose.mockImplementation(async () => ({ type: 'reflect' }));
+    propose.mockImplementation(async () => ({ action: { type: 'reflect' }, why: '' }));
     expect(await intervalsUntilNextCall()).toBe(16);
     expect(controller.getCharacterIssues()[0].resolvedAt).toBe(now);
     expect(store.saved!.value.runtime.providerFailureCount).toBe(0);
@@ -415,7 +420,7 @@ it('lets the owner skip the wait after a failed request', async () => {
   const propose = vi
     .fn()
     .mockRejectedValueOnce(new Error('upstream unavailable'))
-    .mockResolvedValue({ type: 'reflect' });
+    .mockResolvedValue({ action: { type: 'reflect' }, why: '' });
   const controller = await new ElsewhereController(store, {
     now: () => epoch,
     modelProvider: { id: 'fixture', propose },
@@ -437,7 +442,7 @@ it('checks an unavailable provider once per interval without spending a call and
   const store = new MemoryStore();
   let now = epoch;
   let available = false;
-  const propose = vi.fn(async (): Promise<unknown> => ({ type: 'reflect' }));
+  const propose = vi.fn(async (): Promise<unknown> => ({ action: { type: 'reflect' }, why: '' }));
   const controller = await new ElsewhereController(store, {
     now: () => now,
     modelProvider: { id: 'fixture', propose, isAvailable: () => available },
@@ -465,7 +470,7 @@ it('checks an unavailable provider once per interval without spending a call and
 it('continues by itself once the daily allowance resets', async () => {
   const store = new MemoryStore();
   let now = epoch;
-  const propose = vi.fn(async (): Promise<unknown> => ({ type: 'reflect' }));
+  const propose = vi.fn(async (): Promise<unknown> => ({ action: { type: 'reflect' }, why: '' }));
   const controller = await new ElsewhereController(store, {
     now: () => now,
     modelMaximum: 1,
@@ -510,7 +515,9 @@ it('keeps the stated reason while a service stays away after its daily limit, sp
     .mockResolvedValueOnce(
       Response.json({ error: 'daily_limit', retryAfterMs: 600_000 }, { status: 429 }),
     )
-    .mockImplementation(async () => Response.json({ value: { type: 'reflect' } }));
+    .mockImplementation(async () =>
+      Response.json({ value: { action: { type: 'reflect' }, why: '' } }),
+    );
   const controller = await new ElsewhereController(store, {
     now: () => now,
     modelProvider: brokerProvider(fetcher, () => now),
@@ -543,7 +550,9 @@ it('reports refused access as needing the owner, rechecks it without a request, 
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(Response.json({ error: 'not_authorized' }, { status: 403 }))
-    .mockImplementation(async () => Response.json({ value: { type: 'reflect' } }));
+    .mockImplementation(async () =>
+      Response.json({ value: { action: { type: 'reflect' }, why: '' } }),
+    );
   const controller = await new ElsewhereController(store, {
     now: () => now,
     modelProvider: brokerProvider(fetcher, () => now),
@@ -586,7 +595,7 @@ it('releases a failure stored by an earlier release that waited for the owner', 
   delete runtime.providerIssues![0].retrying;
   delete runtime.providerRetryAt;
   delete runtime.providerFailureCount;
-  const propose = vi.fn(async (): Promise<unknown> => ({ type: 'reflect' }));
+  const propose = vi.fn(async (): Promise<unknown> => ({ action: { type: 'reflect' }, why: '' }));
   const next = await new ElsewhereController(store, {
     now: () => epoch,
     simulationStepMs: 30_000,

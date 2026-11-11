@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream';
 const mocks = vi.hoisted(() => ({ lookup: vi.fn(), request: vi.fn() }));
 vi.mock('node:dns/promises', () => ({ lookup: mocks.lookup }));
 vi.mock('node:https', () => ({ request: mocks.request }));
+import { RESEARCH_EXCERPT_LIMIT } from '../../../characters/interfaces/src/research';
 import { publicWebUrl, publicAddress, extractPage, readPublicPage } from './reader';
 beforeEach(() => {
   vi.clearAllMocks();
@@ -54,11 +55,11 @@ describe('controlled public web reader', () => {
       200,
       { 'content-type': 'text/html' },
       '<html><head><title>Birds</title></head><body><article>' +
-        'Bird observations. '.repeat(300) +
+        'Bird observations. '.repeat(900) +
         '</article></body></html>',
     );
     const result = await readPublicPage('https://example.com/birds', AbortSignal.timeout(1000));
-    expect(result.excerpt.length).toBe(4000);
+    expect(result.excerpt.length).toBe(RESEARCH_EXCERPT_LIMIT);
     expect(result.truncated).toBe(true);
     const options = mocks.request.mock.calls[0][1];
     const callback = vi.fn();
@@ -90,6 +91,6 @@ describe('controlled public web reader', () => {
     reply(200, { 'content-type': 'text/plain' }, 'a'.repeat(524289));
     const page = await readPublicPage('https://example.com', AbortSignal.timeout(1000));
     expect(page.truncated).toBe(true);
-    expect(page.excerpt).toHaveLength(4000);
+    expect(page.excerpt).toHaveLength(RESEARCH_EXCERPT_LIMIT);
   });
 });

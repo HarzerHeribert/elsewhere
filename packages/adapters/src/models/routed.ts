@@ -1,7 +1,7 @@
 import {
-  CharacterCommandSchema,
+  CharacterDecisionSchema,
   narrowActionFormat,
-  type CharacterCommand,
+  type CharacterDecision,
 } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import {
@@ -17,7 +17,7 @@ import { OllamaDecisionProvider } from './ollama';
 import { DECISION_PROMPT_VERSION, decisionMessages } from './shared';
 
 /** The shared router supports other job consumers; this adapter only proposes world actions. */
-export class RoutedDecisionProvider implements DecisionProvider<CharacterCommand> {
+export class RoutedDecisionProvider implements DecisionProvider<CharacterDecision> {
   readonly id = 'routed';
   readonly managesAllowance = true;
   readonly localOnly: boolean;
@@ -48,7 +48,7 @@ export class RoutedDecisionProvider implements DecisionProvider<CharacterCommand
     this.router = new WorkloadRouter(this.config, budget, options.now);
   }
   private readonly options: { production?: boolean; fetcher?: typeof fetch; now?: () => number };
-  async propose(context: DecisionContext): Promise<CharacterCommand> {
+  async propose(context: DecisionContext): Promise<CharacterDecision> {
     const messages = decisionMessages(context);
     const result = await this.router.run(
       {
@@ -56,7 +56,7 @@ export class RoutedDecisionProvider implements DecisionProvider<CharacterCommand
         input: { messages, format: narrowActionFormat(context.choices) },
         prefix: messages[0].content,
         promptVersion: DECISION_PROMPT_VERSION,
-        validationVersion: 'character-command-v1',
+        validationVersion: 'character-decision-v1',
         privacy: this.config.allowRemote ? 'remote-allowed' : 'local-only',
         audience: 'character-private',
       },
@@ -93,7 +93,7 @@ export class RoutedDecisionProvider implements DecisionProvider<CharacterCommand
           throw new ModelExecutionError(usage);
         }
       },
-      (value) => CharacterCommandSchema.parse(value),
+      (value) => CharacterDecisionSchema.parse(value),
     );
     return result.value;
   }

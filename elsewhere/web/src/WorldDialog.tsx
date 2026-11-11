@@ -53,26 +53,6 @@ export function WorldSettings({
           )}
         </div>
       )}
-      {snapshot?.thoughts?.available && (admin.owner || canManageCharacter) && (
-        <section className="about-participation" aria-label="Shared thoughts">
-          <p className="eyebrow">Hubert’s thoughts</p>
-          <StatusBadge tone={snapshot.thoughts.enabled ? 'neutral' : 'waiting'}>
-            {snapshot.thoughts.enabled ? 'Shared with visitors' : 'Not shared'}
-          </StatusBadge>
-          <p>
-            A few times an hour Hubert writes one short line about what is on his mind, from what
-            visitors can already see. Each one is a model request, at most 24 a day, and never
-            includes private messages.
-          </p>
-          <Button
-            variant="secondary"
-            disabled={admin.busy}
-            onClick={() => void admin.shareThoughts(!snapshot.thoughts!.enabled)}
-          >
-            {snapshot.thoughts.enabled ? 'Stop sharing thoughts' : 'Share thoughts'}
-          </Button>
-        </section>
-      )}
       {snapshot && (admin.owner || isWorldAdmin || canManageCharacter) && (
         <section className="about-participation" aria-label="Runtime details">
           <p className="eyebrow">This instance</p>

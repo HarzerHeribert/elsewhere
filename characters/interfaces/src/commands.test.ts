@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ActionChoicesSchema,
   CharacterCommandSchema,
+  CharacterDecisionSchema,
   MODEL_ACTION_FORMAT,
   narrowActionFormat,
   type ActionChoice,
@@ -53,15 +54,89 @@ describe('turn-specific action choices', () => {
 
   it('keeps separately offered combinations separate', () => {
     const format = alternatives([
-      { type: 'reconsider', where: { interestId: ['birds'], disposition: ['set-aside'] } },
-      { type: 'reconsider', where: { interestId: ['sky'], disposition: ['pursue'] } },
+      { type: 'pursue', where: { pursuitId: ['birds'] } },
+      { type: 'pursue', where: { question: 'any', why: 'any' } },
+      { type: 'set_aside', where: { pursuitId: ['sky'], reason: 'any' } },
+    ]);
+    expect(format.map(({ properties }) => Object.keys(properties))).toEqual([
+      ['type', 'pursuitId'],
+      ['type', 'question', 'why'],
+      ['type', 'pursuitId', 'reason'],
+    ]);
+    expect(format[0].properties.pursuitId.enum).toEqual(['birds']);
+    expect(format[2].properties.pursuitId.enum).toEqual(['sky']);
+  });
+
+  it('offers either form of pursue, never a mixture', () => {
+    const forms = alternatives([{ type: 'pursue' }]);
+    expect(forms.map(({ required }) => required)).toEqual([
+      ['type', 'question', 'why'],
+      ['type', 'pursuitId'],
     ]);
     expect(
-      format.map(({ properties }) => [properties.interestId.enum, properties.disposition.enum]),
-    ).toEqual([
-      [['birds'], ['set-aside']],
-      [['sky'], ['pursue']],
-    ]);
+      CharacterCommandSchema.safeParse({
+        type: 'pursue',
+        question: 'Why do herons stand?',
+        why: 'I want to know',
+      }).success,
+    ).toBe(true);
+    expect(CharacterCommandSchema.safeParse({ type: 'pursue', pursuitId: 'p1' }).success).toBe(
+      true,
+    );
+    for (const mixed of [
+      { type: 'pursue' },
+      { type: 'pursue', question: 'Why do herons stand?' },
+      { type: 'pursue', question: 'Why do herons stand?', why: 'x', pursuitId: 'p1' },
+      { type: 'pursue', pursuitId: 'p1', why: 'x' },
+      { type: 'pursue', question: 'short', why: 'x' },
+    ])
+      expect(CharacterCommandSchema.safeParse(mixed).success, JSON.stringify(mixed)).toBe(false);
+  });
+
+  it('validates the commands of the mind', () => {
+    const ok = [
+      { type: 'set_aside', pursuitId: 'p1', reason: 'It stopped giving me anything.' },
+      { type: 'search', query: 'heron fishing behaviour' },
+      { type: 'note', text: 'Herons wait for the fish to move.' },
+      {
+        type: 'note',
+        text: 'A tally.',
+        surprised: true,
+        next: 'How long do they wait?',
+        sourceIds: ['s1'],
+      },
+    ];
+    for (const command of ok) expect(CharacterCommandSchema.safeParse(command).success).toBe(true);
+    const parsed = CharacterCommandSchema.parse({ type: 'note', text: ' hello ' });
+    expect(parsed).toEqual({ type: 'note', text: 'hello', surprised: false });
+    for (const bad of [
+      { type: 'search', query: 'ab' },
+      { type: 'search', query: 'x'.repeat(241) },
+      { type: 'note', text: '' },
+      { type: 'note', text: 'x'.repeat(601) },
+      { type: 'note', text: 'ok', sourceIds: Array.from({ length: 9 }, (_, i) => `s${i}`) },
+      { type: 'set_aside', pursuitId: 'p1', reason: '' },
+      { type: 'research', targetId: 'bird' },
+      { type: 'reconsider', interestId: 'birds', disposition: 'pursue' },
+    ])
+      expect(CharacterCommandSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+
+  it('wraps an action and a public why in a decision', () => {
+    expect(CharacterDecisionSchema.parse({ action: { type: 'rest' } })).toEqual({
+      action: { type: 'rest' },
+      why: '',
+    });
+    expect(CharacterDecisionSchema.parse({ action: { type: 'rest' }, why: '  tired  ' }).why).toBe(
+      'tired',
+    );
+    expect(
+      CharacterDecisionSchema.safeParse({ action: { type: 'rest' }, why: 'x'.repeat(201) }).success,
+    ).toBe(false);
+    expect(CharacterDecisionSchema.safeParse({ action: { type: 'rest' }, other: 1 }).success).toBe(
+      false,
+    );
+    expect(CharacterDecisionSchema.safeParse({ type: 'rest' }).success).toBe(false);
   });
 
   it('requires a named optional field and enumerates list items', () => {
@@ -123,11 +198,14 @@ describe('turn-specific action choices', () => {
       { type: 'reflect' },
       { type: 'pin_creation', where: { creationId: ['chart'] } },
       { type: 'draft_mail', where: { kind: ['newsletter'], entryIds: ['note-1'] } },
-      { type: 'reconsider', where: { interestId: ['birds'], disposition: ['set-aside'] } },
-      { type: 'research', where: { targetId: ['butterfly'] } },
+      { type: 'pursue', where: { question: 'any', why: 'any' } },
+      { type: 'pursue', where: { pursuitId: ['birds'] } },
+      { type: 'set_aside', where: { pursuitId: ['birds'], reason: 'any' } },
+      { type: 'search', where: { query: 'any' } },
+      { type: 'note', where: { text: 'any' } },
       { type: 'read', where: { sourceId: [`source-${'b'.repeat(24)}`] } },
     ]);
-    expect(format).toHaveLength(10);
+    expect(format).toHaveLength(13);
     for (const alternative of format) {
       const command = Object.fromEntries(
         alternative.required.map((key) => {
@@ -140,7 +218,11 @@ describe('turn-specific action choices', () => {
             property.const ??
               property.enum?.[0] ??
               (property.items ? [property.items.enum![0]] : undefined) ??
-              (property.type === 'boolean' ? true : { x: 1, z: 2 }),
+              (property.type === 'boolean'
+                ? true
+                : property.type === 'string'
+                  ? 'a long enough text'
+                  : { x: 1, z: 2 }),
           ];
         }),
       );
