@@ -198,6 +198,7 @@ export class ChatGPTClient {
     onDelta?: (text: string) => void,
     format?: ReturnType<typeof responsesActionFormat>,
     maxOutputBytes?: number,
+    maxOutputTokens?: number,
   ): Promise<string> {
     let sent = false;
     try {
@@ -224,6 +225,9 @@ export class ChatGPTClient {
           input: [{ role: 'user', content: messages[1].content }],
           store: false,
           stream: true,
+          // A reply that runs away (endless whitespace or digits) ends here instead of
+          // streaming until the size limit.
+          ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
           ...(format ? { text: { format } } : {}),
           ...(this.model === 'gpt-6-luna' ? { reasoning: { effort: 'none' } } : {}),
         }),
@@ -248,7 +252,9 @@ export class ChatGPTClient {
       if (!sent) this.options.onUsageDetails?.(NOTHING_USED);
       // A quota/policy failure stops future autonomous requests until an operator resumes.
       // Network and malformed-stream failures receive a persisted five-minute cooldown.
-      await this.session.pauseFor(failure);
+      // A reply that was cut off or ran away is the model's answer going wrong, not the
+      // connection: it must not pause every following request.
+      if (!REPLY_SHAPED.includes(failure.code)) await this.session.pauseFor(failure);
       throw failure;
     }
   }
@@ -267,6 +273,16 @@ function caughtName(error: Error): string | undefined {
   return /^[a-z]/.test(name) ? name : undefined;
 }
 
+const REPLY_SHAPED = ['response_incomplete', 'stream_too_large', 'output_too_large'];
+/**
+ * Only the rare long requests are capped. Decisions are not: every test call with a cap came
+ * back with no cached input tokens, and that has not been separated from the cap yet.
+ * A portrait is at most 1200 characters.
+ */
+const REFLECTION_OUTPUT_TOKENS = 800;
+/** A file may be 16,000 characters. */
+const WORK_OUTPUT_TOKENS = 6000;
+
 export class ChatGPTDecisionProvider implements DecisionProvider<CharacterDecision> {
   readonly id = 'chatgpt';
   constructor(readonly client: ChatGPTClient) {}
@@ -284,7 +300,17 @@ export class ChatGPTReflectionProvider implements ReflectionProvider {
     return this.client.isAvailable();
   }
   async reflect(input: ReflectionInput) {
-    return validateReflectionProposal(await this.client.text(reflectionMessages(input)), input);
+    return validateReflectionProposal(
+      await this.client.text(
+        reflectionMessages(input),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        REFLECTION_OUTPUT_TOKENS,
+      ),
+      input,
+    );
   }
 }
 
@@ -313,6 +339,7 @@ export class ChatGPTExpressionProvider implements ExpressionProvider {
         undefined,
         // A file may be 16,000 characters, which can take several bytes each.
         input.form === 'work' ? 4 * STUDIO_TEXT_LIMIT : undefined,
+        input.form === 'work' ? WORK_OUTPUT_TOKENS : undefined,
       ),
       input.form,
     );
