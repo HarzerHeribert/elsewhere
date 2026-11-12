@@ -1,15 +1,28 @@
 import { act, angleDiff, bearingOf, control, numberOf, round, type Mechanism } from './common.js';
+import { SOLSTICE_DECLINATION, risingBearing } from './sky.js';
 
-const HEIGHTS_M = [1.7, 1.2, 2.1, 1.5, 1.9, 1.1, 1.4];
-/** Hidden layout in metres. Stones 1 and 6 lie on a line that the morning sun follows. */
-const LAYOUT = [
-  { x: 0, z: 0 },
-  { x: 4.5, z: 1 },
+const HEIGHTS_M = [1.7, 1.2, 2.1, 0.9, 1.9, 1.5, 1.4];
+/** Where the sun rises at midwinter and at midsummer for this latitude, in degrees. */
+export const WINTER_SUNRISE = risingBearing(-SOLSTICE_DECLINATION);
+export const SUMMER_SUNRISE = risingBearing(SOLSTICE_DECLINATION);
+const along = (from: { x: number; z: number }, bearingDeg: number, metres: number) => ({
+  x: Math.round((from.x + metres * Math.sin((bearingDeg * Math.PI) / 180)) * 100) / 100,
+  z: Math.round((from.z - metres * Math.cos((bearingDeg * Math.PI) / 180)) * 100) / 100,
+});
+const STONE_1 = { x: 0, z: 0 };
+const STONE_2 = { x: 4.5, z: 1 };
+/**
+ * Hidden layout in metres. Stone 4 stands on the line from stone 1 toward the midwinter sunrise
+ * and stone 6 on the line from stone 2 toward the midsummer sunrise; no other pair lines up.
+ */
+export const LAYOUT = [
+  STONE_1,
+  STONE_2,
   { x: 9, z: -1.5 },
-  { x: 3, z: -6 },
-  { x: -4, z: -3.5 },
-  { x: 3.5, z: 6.1 },
-  { x: -6.5, z: 3 },
+  along(STONE_1, WINTER_SUNRISE, 6.4),
+  { x: -6, z: -2 },
+  along(STONE_2, SUMMER_SUNRISE, 7.5),
+  { x: -7, z: 3 },
 ];
 const PACE_M = 0.75;
 

@@ -25,6 +25,8 @@ interface ChatGPTOptions {
   timeoutMs?: number;
   onUsage?: (input: number, output: number) => void;
   onUsageDetails?: (usage: ModelUsage | undefined) => void;
+  /** Called when a request is sent a second time after a reply that ran away or was cut off. */
+  onRetry?: () => void;
 }
 type Envelope = Record<string, unknown>;
 function envelope(value: unknown): Envelope | undefined {
@@ -40,12 +42,21 @@ const NOTHING_USED: ModelUsage = Object.freeze({
   cachedInputTokens: 0,
 });
 
+/** The most a stream may carry before it is cut off. */
+const STREAM_BYTE_LIMIT = 512_000;
+/**
+ * A decision is a short JSON object. Some replies stream on until the general limit; they are
+ * cut off much sooner, and the request is sent once more.
+ */
+export const DECISION_STREAM_BYTE_LIMIT = 150_000;
+
 /** Bounded HTTP/SSE. Deltas alone never authorize a character action. */
 export async function readChatGPTStream(
   response: Response,
   usage: (value: ModelUsage | undefined) => void,
   onDelta?: (text: string) => void,
   maxOutputBytes?: number,
+  maxStreamBytes = STREAM_BYTE_LIMIT,
 ): Promise<string> {
   if (!response.ok) {
     // An HTTP error status arrives in place of a stream: the provider refused the request
@@ -72,7 +83,7 @@ export async function readChatGPTStream(
     while (true) {
       const { done, value } = await reader.read();
       bytes += value?.byteLength ?? 0;
-      if (bytes > 512000) throw new ChatGPTError('stream_too_large');
+      if (bytes > maxStreamBytes) throw new ChatGPTError('stream_too_large');
       buffer += decoder.decode(value, { stream: !done });
       // SSE supports CRLF, LF and CR; preserve a trailing CR across network chunks.
       buffer = buffer.replace(/\r\n/g, '\n').replace(/\r(?!$)/g, '\n');
@@ -142,7 +153,7 @@ export async function readChatGPTStream(
   }
 }
 
-/** Subscription quota only. Fixed public endpoint, no Codex harness, retries or billing fallback. */
+/** Subscription quota only. Fixed public endpoint, no Codex harness or billing fallback; the one retry is for a runaway reply. */
 export class ChatGPTClient {
   readonly model: string;
   private catalog?: string[];
@@ -163,6 +174,9 @@ export class ChatGPTClient {
       signal,
       undefined,
       responsesActionFormat(context.choices),
+      undefined,
+      undefined,
+      DECISION_STREAM_BYTE_LIMIT,
     );
   }
   async models(): Promise<Array<{ slug: string; displayName: string }>> {
@@ -199,6 +213,36 @@ export class ChatGPTClient {
     format?: ReturnType<typeof responsesActionFormat>,
     maxOutputBytes?: number,
     maxOutputTokens?: number,
+    maxStreamBytes?: number,
+  ): Promise<string> {
+    const request = () =>
+      this.attempt(
+        messages,
+        signal,
+        onDelta,
+        format,
+        maxOutputBytes,
+        maxOutputTokens,
+        maxStreamBytes,
+      );
+    try {
+      return await request();
+    } catch (error) {
+      // A reply that ran away or was cut off is the model's answer going wrong, not the
+      // connection: the same request is sent once more. Any other failure is final.
+      if (!(error instanceof ChatGPTError) || !REPLY_SHAPED.includes(error.code)) throw error;
+      this.options.onRetry?.();
+      return await request();
+    }
+  }
+  private async attempt(
+    messages: ReturnType<typeof decisionMessages>,
+    signal: AbortSignal | undefined,
+    onDelta: ((text: string) => void) | undefined,
+    format: ReturnType<typeof responsesActionFormat> | undefined,
+    maxOutputBytes: number | undefined,
+    maxOutputTokens: number | undefined,
+    maxStreamBytes: number | undefined,
   ): Promise<string> {
     let sent = false;
     try {
@@ -240,6 +284,7 @@ export class ChatGPTClient {
         },
         onDelta,
         maxOutputBytes,
+        maxStreamBytes,
       );
     } catch (error) {
       const failure =

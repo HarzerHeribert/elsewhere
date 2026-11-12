@@ -11,7 +11,7 @@ import {
 
 const MAX_MARKS = 24;
 
-/** Timekeeping: the shadow of the pointer, and marks scratched at its tip. */
+/** Timekeeping: a horizontal dial with a vertical pin; marks are scratched at the shadow tip. */
 export const sundial: Mechanism = {
   controls: [
     act('read', 'read the shadow of the pointer'),

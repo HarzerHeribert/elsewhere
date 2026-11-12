@@ -1,15 +1,21 @@
 import {
-  DAY,
-  HOUR,
   angleDiff,
   bearing,
   control,
-  mod,
   numberOf,
   round,
   worldConditions,
   type Mechanism,
 } from './common.js';
+import {
+  STARS,
+  horizontalOf,
+  moonPosition,
+  phaseWords,
+  starHorizontal,
+  wandererMoonOffsets,
+  wandererPosition,
+} from './sky.js';
 
 export interface SkyBody {
   /** What the eyepiece shows. */
@@ -18,27 +24,19 @@ export interface SkyBody {
   elevation: number;
   /** 0 (barely there) to 1 (bright): how little sharpness it takes to tell it apart. */
   brightness: number;
+  /** What the star chart fixed to the stand prints for it, where it is a chart star. */
+  label?: string;
+  /** Set for the wanderer: the points that circle it, east (+) and west (-) in planet radii. */
+  points?: number[];
 }
 
-/** Five lights circle together at one rate; the wanderer drifts against them over days. */
-const LIGHTS = [
-  { seen: 'a steady yellowish light', bearing: 20, elevation: 52, brightness: 0.9 },
-  { seen: 'a steady white light', bearing: 95, elevation: 38, brightness: 0.8 },
-  { seen: 'a steady bluish light', bearing: 160, elevation: 61, brightness: 0.6 },
-  { seen: 'a faint reddish light', bearing: 232, elevation: 29, brightness: 0.3 },
-  { seen: 'a faint cluster', bearing: 301, elevation: 44, brightness: 0.15 },
-];
-const WANDERER = { seen: 'a steady white light', bearing: 58, elevation: 47, brightness: 0.75 };
 /** Half the width of the eyepiece's view, in degrees of bearing. */
 const FIELD = 8;
-const SIDEREAL_HOURS = 23.934;
-const DRIFT_PER_DAY = 3.7;
-const LUNAR_DAY_HOURS = 24.84;
+/** Seen from the lowest altitude at which anything can be made out through the haze. */
+const HORIZON_HAZE = 1;
 
-const horizon = (hour: number) => ({
-  elevation: 60 * Math.sin((2 * Math.PI * (mod(hour, 24) - 6)) / 24) - 5,
-  bearing: mod(90 + (mod(hour, 24) - 6) * 15, 360),
-});
+const brightnessOf = (magnitude: number) => Math.max(0.15, Math.min(1, (3 - magnitude) / 4.5));
+const WORDS = ['no', 'one', 'two', 'three', 'four'];
 
 /** Everything above the horizon at a world time. Hidden: only `aim` ever reports from it. */
 export function skyAt(now: number): SkyBody[] {
@@ -51,21 +49,39 @@ export function skyAt(now: number): SkyBody[] {
       elevation: sunElevationDeg,
       brightness: 1,
     });
-  const moon = horizon((now / HOUR) * (24 / LUNAR_DAY_HOURS) + 9);
-  if (moon.elevation > 0)
+  const moonAt = moonPosition(now);
+  const moon = horizontalOf(moonAt.raDeg, moonAt.decDeg, now);
+  if (moon.elevationDeg > 0)
     bodies.push({
-      seen: 'the moon',
-      bearing: moon.bearing,
-      elevation: moon.elevation,
-      brightness: 0.55,
+      seen: `the moon, ${phaseWords(moonAt.elongationDeg)}`,
+      bearing: moon.bearingDeg,
+      elevation: moon.elevationDeg,
+      brightness: 0.55 + 0.4 * moonAt.lit,
     });
   if (sunElevationDeg < -6) {
-    const turn = (360 * now) / (SIDEREAL_HOURS * HOUR);
-    for (const light of LIGHTS) bodies.push({ ...light, bearing: mod(light.bearing + turn, 360) });
-    bodies.push({
-      ...WANDERER,
-      bearing: mod(WANDERER.bearing + turn + (DRIFT_PER_DAY * now) / DAY, 360),
-    });
+    for (const star of STARS) {
+      const place = starHorizontal(star, now);
+      if (place.elevationDeg < HORIZON_HAZE) continue;
+      bodies.push({
+        seen: `a steady ${star.colour} light`,
+        bearing: place.bearingDeg,
+        elevation: place.elevationDeg,
+        brightness: brightnessOf(star.magnitude),
+        label: star.label,
+      });
+    }
+    const wanderer = wandererPosition(now);
+    const place = horizontalOf(wanderer.raDeg, wanderer.decDeg, now);
+    if (place.elevationDeg >= HORIZON_HAZE)
+      bodies.push({
+        seen: 'a steady cream-white light',
+        bearing: place.bearingDeg,
+        elevation: place.elevationDeg,
+        brightness: 0.95,
+        points: wandererMoonOffsets(now)
+          .filter((point) => !point.hidden)
+          .map((point) => point.offset),
+      });
   }
   return bodies;
 }
@@ -100,14 +116,26 @@ export const telescope: Mechanism = {
       .filter((body) => Math.abs(angleDiff(body.bearing, target)) <= FIELD)
       .sort((a, b) => b.brightness - a.brightness);
     // A sharp eyepiece tells a body apart; an unsharp one still shows the bright ones as a patch.
+    const crisp = sharpness > 0.75;
     const told = inView
-      .map((body) =>
-        sharpness >= 0.97 - 0.85 * body.brightness
-          ? `${body.seen}, ${round(body.elevation, 0)} degrees up`
-          : body.brightness >= 0.5
-            ? `a blurred bright patch, ${round(body.elevation, 0)} degrees up`
-            : undefined,
-      )
+      .map((body) => {
+        if (sharpness >= 0.97 - 0.85 * body.brightness) {
+          let line = `${body.seen}, ${round(body.elevation, 0)} degrees up`;
+          if (crisp && body.label) line += `, marked ${body.label} on the chart`;
+          if (crisp && body.points) {
+            const count = Math.min(4, body.points.length);
+            const sides = body.points
+              .slice()
+              .sort((a, b) => a - b)
+              .map((offset) => `${round(Math.abs(offset) / 2)} ${offset > 0 ? 'east' : 'west'}`);
+            line += `, with ${WORDS[count]} tiny ${count === 1 ? 'point' : 'points'} in a line beside it${count ? ` at ${sides.join(', ')} planet-diameters from it` : ''}`;
+          }
+          return line;
+        }
+        return body.brightness >= 0.5
+          ? `a blurred bright patch, ${round(body.elevation, 0)} degrees up`
+          : undefined;
+      })
       .filter((line): line is string => Boolean(line))
       .slice(0, 3);
     const head = `Aimed along ${bearing(target)} degrees with the ring at ${ring}`;

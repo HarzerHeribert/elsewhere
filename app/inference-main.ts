@@ -44,6 +44,7 @@ import {
   validatePublicExpression,
 } from '../packages/adapters/src/models/expression';
 import { createUnconfiguredInferenceService } from '../packages/inference/src/unconfigured';
+import { createHourlyUsageLog } from './usage-log';
 
 // No dotenv discovery: this process receives only its own explicitly installed secrets.
 process.umask(0o077);
@@ -55,16 +56,33 @@ try {
   const credentials = new ChatGPTStore(config.INFERENCE_DATA_ROOT, config.CHATGPT_PROFILE);
   await credentials.hostId(); // Stable remote-host identity exists before importing a session.
   const session = new ChatGPTSession(credentials);
+  // What one dispatch used: summed over the requests it sent (a reply that ran away is sent
+  // again once), and unknown as soon as any of them is.
   let usage: ModelUsage | undefined;
+  let usageUnknown = false;
+  const hourly = createHourlyUsageLog((line) => console.warn(line));
   const client = new ChatGPTClient(session, {
     model: config.MODEL_NAME,
     timeoutMs: config.MODEL_TIMEOUT_MS,
     onUsageDetails: (value) => {
-      usage = value;
+      hourly.call(value);
+      if (!value || usageUnknown) {
+        usageUnknown = true;
+        usage = undefined;
+      } else
+        usage = usage
+          ? {
+              inputTokens: usage.inputTokens + value.inputTokens,
+              outputTokens: usage.outputTokens + value.outputTokens,
+              cachedInputTokens: usage.cachedInputTokens + value.cachedInputTokens,
+            }
+          : value;
     },
+    onRetry: () => hourly.retried(),
   });
   const dispatch = async (input: DecisionContext | ReflectionInput, signal: AbortSignal) => {
     usage = undefined;
+    usageUnknown = false;
     let text: string | undefined;
     const portrait = 'form' in input;
     try {
@@ -149,6 +167,7 @@ try {
         reflection: dispatch,
         expression: async (input, signal, onDelta) => {
           usage = undefined;
+          usageUnknown = false;
           try {
             const text = await client.text(
               expressionMessages(HUBERT_IDENTITY, input),

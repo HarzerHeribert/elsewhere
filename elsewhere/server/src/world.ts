@@ -34,7 +34,7 @@ const copy = <T>(value: T): T => structuredClone(value);
  */
 const PLACE_TEXT = {
   workshop:
-    'A sheltered place for experiments and unfinished ideas, with a workbench, a window with a glass prism on its sill, drawers of seed and an unfamiliar mechanism.',
+    'A sheltered place for experiments and unfinished ideas, with a workbench, a window with a glass prism on its sill, drawers of seed and a pendulum on a stand.',
   courtyard:
     'An open garden with a bench, a mailbox, a sundial, an easel, a bed of seedlings and room to wonder.',
   orchard:
@@ -46,44 +46,183 @@ const PLACE_TEXT = {
   meadow:
     'Open paths connect Elsewhere’s distinct places, with standing stones, a wind flag with a tally board and a stand for launching a water rocket.',
 } as const;
-const PREVIOUS_PLACE_TEXT: Record<string, string> = {
-  workshop: 'A sheltered place for experiments and unfinished ideas.',
-  courtyard: 'An open garden with a bench, a mailbox, and room to wonder.',
-  orchard: 'An old apple grove with a wind chime and a path between the trees.',
-  pond: 'Still water, reeds, and a place to watch reflections.',
-  library: 'A quiet reading room with maps and books about small mechanisms.',
-  meadow: 'Open paths connect Elsewhere’s distinct places.',
+const PREVIOUS_PLACE_TEXT: Record<string, string[]> = {
+  workshop: [
+    'A sheltered place for experiments and unfinished ideas.',
+    'A sheltered place for experiments and unfinished ideas, with a workbench, a window with a glass prism on its sill, drawers of seed and an unfamiliar mechanism.',
+  ],
+  courtyard: ['An open garden with a bench, a mailbox, and room to wonder.'],
+  orchard: ['An old apple grove with a wind chime and a path between the trees.'],
+  pond: ['Still water, reeds, and a place to watch reflections.'],
+  library: ['A quiet reading room with maps and books about small mechanisms.'],
+  meadow: ['Open paths connect Elsewhere’s distinct places.'],
 };
 const TEXT = {
+  artifact:
+    'A cord, five brass bobs and a protractor arc on a stand beside the workbench; the cord can be set to a length, a bob hung and let swing.',
   window:
-    'A bright window with a deep sill and a glass prism standing on it; the prism can be turned and the light on the sill read.',
-  garden: 'A raised bed of three small seedlings that can be watered, shaded and measured.',
+    'A bright window with a deep sill, a glass prism on a turntable standing on it and a paper screen behind; the prism can be turned and the light on the screen read.',
+  garden: 'A raised bed of three runner-bean seedlings that can be watered, shaded and measured.',
   'orchard-tree':
     'A branching tree in the orchard, with uneven fruit and a shaded trunk; its low branch can be counted and shaken.',
   'pond-water':
     'A shallow pond reflecting the trees and sky; stones can be dropped or skipped on it and a leaf boat sailed.',
   'reading-table': 'A broad table beside an open notebook, a place to write.',
   'lookout-telescope':
-    'A public brass telescope on a three-legged stand; its focus can be turned and it can be aimed along a bearing.',
+    'A public brass telescope on a three-legged stand, with a star chart fixed to the stand; its focus can be turned and it can be aimed along a bearing.',
   windchime:
     'Small copper tubes hung from a wooden frame; each tube can be struck, measured and its collar moved.',
-  sundial: 'A low stone circle with a copper pointer; its shadow can be read and marked.',
+  sundial:
+    'A low stone circle with a slanted copper pointer and a short upright pin; the shadow of the pin can be read and marked.',
   'weather-marker':
-    'A simple wind flag beside the path to the lookout, with a tally board beside it.',
+    'A simple wind flag beside the path to the lookout, with a tally board and a pole painted in numbered bands.',
   'standing-stones':
     'Weathered stones beside the orchard path that can be tapped, measured, paced between and sighted along.',
+  easel:
+    'A field easel beside the garden with a board and tins of alizarin crimson, cadmium yellow and ultramarine blue paint; colours can be mixed and a view framed.',
+  'seed-drawers':
+    'A cabinet of six drawers of garden-pea seed beside a sowing tray; two lines can be crossed, sown and the plants counted.',
+  'launch-stand':
+    'A tripod holding a 1.5 litre bottle rocket in the meadow; it can be filled, pumped, tilted and launched.',
 } as const;
-const PREVIOUS_OBJECT_TEXT: Record<string, string> = {
-  window: 'A bright window with a deep sill.',
-  garden: 'A raised bed of small plants.',
-  'orchard-tree': 'A branching tree in the orchard, with uneven fruit and a shaded trunk.',
-  'pond-water': 'A shallow pond reflecting the trees and sky.',
-  'reading-table': 'A broad table beside an open notebook.',
-  'lookout-telescope': 'A public brass telescope on a three-legged stand.',
-  windchime: 'Small copper tubes hung from a wooden frame.',
-  sundial: 'A low stone circle with a copper pointer.',
-  'weather-marker': 'A simple wind flag beside the path to the lookout.',
-  'standing-stones': 'Three weathered stones beside the orchard path.',
+const PREVIOUS_OBJECT_TEXT: Record<string, string[]> = {
+  artifact: ['Something small rests beside the workbench.'],
+  window: [
+    'A bright window with a deep sill.',
+    'A bright window with a deep sill and a glass prism standing on it; the prism can be turned and the light on the sill read.',
+  ],
+  garden: [
+    'A raised bed of small plants.',
+    'A raised bed of three small seedlings that can be watered, shaded and measured.',
+  ],
+  'orchard-tree': ['A branching tree in the orchard, with uneven fruit and a shaded trunk.'],
+  'pond-water': ['A shallow pond reflecting the trees and sky.'],
+  'reading-table': ['A broad table beside an open notebook.'],
+  'lookout-telescope': [
+    'A public brass telescope on a three-legged stand.',
+    'A public brass telescope on a three-legged stand; its focus can be turned and it can be aimed along a bearing.',
+  ],
+  windchime: ['Small copper tubes hung from a wooden frame.'],
+  sundial: [
+    'A low stone circle with a copper pointer.',
+    'A low stone circle with a copper pointer; its shadow can be read and marked.',
+  ],
+  'weather-marker': [
+    'A simple wind flag beside the path to the lookout.',
+    'A simple wind flag beside the path to the lookout, with a tally board beside it.',
+  ],
+  'standing-stones': ['Three weathered stones beside the orchard path.'],
+  easel: [
+    'A field easel beside the garden with a board and tins of red, yellow and blue paint; colours can be mixed and a view framed.',
+  ],
+  'seed-drawers': [
+    'A cabinet of six drawers of seed beside a sowing tray; two lines can be crossed, sown and the seedlings counted.',
+  ],
+  'launch-stand': [
+    'A tripod holding a bottle rocket in the meadow; it can be filled, pumped, tilted and launched.',
+  ],
+};
+/**
+ * What each working object says when inspected: one short plate of what the thing physically is,
+ * in the terms a person would look up. Saved worlds that still carry the previous plate get this.
+ */
+const PLATE: Record<string, { detail: string; previous: string[] }> = {
+  artifact: {
+    detail:
+      'A stand of oak holds a braided cotton cord from a pivot clamp. Behind it is a protractor arc marked in degrees, and a steel rule runs along the stand. Five brass spheres of 50, 100, 200, 350 and 500 g hang in a rack, each with a hook for the cord: a simple pendulum rig, as in a school physics laboratory.',
+    previous: [
+      'It is a tiny hand-cranked weather vane with a crooked copper fin. Turning the crank makes the fin wobble instead of spin.',
+    ],
+  },
+  windchime: {
+    detail:
+      'Five hollow copper tubes, 22 mm across with a 1 mm wall, hang by cords from a wooden frame, each tied where it rings most freely. They are cut to different lengths, and a sliding brass collar on each can shorten the part that sounds. Five tubes make an uneven chord when the wind changes.',
+    previous: [
+      'Five tubes make an uneven chord when the wind changes. The shortest tube sounds first.',
+    ],
+  },
+  sundial: {
+    detail:
+      'A horizontal dial of limestone, its rim marked in twelve parts, carries a copper style (gnomon) cut to an angle of 51 degrees, and a vertical brass pin 18 cm tall whose shadow tip can be marked.',
+    previous: [
+      'The marks around the dial divide the day into twelve parts. Its shadow offers a second way to notice time passing.',
+    ],
+  },
+  'lookout-telescope': {
+    detail:
+      'A brass refractor with an 80 mm front lens on a three-legged stand with a bearing ring. Its focus ring is stiff. A printed star chart is fixed to the stand; it prints the Greek-letter names of the brightest stars in their constellations.',
+    previous: [
+      'The telescope’s focus ring is stiff. Through its lens, a pale moon sits above the edge of the world.',
+    ],
+  },
+  'pond-water': {
+    detail:
+      'A breeze breaks the reflection into ripples. The pond is shallow, still fresh water at about 15 degrees Celsius, with a muddy bank 2.0 m from where pebbles are dropped. Pebbles of five sizes, from a pea to a hen’s egg, lie on the shore beside flat slate skipping stones and willow-leaf boats with a twig mast.',
+    previous: [
+      'A breeze breaks the reflection into ripples. Three reeds sway out of time with one another.',
+    ],
+  },
+  'weather-marker': {
+    detail:
+      'A flag of red ripstop nylon flies from a 2.4 m wooden pole whose lower part is painted in thirteen bands, numbered 0 to 12, each with a short phrase for what the wind does on land. The scale is the Beaufort scale. The flag’s frayed edge flicks back and forth above the path.',
+    previous: [
+      'The flag turns with the breeze. Its frayed edge flicks back and forth above the path.',
+    ],
+  },
+  garden: {
+    detail:
+      'Three runner-bean seedlings (Phaseolus coccineus) stand in a raised bed of garden loam and lean toward the same patch of light.',
+    previous: [
+      'Three seedlings lean toward the same patch of light. One leaf has an unexpectedly geometric edge.',
+    ],
+  },
+  'orchard-tree': {
+    detail:
+      'An old ‘Belle de Boskoop’ apple, a Dutch variety raised at Boskoop in the 1850s, with large, russet-skinned fruit. The apples grow in clusters. A fork in the trunk holds a small, empty bird’s nest.',
+    previous: [
+      'The apples grow in clusters. A fork in the trunk holds a small, empty bird’s nest.',
+    ],
+  },
+  window: {
+    detail:
+      'An equilateral prism of crown glass, 60 degrees at its apex, stands on a turntable on the sill. A shutter has an adjustable slit for the sunlight, and a paper screen is clipped 500 mm behind the prism.',
+    previous: ['Soft light falls across an empty sill. From here the courtyard sounds distant.'],
+  },
+  easel: {
+    detail:
+      'The board is clipped with a sheet of paper. Three tins of artists’ paint stand open on the ledge, labelled alizarin crimson, cadmium yellow and ultramarine blue, and a rag is stiff with old colour.',
+    previous: [
+      'The board is clipped with a sheet of paper. Three tins of paint stand open on the ledge, and a rag is stiff with old colour.',
+    ],
+  },
+  'pinned-music-box': {
+    detail:
+      'A brass cylinder with sixteen rows of tiny holes turns against a steel comb of eight teeth, tuned in equal temperament to a major scale that starts at middle C. A governor lever sits at its side.',
+    previous: [
+      'A brass cylinder with sixteen rows of tiny holes turns against a steel comb of eight teeth. A governor lever sits at its side.',
+    ],
+  },
+  'specimen-tray': {
+    detail:
+      'Six numbered slots hold a pigeon’s contour feather, a runner-bean leaf, a pinch of medium sand, a moth’s forewing, a drop of pond water and a scrap of ordinary printing paper. The brass lens turns from 2 to 60 times.',
+    previous: [
+      'Six numbered slots hold a feather, a leaf, a pinch of sand, a moth wing, a drop of pond water and a scrap of paper.',
+    ],
+  },
+  'seed-drawers': {
+    detail:
+      'Each drawer is labelled with a number only and holds dried garden peas (Pisum sativum). A tray of damp soil waits on the shelf below.',
+    previous: [
+      'Each drawer is labelled with a number only. A tray of damp soil waits on the shelf below.',
+    ],
+  },
+  'launch-stand': {
+    detail:
+      'A clear 1.5 litre PET bottle, 89 mm across with a 21.5 mm opening and an empty mass of 0.12 kg, hangs mouth down in a wooden tripod. A rubber bung seals it and a bicycle pump hose with a pressure gauge in bar feeds it. The grass around it is flattened and damp.',
+    previous: [
+      'A clear bottle with a cork and a bicycle pump hose sits in a wooden tripod. The grass around it is flattened and damp.',
+    ],
+  },
 };
 
 export function createInitialWorld(now = Date.now()): WorldState {
@@ -196,7 +335,7 @@ export function createInitialWorld(now = Date.now()): WorldState {
         color: '#bdd5cd',
         tags: ['light', 'quiet', 'workshop'],
         affordances: ['inspect', 'rest'],
-        detail: 'Soft light falls across an empty sill. From here the courtyard sounds distant.',
+        detail: PLATE.window.detail,
       },
       {
         id: 'mailbox',
@@ -225,14 +364,13 @@ export function createInitialWorld(now = Date.now()): WorldState {
         color: '#8ba776',
         tags: ['nature', 'patterns', 'courtyard'],
         affordances: ['inspect', 'interact'],
-        detail:
-          'Three seedlings lean toward the same patch of light. One leaf has an unexpectedly geometric edge.',
+        detail: PLATE.garden.detail,
       },
       {
         id: 'artifact',
-        name: 'An unfamiliar object',
+        name: 'The pendulum stand',
         kind: 'artifact',
-        description: 'Something small rests beside the workbench.',
+        description: TEXT.artifact,
         position: { x: -4.5, z: -2 },
         radius: 0.35,
         elevation: 1.19,
@@ -241,8 +379,7 @@ export function createInitialWorld(now = Date.now()): WorldState {
         color: '#cb8b60',
         tags: ['unfamiliar', 'mechanism', 'workshop'],
         affordances: ['inspect', 'interact'],
-        detail:
-          'It is a tiny hand-cranked weather vane with a crooked copper fin. Turning the crank makes the fin wobble instead of spin.',
+        detail: PLATE.artifact.detail,
       },
     ],
     residents: [
@@ -277,16 +414,14 @@ function craftObjects(): WorldObject[] {
       id: 'easel',
       name: 'The easel',
       kind: 'painting-kit',
-      description:
-        'A field easel beside the garden with a board and tins of red, yellow and blue paint; colours can be mixed and a view framed.',
+      description: TEXT.easel,
       position: { x: 8.4, z: -5.2 },
       radius: 0.6,
       height: 1.5,
       color: '#c7a36a',
       tags: ['making', 'colour', 'courtyard'],
       affordances: ['inspect', 'work', 'interact'],
-      detail:
-        'The board is clipped with a sheet of paper. Three tins of paint stand open on the ledge, and a rag is stiff with old colour.',
+      detail: PLATE.easel.detail,
     },
     {
       id: 'pinned-music-box',
@@ -300,8 +435,7 @@ function craftObjects(): WorldObject[] {
       color: '#8a6a4b',
       tags: ['sound', 'making', 'library'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'A brass cylinder with sixteen rows of tiny holes turns against a steel comb of eight teeth. A governor lever sits at its side.',
+      detail: PLATE['pinned-music-box'].detail,
     },
     {
       id: 'specimen-tray',
@@ -317,38 +451,33 @@ function craftObjects(): WorldObject[] {
       color: '#9b8466',
       tags: ['discovery', 'small', 'library'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'Six numbered slots hold a feather, a leaf, a pinch of sand, a moth wing, a drop of pond water and a scrap of paper.',
+      detail: PLATE['specimen-tray'].detail,
     },
     {
       id: 'seed-drawers',
       name: 'The seed drawers',
       kind: 'seed-library',
-      description:
-        'A cabinet of six drawers of seed beside a sowing tray; two lines can be crossed, sown and the seedlings counted.',
+      description: TEXT['seed-drawers'],
       position: { x: -4, z: 3.6 },
       radius: 0.6,
       height: 1.7,
       color: '#9a7b57',
       tags: ['nature', 'patterns', 'workshop'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'Each drawer is labelled with a number only. A tray of damp soil waits on the shelf below.',
+      detail: PLATE['seed-drawers'].detail,
     },
     {
       id: 'launch-stand',
       name: 'The launch stand',
       kind: 'launch-stand',
-      description:
-        'A tripod holding a bottle rocket in the meadow; it can be filled, pumped, tilted and launched.',
+      description: TEXT['launch-stand'],
       position: { x: 4, z: 18 },
       radius: 0.7,
       height: 1,
       color: '#7fa4b8',
       tags: ['making', 'sky', 'meadow'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'A clear bottle with a cork and a bicycle pump hose sits in a wooden tripod. The grass around it is flattened and damp.',
+      detail: PLATE['launch-stand'].detail,
     },
   ];
 }
@@ -486,7 +615,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       color: '#77936a',
       tags: ['nature', 'patterns', 'orchard'],
       affordances: ['inspect', 'interact'],
-      detail: 'The apples grow in clusters. A fork in the trunk holds a small, empty bird’s nest.',
+      detail: PLATE['orchard-tree'].detail,
     },
     {
       id: 'pond-water',
@@ -501,8 +630,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       color: '#7bafa7',
       tags: ['water', 'patterns', 'quiet'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'A breeze breaks the reflection into ripples. Three reeds sway out of time with one another.',
+      detail: PLATE['pond-water'].detail,
     },
     {
       id: 'pond-bench',
@@ -555,8 +683,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       color: '#b7995b',
       tags: ['sky', 'mechanism', 'discovery'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'The telescope’s focus ring is stiff. Through its lens, a pale moon sits above the edge of the world.',
+      detail: PLATE['lookout-telescope'].detail,
     },
     {
       id: 'windchime',
@@ -569,8 +696,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       color: '#bf956d',
       tags: ['sound', 'patterns', 'nature'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'Five tubes make an uneven chord when the wind changes. The shortest tube sounds first.',
+      detail: PLATE.windchime.detail,
     },
     {
       id: 'sundial',
@@ -583,8 +709,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       color: '#bab69f',
       tags: ['time', 'patterns', 'sky'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'The marks around the dial divide the day into twelve parts. Its shadow offers a second way to notice time passing.',
+      detail: PLATE.sundial.detail,
     },
     {
       id: 'weather-marker',
@@ -597,8 +722,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       color: '#c19a6b',
       tags: ['weather', 'patterns', 'nature'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'The flag turns with the breeze. Its frayed edge flicks back and forth above the path.',
+      detail: PLATE['weather-marker'].detail,
     },
     {
       id: 'standing-stones',
@@ -714,42 +838,79 @@ function removeRetiredFeatures(input: WorldState): WorldState {
  * Give a saved world the working objects added since it was made, and the descriptions and
  * affordances that name what can be done at them. Text an operator changed is left alone.
  */
+const SKETCH = {
+  name: 'A pendulum sketch',
+  description: 'A little diagram Hubert made while investigating the pendulum stand.',
+  detail:
+    'Hubert’s sketch shows a cord, a bob and a protractor arc. A pencilled question asks whether the time of a swing depends on the bob. Beside it is a proposed experiment: change the bob and compare ten swings.',
+};
 const PREVIOUS_STONES_DETAIL =
   'Two stones lean toward each other; the third stands alone. Their shadows almost meet at the same point.';
+const PREVIOUS_STONES_DETAILS = [
+  PREVIOUS_STONES_DETAIL,
+  'Seven weathered stones stand in a loose ring; two of them lean toward each other. Their shadows almost meet at the same point.',
+];
 const STONES_DETAIL =
-  'Seven weathered stones stand in a loose ring; two of them lean toward each other. Their shadows almost meet at the same point.';
+  'Seven upright stones of weathered sandstone, between 0.9 and 2.1 m tall, stand in a loose ring on level ground, set out in the manner of the stone alignments of Neolithic and Bronze Age Europe.';
+
+const staleDescription = (object: WorldObject) =>
+  PREVIOUS_OBJECT_TEXT[object.id]?.includes(object.description) === true &&
+  object.description !== TEXT[object.id as keyof typeof TEXT];
+const staleDetail = (object: WorldObject) =>
+  object.id === 'standing-stones'
+    ? PREVIOUS_STONES_DETAILS.includes(object.detail ?? '')
+    : PLATE[object.id]?.previous.includes(object.detail ?? '') === true;
+const stalePlace = (place: WorldState['places'][number]) =>
+  PREVIOUS_PLACE_TEXT[place.id]?.includes(place.description) === true &&
+  place.description !== PLACE_TEXT[place.id as keyof typeof PLACE_TEXT];
+/** Mechanism state left by what an object used to be: the vane's fin and the garden's millimetres. */
+const OLD_STATE_KEYS: Record<string, string[]> = { artifact: ['fin'], garden: ['height'] };
+const staleState = (world: WorldState) =>
+  Object.entries(OLD_STATE_KEYS).some(([id, keys]) =>
+    keys.some((key) => world.mechanisms?.[id] && key in world.mechanisms[id]),
+  );
+/** The earlier sketch of the vane experiment, kept by its id. */
+const OLD_SKETCH_PREFIX = 'Hubert’s sketch shows a crank, an axle and a copper fin.';
 
 function upgradeWorkingObjects(input: WorldState): WorldState {
   const template = createInitialWorld(input.createdAt);
   const existing = new Set(input.objects.map((object) => object.id));
   const missing = craftObjects().filter((object) => !existing.has(object.id));
-  const plan = [
-    ...input.places.filter(
-      (place) =>
-        PREVIOUS_PLACE_TEXT[place.id] === place.description &&
-        place.description !== PLACE_TEXT[place.id as keyof typeof PLACE_TEXT],
-    ),
-    ...input.objects.filter(
+  const stale =
+    input.places.some(stalePlace) ||
+    input.objects.some(
       (object) =>
-        (PREVIOUS_OBJECT_TEXT[object.id] === object.description &&
-          object.description !== TEXT[object.id as keyof typeof TEXT]) ||
+        staleDescription(object) ||
+        staleDetail(object) ||
         (object.id === 'reading-table' && !object.affordances.includes('work')) ||
-        (object.id === 'standing-stones' && object.detail === PREVIOUS_STONES_DETAIL),
-    ),
-  ];
-  if (!missing.length && !plan.length) return input;
+        (object.id === 'weather-vane-sketch' && object.detail?.startsWith(OLD_SKETCH_PREFIX)),
+    ) ||
+    staleState(input);
+  if (!missing.length && !stale) return input;
   const world = copy(input);
   for (const place of world.places) {
     const text = PLACE_TEXT[place.id as keyof typeof PLACE_TEXT];
-    if (text && PREVIOUS_PLACE_TEXT[place.id] === place.description) place.description = text;
+    if (text && stalePlace(place)) place.description = text;
   }
   for (const object of world.objects) {
     const text = TEXT[object.id as keyof typeof TEXT];
-    if (text && PREVIOUS_OBJECT_TEXT[object.id] === object.description) object.description = text;
-    if (object.id === 'standing-stones' && object.detail === PREVIOUS_STONES_DETAIL)
-      object.detail = STONES_DETAIL;
+    if (text && staleDescription(object)) object.description = text;
+    if (staleDetail(object)) {
+      object.detail = object.id === 'standing-stones' ? STONES_DETAIL : PLATE[object.id].detail;
+      if (object.id === 'artifact' && object.name === 'An unfamiliar object')
+        object.name = 'The pendulum stand';
+    }
     if (object.id === 'reading-table' && !object.affordances.includes('work'))
       object.affordances = template.objects.find((item) => item.id === object.id)!.affordances;
+    if (object.id === 'weather-vane-sketch' && object.detail?.startsWith(OLD_SKETCH_PREFIX)) {
+      object.name = SKETCH.name;
+      object.description = SKETCH.description;
+      object.detail = SKETCH.detail;
+    }
+  }
+  for (const [id, keys] of Object.entries(OLD_STATE_KEYS)) {
+    const state = world.mechanisms?.[id];
+    if (state) for (const key of keys) delete state[key];
   }
   world.objects.push(...missing);
   world.version++;
@@ -1373,7 +1534,7 @@ export function executeWorldCommand(
           : command.type === 'inspect'
             ? `${resident.name} inspected ${object.name.toLowerCase()}. ${object.detail ?? object.description}`
             : command.type === 'work'
-              ? `${resident.name} sketched a working idea at the workbench: a small weather-vane experiment.`
+              ? `${resident.name} sketched a working idea at the workbench: a small pendulum experiment.`
               : command.type === 'interact'
                 ? `${resident.name} spent a moment with ${object.name.toLowerCase()}. ${object.detail ?? object.description}`
                 : `${resident.name} turned toward ${object.name.toLowerCase()}.`;
@@ -1382,26 +1543,25 @@ export function executeWorldCommand(
         if (!sketch)
           world.objects.push({
             id: 'weather-vane-sketch',
-            name: 'A weather-vane sketch',
+            name: SKETCH.name,
             kind: 'sketch',
-            description: 'A little diagram Hubert made while investigating the copper mechanism.',
+            description: SKETCH.description,
             position: { x: -6.7, z: -1.9 },
             radius: 0.25,
             height: 1.04,
             color: '#eee2bd',
             tags: ['making', 'mechanism', 'weather', 'workshop'],
             affordances: ['inspect'],
-            detail:
-              'Hubert’s sketch shows a crank, an axle and a copper fin. A pencilled question asks whether the bent fin rubs against the axle housing. Beside it is a proposed experiment: straighten the fin and compare three rotations.',
+            detail: SKETCH.detail,
           });
         else
-          sketch.detail = `${sketch.detail?.split(' Revision noted at')[0]} Revision noted at ${new Date(now).toISOString()}: check the fin clearance before changing the crank.`;
+          sketch.detail = `${sketch.detail?.split(' Revision noted at')[0]} Revision noted at ${new Date(now).toISOString()}: check the cord length before changing the bob.`;
         object.description =
-          'A wooden table with Hubert’s weather-vane sketch beside the unfinished mechanism.';
+          'A wooden table with Hubert’s pendulum sketch beside the pendulum stand.';
       }
       outcome.evidence =
         command.type === 'work'
-          ? 'A weather-vane experiment is sketched on paper at the workbench.'
+          ? 'A pendulum experiment is sketched on paper at the workbench.'
           : command.type === 'use' && used?.ok
             ? used.reading
             : command.type === 'inspect' || command.type === 'interact'
