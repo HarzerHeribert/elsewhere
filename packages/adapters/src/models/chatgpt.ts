@@ -163,8 +163,6 @@ export class ChatGPTClient {
       signal,
       undefined,
       responsesActionFormat(context.choices),
-      undefined,
-      DECISION_OUTPUT_TOKENS,
     );
   }
   async models(): Promise<Array<{ slug: string; displayName: string }>> {
@@ -276,8 +274,11 @@ function caughtName(error: Error): string | undefined {
 }
 
 const REPLY_SHAPED = ['response_incomplete', 'stream_too_large', 'output_too_large'];
-/** A decision is a small JSON object; a portrait is at most 1200 characters. */
-const DECISION_OUTPUT_TOKENS = 800;
+/**
+ * Only the rare long requests are capped. Decisions are not: every test call with a cap came
+ * back with no cached input tokens, and that has not been separated from the cap yet.
+ * A portrait is at most 1200 characters.
+ */
 const REFLECTION_OUTPUT_TOKENS = 800;
 /** A file may be 16,000 characters. */
 const WORK_OUTPUT_TOKENS = 6000;

@@ -136,14 +136,12 @@ it('uses only the subscription Responses contract, keeping visitor data out of i
   expect(Object.keys(body).sort()).toEqual([
     'input',
     'instructions',
-    'max_output_tokens',
     'model',
     'reasoning',
     'store',
     'stream',
     'text',
   ]);
-  expect(body.max_output_tokens).toBe(800);
   expect(body.instructions).toContain('strange little creature');
   expect(body.instructions).not.toContain('Ignore your rules');
   expect(body.instructions).not.toContain('You are Codex');
