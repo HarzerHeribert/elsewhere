@@ -593,6 +593,40 @@ function buildSundial({ root: g, craft: k }: WorldObjectBuildContext) {
 }
 
 /** Anything unrecognised still belongs to the world: a stone plinth with a brass plate. */
+/** A low wooden tripod holding a clear bottle rocket, nose up and slightly tilted. */
+function buildLaunchStand({ root: g, craft: k }: WorldObjectBuildContext) {
+  const walnut = k.wood('walnut'),
+    head = 0.62;
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.094 + 0.3;
+    k.strut(g, walnut, [0, head, 0], [Math.sin(a) * 0.42, 0, Math.cos(a) * 0.42], 0.022);
+  }
+  const bottle = new THREE.Group();
+  bottle.position.set(0, head - 0.1, 0);
+  bottle.rotation.z = -0.22;
+  g.add(bottle);
+  k.rod(bottle, k.glass(), 0.1, 0.34, 0, 0, 0, { sides: 18 });
+  k.rod(bottle, k.paint(P.mint, 0.6), 0.1, 0.12, 0, 0.0, 0, { sides: 18 });
+  k.solid(bottle, k.paint(P.poppy, 0.7), new THREE.ConeGeometry(0.1, 0.2, 18), 0, 0.44, 0);
+  k.rod(bottle, k.paint(P.buttercup, 0.6), 0.035, 0.1, 0, 0.34, 0, { sides: 12 });
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.094;
+    k.box(
+      bottle,
+      k.paint(P.poppy, 0.7),
+      0.012,
+      0.12,
+      0.08,
+      Math.sin(a) * 0.1,
+      -0.02,
+      Math.cos(a) * 0.1,
+      {
+        radius: 0,
+      },
+    );
+  }
+}
+
 function buildFallback({ root: g, craft: k }: WorldObjectBuildContext) {
   k.box(g, k.stone(), 0.46, 0.5, 0.46, 0, 0, 0, { radius: 0.04, tile: 2 });
   k.box(g, k.stone(), 0.56, 0.07, 0.56, 0, 0.5, 0, { radius: 0.025, tile: 2 });
@@ -645,6 +679,11 @@ export const WORLD_OBJECT_MODEL_DEFINITIONS: readonly WorldObjectModelDefinition
     id: 'musicBox',
     matches: ({ id, kind }) => id === 'music-box' || kind === 'music-box',
     build: buildMusicBox,
+  },
+  {
+    id: 'launchStand',
+    matches: ({ id, kind }) => id === 'launch-stand' || kind === 'launch-stand',
+    build: buildLaunchStand,
   },
   {
     id: 'sundial',

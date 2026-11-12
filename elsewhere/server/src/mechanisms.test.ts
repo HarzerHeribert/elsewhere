@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialWorld } from './world.js';
-import { mechanismFor, operate, worldConditions } from './mechanisms.js';
+import { mechanismFor, operate, worldConditions, type MechanismState } from './mechanisms/index.js';
 
 const world = createInitialWorld(0);
 const object = (id: string) => world.objects.find((item) => item.id === id)!;
@@ -8,13 +8,7 @@ const HOUR = 3_600_000;
 const day = Date.UTC(2026, 10, 9, 0, 0);
 const noon = day + 12 * HOUR;
 const midnight = day;
-const read = (
-  id: string,
-  control: string,
-  value?: number,
-  state?: Record<string, number>,
-  at = noon,
-) => {
+const read = (id: string, control: string, value?: number, state?: MechanismState, at = noon) => {
   const result = operate(object(id), control, value, state, at);
   if (!result.ok) throw new Error(result.problem);
   return result;
@@ -109,7 +103,7 @@ describe('mechanisms', () => {
   it('refuses an unknown control or a value out of range with a helpful problem', () => {
     const unknown = operate(object('windchime'), 'pluck', undefined, undefined, noon);
     expect(unknown).toMatchObject({ ok: false });
-    expect(!unknown.ok && unknown.problem).toMatch(/strike, listen/);
+    expect(!unknown.ok && unknown.problem).toMatch(/strike, listen, pick, measure, shift/);
     const range = operate(object('windchime'), 'strike', 9, undefined, noon);
     expect(!range.ok && range.problem).toMatch(/1 to 5/);
     expect(operate(object('windchime'), 'strike', undefined, undefined, noon).ok).toBe(false);
