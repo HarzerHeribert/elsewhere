@@ -152,7 +152,7 @@ export interface WorldState {
   visitors?: WorldVisitor[];
   entities?: WorldEntity[];
   /** Hidden per-object mechanism state. Never projected publicly or to a model. */
-  mechanisms?: Record<string, Record<string, number>>;
+  mechanisms?: Record<string, Record<string, number | number[]>>;
 }
 /** Public objects intentionally omit inspection-only/private detail. */
 export type PublicWorldObject = Omit<WorldObject, 'detail'>;

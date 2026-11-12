@@ -18,7 +18,7 @@ import {
   type WorldResident,
   type WorldState,
 } from '@elsewhere/character-interfaces';
-import { mechanismFor, operate } from './mechanisms.js';
+import { mechanismFor, operate } from './mechanisms/index.js';
 import { advanceEntities, createInitialEntities, publicEntity } from './entities.js';
 
 const SPEED = 0.0022; // world units / millisecond
@@ -27,6 +27,64 @@ const distance = (a: Position, b: Position) => Math.hypot(a.x - b.x, a.z - b.z);
 const inside = (p: Position, b: Bounds, pad = 0) =>
   p.x >= b.minX + pad && p.x <= b.maxX - pad && p.z >= b.minZ + pad && p.z <= b.maxZ - pad;
 const copy = <T>(value: T): T => structuredClone(value);
+
+/**
+ * Canonical descriptions of places and working objects, with what they said before each
+ * thing that can be worked there was named. A saved world keeps any text the operator changed.
+ */
+const PLACE_TEXT = {
+  workshop:
+    'A sheltered place for experiments and unfinished ideas, with a workbench, a window with a glass prism on its sill, drawers of seed and an unfamiliar mechanism.',
+  courtyard:
+    'An open garden with a bench, a mailbox, a sundial, an easel, a bed of seedlings and room to wonder.',
+  orchard:
+    'An old apple grove with an apple tree whose low branch can be counted and shaken, a wind chime and a path between the trees.',
+  pond: 'Still water, reeds, and a place to watch reflections, where stones can be dropped or skipped and a leaf boat sailed.',
+  library:
+    'A quiet reading room with maps and books about small mechanisms, a reading table for writing, a tray of specimens under a lens and a music box.',
+  lookout: 'An open observation point above the meadow, with a telescope pointed at the sky.',
+  meadow:
+    'Open paths connect Elsewhere’s distinct places, with standing stones, a wind flag with a tally board and a stand for launching a water rocket.',
+} as const;
+const PREVIOUS_PLACE_TEXT: Record<string, string> = {
+  workshop: 'A sheltered place for experiments and unfinished ideas.',
+  courtyard: 'An open garden with a bench, a mailbox, and room to wonder.',
+  orchard: 'An old apple grove with a wind chime and a path between the trees.',
+  pond: 'Still water, reeds, and a place to watch reflections.',
+  library: 'A quiet reading room with maps and books about small mechanisms.',
+  meadow: 'Open paths connect Elsewhere’s distinct places.',
+};
+const TEXT = {
+  window:
+    'A bright window with a deep sill and a glass prism standing on it; the prism can be turned and the light on the sill read.',
+  garden: 'A raised bed of three small seedlings that can be watered, shaded and measured.',
+  'orchard-tree':
+    'A branching tree in the orchard, with uneven fruit and a shaded trunk; its low branch can be counted and shaken.',
+  'pond-water':
+    'A shallow pond reflecting the trees and sky; stones can be dropped or skipped on it and a leaf boat sailed.',
+  'reading-table': 'A broad table beside an open notebook, a place to write.',
+  'lookout-telescope':
+    'A public brass telescope on a three-legged stand; its focus can be turned and it can be aimed along a bearing.',
+  windchime:
+    'Small copper tubes hung from a wooden frame; each tube can be struck, measured and its collar moved.',
+  sundial: 'A low stone circle with a copper pointer; its shadow can be read and marked.',
+  'weather-marker':
+    'A simple wind flag beside the path to the lookout, with a tally board beside it.',
+  'standing-stones':
+    'Weathered stones beside the orchard path that can be tapped, measured, paced between and sighted along.',
+} as const;
+const PREVIOUS_OBJECT_TEXT: Record<string, string> = {
+  window: 'A bright window with a deep sill.',
+  garden: 'A raised bed of small plants.',
+  'orchard-tree': 'A branching tree in the orchard, with uneven fruit and a shaded trunk.',
+  'pond-water': 'A shallow pond reflecting the trees and sky.',
+  'reading-table': 'A broad table beside an open notebook.',
+  'lookout-telescope': 'A public brass telescope on a three-legged stand.',
+  windchime: 'Small copper tubes hung from a wooden frame.',
+  sundial: 'A low stone circle with a copper pointer.',
+  'weather-marker': 'A simple wind flag beside the path to the lookout.',
+  'standing-stones': 'Three weathered stones beside the orchard path.',
+};
 
 export function createInitialWorld(now = Date.now()): WorldState {
   const world: WorldState = {
@@ -40,13 +98,13 @@ export function createInitialWorld(now = Date.now()): WorldState {
       {
         id: 'workshop',
         name: 'The workshop',
-        description: 'A sheltered place for experiments and unfinished ideas.',
+        description: PLACE_TEXT.workshop,
         bounds: { minX: -9, maxX: -1, minZ: -6, maxZ: 5 },
       },
       {
         id: 'courtyard',
         name: 'The courtyard',
-        description: 'An open garden with a bench, a mailbox, and room to wonder.',
+        description: PLACE_TEXT.courtyard,
         bounds: { minX: -1, maxX: 10, minZ: -8, maxZ: 8 },
       },
     ],
@@ -131,7 +189,7 @@ export function createInitialWorld(now = Date.now()): WorldState {
         id: 'window',
         name: 'The workshop window',
         kind: 'window',
-        description: 'A bright window with a deep sill.',
+        description: TEXT.window,
         position: { x: -7, z: 2 },
         radius: 0.8,
         height: 1.7,
@@ -158,7 +216,7 @@ export function createInitialWorld(now = Date.now()): WorldState {
         id: 'garden',
         name: 'The little garden',
         kind: 'garden',
-        description: 'A raised bed of small plants.',
+        description: TEXT.garden,
         position: { x: 6.1, z: -3 },
         radius: 1,
         height: 0.5,
@@ -212,6 +270,89 @@ export function createInitialWorld(now = Date.now()): WorldState {
   return expandInitialLayout(world);
 }
 
+/** The working objects added after the first canonical layout, one per direction of inquiry. */
+function craftObjects(): WorldObject[] {
+  return [
+    {
+      id: 'easel',
+      name: 'The easel',
+      kind: 'painting-kit',
+      description:
+        'A field easel beside the garden with a board and tins of red, yellow and blue paint; colours can be mixed and a view framed.',
+      position: { x: 8.4, z: -5.2 },
+      radius: 0.6,
+      height: 1.5,
+      color: '#c7a36a',
+      tags: ['making', 'colour', 'courtyard'],
+      affordances: ['inspect', 'work', 'interact'],
+      detail:
+        'The board is clipped with a sheet of paper. Three tins of paint stand open on the ledge, and a rag is stiff with old colour.',
+    },
+    {
+      id: 'pinned-music-box',
+      name: 'The music box',
+      kind: 'music-box',
+      description:
+        'A cylinder music box on a stool beside the reading table; steps can be pinned and the tune played.',
+      position: { x: -15.6, z: -12.6 },
+      radius: 0.4,
+      height: 0.6,
+      color: '#8a6a4b',
+      tags: ['sound', 'making', 'library'],
+      affordances: ['inspect', 'interact'],
+      detail:
+        'A brass cylinder with sixteen rows of tiny holes turns against a steel comb of eight teeth. A governor lever sits at its side.',
+    },
+    {
+      id: 'specimen-tray',
+      name: 'The specimen tray',
+      kind: 'magnifying-glass',
+      description:
+        'A tray of six specimens on the reading table, with a lens whose power can be changed.',
+      position: { x: -17.4, z: -14.3 },
+      radius: 0.3,
+      elevation: 0.76,
+      height: 0.9,
+      observationHeight: 1.45,
+      color: '#9b8466',
+      tags: ['discovery', 'small', 'library'],
+      affordances: ['inspect', 'interact'],
+      detail:
+        'Six numbered slots hold a feather, a leaf, a pinch of sand, a moth wing, a drop of pond water and a scrap of paper.',
+    },
+    {
+      id: 'seed-drawers',
+      name: 'The seed drawers',
+      kind: 'seed-library',
+      description:
+        'A cabinet of six drawers of seed beside a sowing tray; two lines can be crossed, sown and the seedlings counted.',
+      position: { x: -4, z: 3.6 },
+      radius: 0.6,
+      height: 1.7,
+      color: '#9a7b57',
+      tags: ['nature', 'patterns', 'workshop'],
+      affordances: ['inspect', 'interact'],
+      detail:
+        'Each drawer is labelled with a number only. A tray of damp soil waits on the shelf below.',
+    },
+    {
+      id: 'launch-stand',
+      name: 'The launch stand',
+      kind: 'launch-stand',
+      description:
+        'A tripod holding a bottle rocket in the meadow; it can be filled, pumped, tilted and launched.',
+      position: { x: 4, z: 18 },
+      radius: 0.7,
+      height: 1,
+      color: '#7fa4b8',
+      tags: ['making', 'sky', 'meadow'],
+      affordances: ['inspect', 'interact'],
+      detail:
+        'A clear bottle with a cork and a bicycle pump hose sits in a wooden tripod. The grass around it is flattened and damp.',
+    },
+  ];
+}
+
 function expandInitialLayout(world: WorldState): WorldState {
   world.layoutVersion = 3;
   world.spatialVersion = 1;
@@ -221,32 +362,31 @@ function expandInitialLayout(world: WorldState): WorldState {
     {
       id: 'orchard',
       name: 'The orchard',
-      description: 'An old apple grove with a wind chime and a path between the trees.',
+      description: PLACE_TEXT.orchard,
       bounds: { minX: -29, maxX: -11, minZ: 8, maxZ: 24 },
     },
     {
       id: 'pond',
       name: 'The pond',
-      description: 'Still water, reeds, and a place to watch reflections.',
+      description: PLACE_TEXT.pond,
       bounds: { minX: 11, maxX: 30, minZ: 6, maxZ: 24 },
     },
     {
       id: 'library',
       name: 'The little library',
-      description: 'A quiet reading room with maps and books about small mechanisms.',
+      description: PLACE_TEXT.library,
       bounds: { minX: -29, maxX: -12, minZ: -24, maxZ: -9 },
     },
     {
       id: 'lookout',
       name: 'The lookout',
-      description:
-        'An open observation point above the meadow, with a telescope pointed at the sky.',
+      description: PLACE_TEXT.lookout,
       bounds: { minX: 12, maxX: 30, minZ: -24, maxZ: -10 },
     },
     {
       id: 'meadow',
       name: 'The meadow paths',
-      description: 'Open paths connect Elsewhere’s distinct places.',
+      description: PLACE_TEXT.meadow,
       bounds: { ...world.bounds },
     },
   );
@@ -339,7 +479,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       id: 'orchard-tree',
       name: 'The old apple tree',
       kind: 'tree',
-      description: 'A branching tree in the orchard, with uneven fruit and a shaded trunk.',
+      description: TEXT['orchard-tree'],
       position: { x: -20, z: 15 },
       radius: 1.5,
       height: 4.2,
@@ -352,7 +492,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       id: 'pond-water',
       name: 'The still pond',
       kind: 'pond',
-      description: 'A shallow pond reflecting the trees and sky.',
+      description: TEXT['pond-water'],
       position: { x: 20, z: 14 },
       radius: 4,
       footprint: { minX: 16, maxX: 24, minZ: 10, maxZ: 18 },
@@ -395,20 +535,20 @@ function expandInitialLayout(world: WorldState): WorldState {
       id: 'reading-table',
       name: 'The reading table',
       kind: 'table',
-      description: 'A broad table beside an open notebook.',
+      description: TEXT['reading-table'],
       position: { x: -18, z: -14 },
       radius: 1.2,
       height: 0.9,
       color: '#b08b62',
       tags: ['reading', 'quiet', 'making'],
-      affordances: ['inspect', 'interact'],
+      affordances: ['inspect', 'work', 'interact'],
       detail: 'The notebook contains a simple question: what makes a place worth returning to?',
     },
     {
       id: 'lookout-telescope',
       name: 'The lookout telescope',
       kind: 'telescope',
-      description: 'A public brass telescope on a three-legged stand.',
+      description: TEXT['lookout-telescope'],
       position: { x: 23, z: -18 },
       radius: 0.8,
       height: 1.6,
@@ -422,7 +562,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       id: 'windchime',
       name: 'The orchard wind chime',
       kind: 'windchime',
-      description: 'Small copper tubes hung from a wooden frame.',
+      description: TEXT.windchime,
       position: { x: -12, z: 8 },
       radius: 0.5,
       height: 2,
@@ -436,7 +576,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       id: 'sundial',
       name: 'The courtyard sundial',
       kind: 'sundial',
-      description: 'A low stone circle with a copper pointer.',
+      description: TEXT.sundial,
       position: { x: 9, z: -1 },
       radius: 0.8,
       height: 0.6,
@@ -450,7 +590,7 @@ function expandInitialLayout(world: WorldState): WorldState {
       id: 'weather-marker',
       name: 'The meadow weather marker',
       kind: 'weather-marker',
-      description: 'A simple wind flag beside the path to the lookout.',
+      description: TEXT['weather-marker'],
       position: { x: 23, z: -8 },
       radius: 0.45,
       height: 2.4,
@@ -464,16 +604,16 @@ function expandInitialLayout(world: WorldState): WorldState {
       id: 'standing-stones',
       name: 'The standing stones',
       kind: 'stones',
-      description: 'Three weathered stones beside the orchard path.',
+      description: TEXT['standing-stones'],
       position: { x: -10, z: 16 },
       radius: 1.2,
       height: 1.7,
       color: '#a9ae9b',
       tags: ['patterns', 'quiet', 'discovery'],
       affordances: ['inspect', 'interact'],
-      detail:
-        'Two stones lean toward each other; the third stands alone. Their shadows almost meet at the same point.',
+      detail: STONES_DETAIL,
     },
+    ...craftObjects(),
   );
   const entryPoints: Record<string, Position> = {
     workshop: { x: -3, z: 0 },
@@ -570,7 +710,57 @@ function removeRetiredFeatures(input: WorldState): WorldState {
   return world;
 }
 
+/**
+ * Give a saved world the working objects added since it was made, and the descriptions and
+ * affordances that name what can be done at them. Text an operator changed is left alone.
+ */
+const PREVIOUS_STONES_DETAIL =
+  'Two stones lean toward each other; the third stands alone. Their shadows almost meet at the same point.';
+const STONES_DETAIL =
+  'Seven weathered stones stand in a loose ring; two of them lean toward each other. Their shadows almost meet at the same point.';
+
+function upgradeWorkingObjects(input: WorldState): WorldState {
+  const template = createInitialWorld(input.createdAt);
+  const existing = new Set(input.objects.map((object) => object.id));
+  const missing = craftObjects().filter((object) => !existing.has(object.id));
+  const plan = [
+    ...input.places.filter(
+      (place) =>
+        PREVIOUS_PLACE_TEXT[place.id] === place.description &&
+        place.description !== PLACE_TEXT[place.id as keyof typeof PLACE_TEXT],
+    ),
+    ...input.objects.filter(
+      (object) =>
+        (PREVIOUS_OBJECT_TEXT[object.id] === object.description &&
+          object.description !== TEXT[object.id as keyof typeof TEXT]) ||
+        (object.id === 'reading-table' && !object.affordances.includes('work')) ||
+        (object.id === 'standing-stones' && object.detail === PREVIOUS_STONES_DETAIL),
+    ),
+  ];
+  if (!missing.length && !plan.length) return input;
+  const world = copy(input);
+  for (const place of world.places) {
+    const text = PLACE_TEXT[place.id as keyof typeof PLACE_TEXT];
+    if (text && PREVIOUS_PLACE_TEXT[place.id] === place.description) place.description = text;
+  }
+  for (const object of world.objects) {
+    const text = TEXT[object.id as keyof typeof TEXT];
+    if (text && PREVIOUS_OBJECT_TEXT[object.id] === object.description) object.description = text;
+    if (object.id === 'standing-stones' && object.detail === PREVIOUS_STONES_DETAIL)
+      object.detail = STONES_DETAIL;
+    if (object.id === 'reading-table' && !object.affordances.includes('work'))
+      object.affordances = template.objects.find((item) => item.id === object.id)!.affordances;
+  }
+  world.objects.push(...missing);
+  world.version++;
+  return world;
+}
+
 export function upgradeWorldLayout(input: WorldState): WorldState {
+  return upgradeWorkingObjects(upgradeLayout(input));
+}
+
+function upgradeLayout(input: WorldState): WorldState {
   input = removeRetiredFeatures(upgradeCanonicalObjectText(input));
   if ((input.layoutVersion ?? 1) >= 3 && (input.spatialVersion ?? 0) >= 1) return input;
   const world = copy(input);
@@ -1156,7 +1346,10 @@ export function executeWorldCommand(
       }
       let used: ReturnType<typeof operate> | undefined;
       if (command.type === 'use') {
-        used = operate(object, command.control, command.value, world.mechanisms?.[object.id], now);
+        used = operate(object, command.control, command.value, world.mechanisms?.[object.id], now, {
+          objects: world.objects,
+          places: world.places,
+        });
         if (!used.ok) {
           outcome.summary = used.problem;
           return { world, outcome };
