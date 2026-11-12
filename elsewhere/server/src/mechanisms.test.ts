@@ -45,18 +45,15 @@ describe('mechanisms', () => {
     expect(pitches[4]).toBeLessThan(1150);
   });
 
-  it('lets the vane slip and scrape by its hidden angle, and remembers a bend', () => {
-    const bent = read('artifact', 'turn', 10);
-    const straight = read('artifact', 'bend', 0);
-    expect(straight.state.fin).toBe(0);
-    const level = read('artifact', 'turn', 10, straight.state);
-    const [, rotationsBent, scrapesBent] = numbers(bent.reading);
-    const [, rotationsLevel, scrapesLevel] = numbers(level.reading);
-    expect(rotationsBent).toBeLessThan(rotationsLevel);
-    expect(scrapesBent).toBeGreaterThan(0);
-    expect(scrapesLevel).toBe(0);
-    const slight = read('artifact', 'bend', 4, straight.state);
-    expect(numbers(read('artifact', 'turn', 10, slight.state).reading)[2]).toBe(0);
+  it('remembers the cord length and the bob, and forgets what the old vane kept', () => {
+    const longer = read('artifact', 'length', 150);
+    const heavier = read('artifact', 'bob', 5, longer.state);
+    expect(heavier.state).toMatchObject({ length: 150, bob: 5 });
+    const old = read('artifact', 'length', 80, { fin: 7, uses: 2 });
+    expect(old.state).not.toHaveProperty('fin');
+    expect(read('artifact', 'release', 10, heavier.state).reading).toMatch(
+      /Released from 10 degrees with the 500 g bob on 150 cm of cord, ten full swings took [\d.]+ s/,
+    );
   });
 
   it('casts no shadow at night and different shadows at different hours', () => {
@@ -85,13 +82,11 @@ describe('mechanisms', () => {
     expect(later.best).not.toBe(night.best);
   });
 
-  it('has the pond ring arrive at the same time whatever the pebble', () => {
-    const seconds = [1, 2, 3, 4, 5].map(
-      (size) => numbers(read('pond-water', 'drop', size).reading)[0],
-    );
-    expect(Math.max(...seconds) - Math.min(...seconds)).toBeLessThan(0.4);
-    const rings = (size: number) => numbers(read('pond-water', 'drop', size).reading)[1];
-    expect(rings(5)).toBeGreaterThan(rings(1));
+  it('has bigger pebbles start longer ripples, and reports the spacing, speed and time to the bank', () => {
+    const reading = read('pond-water', 'drop', 3).reading;
+    expect(reading).toMatch(/rings lie [\d.]+ cm apart.*[\d.]+ cm\/s.*2\.0 m away after [\d.]+ s/);
+    const spacing = (size: number) => numbers(read('pond-water', 'drop', size).reading)[0];
+    expect(spacing(5)).toBeGreaterThan(spacing(1));
   });
 
   it('reads the flag, the stones and the chime in the air', () => {
@@ -117,6 +112,6 @@ describe('mechanisms', () => {
         mechanismFor,
       ),
     );
-    expect(text).not.toMatch(/wind speed|temperature|threshold|length|angle of|sun/i);
+    expect(text).not.toMatch(/wind speed|temperature|threshold|angle of|sun/i);
   });
 });

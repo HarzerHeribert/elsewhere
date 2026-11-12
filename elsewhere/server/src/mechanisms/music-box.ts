@@ -1,17 +1,21 @@
 import { act, control, listOf, numberOf, round, type Mechanism } from './common.js';
 
 const STEPS = 16;
-/** Hidden: the pitch in Hz of each tooth of the comb. */
-const TEETH = [220, 247.5, 264, 293.3, 330, 352, 396, 440];
-/** Ratios that ring cleanly together. */
-const SIMPLE = [1, 5 / 4, 4 / 3, 3 / 2, 5 / 3, 2];
+/** Middle C in Hz; the comb is tuned to C major in equal temperament from here. */
+const C4 = 261.63;
+/** Semitones above C4 of each of the eight teeth: C D E F G A B C. */
+const SEMITONES = [0, 2, 4, 5, 7, 9, 11, 12];
+export const TEETH = SEMITONES.map((semitones) => C4 * 2 ** (semitones / 12));
+/** Interval sizes in semitones that ring cleanly: unison, thirds, fourth, fifth, sixths, octave. */
+const CLEAN_SEMITONES = [0, 3, 4, 5, 7, 8, 9, 12];
 
-const cleanPair = (a: number, b: number) => {
-  const ratio = Math.max(a, b) / Math.min(a, b);
-  return SIMPLE.some((simple) => Math.abs(ratio - simple) / simple < 0.012);
+/** Whether two frequencies make a clean interval, judged from their ratio. */
+export const cleanPair = (a: number, b: number) => {
+  const semitones = Math.round(12 * Math.log2(Math.max(a, b) / Math.min(a, b)));
+  return CLEAN_SEMITONES.includes(semitones);
 };
 
-/** Composition: a pinned cylinder of 16 steps played against a comb of eight teeth. */
+/** Composition: a pinned cylinder of 16 steps played against a steel comb of eight teeth. */
 export const musicBox: Mechanism = {
   controls: [
     control('step', 'turn the cylinder to one step', 1, STEPS, 'step number'),

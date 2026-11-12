@@ -104,7 +104,7 @@ describe('the working objects in the world', () => {
     for (const text of [shown, seen]) {
       expect(text).not.toContain('"mechanisms"');
       expect(text).not.toMatch(
-        /"(uses|marks|tally|shift\d|notes|strokes|sownAt|sowing|gone|ground|cups|since|focus|turn|slit|pick|tempo|power|mother|father|fin)":/,
+        /"(uses|marks|tally|shift\d|notes|strokes|sownAt|sowing|gone|ground|cups|since|focus|turn|slit|pick|tempo|power|mother|father|fin|bob|length|heightCm)":/,
       );
       expect(text).not.toMatch(/sunElevation|windSpeed|airTemp|windBearing/);
     }
@@ -177,6 +177,41 @@ describe('upgrading a saved world', () => {
     expect(upgraded.version).toBeGreaterThan(old.version);
     expect(upgradeWorldLayout(upgraded)).toBe(upgraded);
     expect(old.objects.some((item) => item.id === 'easel')).toBe(false);
+  });
+
+  it('turns the old vane into the pendulum stand, drops the vane’s state and keeps the plate current', () => {
+    const old = previous();
+    const artifact = old.objects.find((item) => item.id === 'artifact')!;
+    artifact.name = 'An unfamiliar object';
+    artifact.description = 'Something small rests beside the workbench.';
+    artifact.detail =
+      'It is a tiny hand-cranked weather vane with a crooked copper fin. Turning the crank makes the fin wobble instead of spin.';
+    old.objects.find((item) => item.id === 'garden')!.detail =
+      'Three seedlings lean toward the same patch of light. One leaf has an unexpectedly geometric edge.';
+    old.places.find((place) => place.id === 'workshop')!.description =
+      'A sheltered place for experiments and unfinished ideas, with a workbench, a window with a glass prism on its sill, drawers of seed and an unfamiliar mechanism.';
+    old.mechanisms = {
+      artifact: { fin: 3, uses: 4 },
+      garden: { height: [12, 15, 9], since: 5, uses: 1 },
+    };
+    const upgraded = upgradeWorldLayout(old);
+    const fresh = createInitialWorld(noon);
+    const after = (id: string) => upgraded.objects.find((item) => item.id === id)!;
+    expect(after('artifact').name).toBe('The pendulum stand');
+    expect(after('artifact').description).toBe(
+      fresh.objects.find((item) => item.id === 'artifact')!.description,
+    );
+    expect(after('artifact').detail).toMatch(/pendulum rig/);
+    expect(after('garden').detail).toMatch(/Phaseolus coccineus/);
+    expect(after('weather-marker').description).toMatch(/numbered bands/);
+    expect(upgraded.places.find((place) => place.id === 'workshop')!.description).toMatch(
+      /pendulum/,
+    );
+    expect(upgraded.mechanisms).toEqual({ artifact: { uses: 4 }, garden: { since: 5, uses: 1 } });
+    expect(JSON.stringify(upgraded.objects.map((item) => item.detail))).not.toMatch(
+      /vane with a crooked/,
+    );
+    expect(upgradeWorldLayout(upgraded)).toBe(upgraded);
   });
 
   it('keeps text an operator changed and a resident’s stored readings', () => {

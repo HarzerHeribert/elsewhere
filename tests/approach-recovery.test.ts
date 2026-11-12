@@ -171,7 +171,8 @@ it('migrates exact old policy-laden object text without replacing customized con
   expect(updated.objects.find((o) => o.id === 'weather-marker')!.detail).not.toMatch(
     /simulated|external service/,
   );
-  expect(updated.version).toBe(world.version + 1);
+  // One bump for the corrected wording, one for the telescope and flag taking their plates.
+  expect(updated.version).toBe(world.version + 2);
   expect(world).toEqual(before);
   expect(upgradeWorldLayout(updated)).toBe(updated);
   const customized = structuredClone(before);

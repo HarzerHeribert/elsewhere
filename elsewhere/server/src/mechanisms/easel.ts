@@ -11,9 +11,9 @@ import {
 
 /** Hidden: pigment colours and how strongly each tints a mix. */
 const PIGMENTS = [
-  { key: 'red', rgb: [196, 38, 38], strength: 1 },
-  { key: 'yellow', rgb: [240, 200, 30], strength: 0.8 },
-  { key: 'blue', rgb: [30, 60, 170], strength: 1.5 },
+  { key: 'red', name: 'alizarin crimson', rgb: [196, 38, 52], strength: 1 },
+  { key: 'yellow', name: 'cadmium yellow', rgb: [245, 196, 24], strength: 0.8 },
+  { key: 'blue', name: 'ultramarine blue', rgb: [30, 50, 160], strength: 1.5 },
 ];
 const VIEW_DEGREES = 40;
 const MAX_THINGS = 6;
@@ -83,22 +83,40 @@ function view(scene: Scene | undefined, from: { x: number; z: number }, facing: 
 /** Illustration: three paints to mix, and a frame to hold up to the view. */
 export const easel: Mechanism = {
   controls: [
-    control('red', 'squeeze red paint onto the palette', 0, 10, 'parts of red'),
-    control('yellow', 'squeeze yellow paint onto the palette', 0, 10, 'parts of yellow'),
-    control('blue', 'squeeze blue paint onto the palette', 0, 10, 'parts of blue'),
+    control(
+      'red',
+      'squeeze alizarin crimson paint onto the palette',
+      0,
+      10,
+      'parts of alizarin crimson',
+    ),
+    control(
+      'yellow',
+      'squeeze cadmium yellow paint onto the palette',
+      0,
+      10,
+      'parts of cadmium yellow',
+    ),
+    control(
+      'blue',
+      'squeeze ultramarine blue paint onto the palette',
+      0,
+      10,
+      'parts of ultramarine blue',
+    ),
     act('dab', 'stir the palette and dab the mixed paint on the board'),
     control('frame', 'hold up the frame toward a bearing', 0, 359, 'compass bearing in degrees'),
   ],
   run: ({ control: id, value, state, object, scene }) => {
     if (id === 'red' || id === 'yellow' || id === 'blue')
       return {
-        reading: `The palette now holds ${value} ${value === 1 ? 'part' : 'parts'} of ${id}.`,
+        reading: `The palette now holds ${value} ${value === 1 ? 'part' : 'parts'} of ${PIGMENTS.find((pigment) => pigment.key === id)!.name}.`,
         state: { ...state, [id]: value as number },
       };
     const parts = PIGMENTS.map((pigment) => numberOf(state, pigment.key, 0));
     if (id === 'dab') {
       const mixed = mixColour(parts);
-      const head = `With ${parts[0]} red, ${parts[1]} yellow and ${parts[2]} blue`;
+      const head = `With ${parts[0]} alizarin crimson, ${parts[1]} cadmium yellow and ${parts[2]} ultramarine blue`;
       return {
         reading: mixed
           ? `${head} the dab comes out ${mixed.hex}, ${mixed.lightness}% light.`

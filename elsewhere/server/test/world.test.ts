@@ -158,7 +158,7 @@ describe('authoritative Elsewhere world', () => {
       61000,
     );
     expect(inspected.outcome.status).toBe('completed');
-    expect(inspected.outcome.evidence).toContain('hand-cranked weather vane');
+    expect(inspected.outcome.evidence).toContain('pendulum');
   });
 
   it('rejects ambiguous movement, unauthorized residents, and unavailable delegation', () => {
@@ -198,8 +198,8 @@ describe('authoritative Elsewhere world', () => {
     );
     expect(worked.outcome.status).toBe('completed');
     const detail = worked.world.objects.find((o) => o.id === 'weather-vane-sketch')?.detail;
-    expect(detail).toMatch(/question.*bent fin.*axle housing/i);
-    expect(detail).toMatch(/proposed experiment.*compare three rotations/i);
+    expect(detail).toMatch(/question.*time of a swing.*bob/i);
+    expect(detail).toMatch(/proposed experiment.*compare ten swings/i);
     const restored = JSON.parse(JSON.stringify(worked.world));
     expect(
       restored.objects.find((o: { id: string }) => o.id === 'weather-vane-sketch'),
@@ -244,16 +244,16 @@ describe('authoritative Elsewhere world', () => {
       const crank = executeWorldCommand(bench, 'hubert', {
         type: 'use',
         targetId: 'artifact',
-        control: 'bend',
-        value: 3,
+        control: 'bob',
+        value: 4,
       });
       expect(crank.outcome.status).toBe('completed');
-      expect(crank.world.mechanisms?.artifact.fin).toBe(3);
+      expect(crank.world.mechanisms?.artifact.bob).toBe(4);
       const shown = JSON.stringify(publicWorld(crank.world));
       const seen = JSON.stringify(observeWorld(crank.world, 'hubert'));
       for (const text of [shown, seen]) {
         expect(text).not.toContain('"mechanisms"');
-        expect(text).not.toMatch(/"uses"|"fin"|sunElevation|windSpeed|airTemp|windBearing/);
+        expect(text).not.toMatch(/"uses"|"bob":|sunElevation|windSpeed|airTemp|windBearing/);
       }
       expect(shown).toContain('"controls"');
       expect(shown).toContain('tube number');

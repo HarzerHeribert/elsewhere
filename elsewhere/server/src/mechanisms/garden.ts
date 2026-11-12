@@ -1,5 +1,5 @@
 import {
-  HOUR,
+  DAY,
   act,
   control,
   listOf,
@@ -10,34 +10,45 @@ import {
   type MechanismState,
 } from './common.js';
 
-const START_MM = [12, 15, 9];
+/** Heights in cm of the three runner-bean seedlings when the bed is first worked. */
+const START_CM = [12, 15, 9];
 const VIGOUR = [0.8, 1, 1.25];
 const BEST_CUPS = 2;
-const MAX_MM = 600;
+/** Where a runner bean's height levels off, in cm. */
+const MAX_CM = 300;
+/** Logistic growth rate per day at the best watering and full light: about 4.5 cm a day at its peak. */
+const RATE_PER_DAY = 0.06;
 const LEAN_FACTOR = [0.85, 1, 1.2];
 
-/** Millimetres per hour for one seedling under the given settings. */
+/** Growth rate per day for one seedling under the given settings. */
 const rateOf = (cups: number, shade: number, vigour: number) =>
-  2.2 * vigour * Math.exp(-(((cups - BEST_CUPS) / 1.4) ** 2)) * (1 - 0.6 * (shade / 100));
+  RATE_PER_DAY * vigour * Math.exp(-(((cups - BEST_CUPS) / 1.4) ** 2)) * (1 - 0.6 * (shade / 100));
+
+/** Logistic growth of one height over some days. */
+export const grownHeight = (height: number, rate: number, days: number) =>
+  MAX_CM / (1 + (MAX_CM / height - 1) * Math.exp(-rate * days));
 
 /** Heights at `now`, grown from the stored heights under the settings held since `since`. */
 function heightsAt(state: MechanismState, now: number): number[] {
-  const stored = listOf(state, 'height');
-  const heights = stored.length === 3 ? stored : START_MM;
-  const hours = Math.max(0, now - numberOf(state, 'since', now)) / HOUR;
+  const stored = listOf(state, 'heightCm');
+  if (stored.length !== 3) return START_CM;
+  const days = Math.max(0, now - numberOf(state, 'since', now)) / DAY;
   const cups = numberOf(state, 'cups', 1);
   const shade = numberOf(state, 'shade', 0);
-  return heights.map((h, i) => Math.min(MAX_MM, h + rateOf(cups, shade, VIGOUR[i]) * hours));
+  return stored.map((h, i) => grownHeight(h, rateOf(cups, shade, VIGOUR[i]), days));
 }
+
+/** A height in cm: one decimal while small, whole centimetres once tall. */
+const heightText = (cm: number) => (cm < 30 ? round(cm) : round(cm, 0));
 
 /** Settle the past under the old settings before a setting changes. */
 const settled = (state: MechanismState, now: number): MechanismState => ({
   ...state,
-  height: heightsAt(state, now),
+  heightCm: heightsAt(state, now),
   since: now,
 });
 
-/** Botany: three seedlings in one bed, a watering and a shade screen. */
+/** Botany: three runner-bean seedlings in one bed, a watering and a shade screen. */
 export const garden: Mechanism = {
   controls: [
     control('water', 'set the daily watering of the bed', 0, 5, 'cups of water a day', 0.5),
@@ -63,15 +74,15 @@ export const garden: Mechanism = {
     const toward = Math.round(mod(conditions.sunBearingDeg, 360));
     const parts = heightsAt(state, now).map(
       (h, i) =>
-        `seedling ${i + 1} stands ${round(Math.min(MAX_MM, h * fine))} mm and leans ${round(lean * LEAN_FACTOR[i])} degrees toward ${toward} degrees`,
+        `seedling ${i + 1} stands ${heightText(Math.min(MAX_CM, h * fine))} cm and leans ${round(lean * LEAN_FACTOR[i])} degrees toward ${toward} degrees`,
     );
     return {
       reading: `At ${cups} ${cups === 1 ? 'cup' : 'cups'} and ${shade}% shade: ${parts.join('; ')}.`,
       // The first visit starts the clock: nothing grows before the bed is first worked.
       state: {
         ...state,
-        height: listOf(state, 'height').length === 3 ? listOf(state, 'height') : START_MM,
-        since: numberOf(state, 'since', now),
+        heightCm: listOf(state, 'heightCm').length === 3 ? listOf(state, 'heightCm') : START_CM,
+        since: listOf(state, 'heightCm').length === 3 ? numberOf(state, 'since', now) : now,
       },
     };
   },

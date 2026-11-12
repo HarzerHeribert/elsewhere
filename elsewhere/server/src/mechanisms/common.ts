@@ -1,4 +1,5 @@
 import type { Bounds, Position, WorldControl, WorldObject } from '@elsewhere/character-interfaces';
+import { sunHorizontal } from './sky.js';
 
 /**
  * Objects that answer back. Everything here is pure and deterministic: a reading depends on
@@ -39,9 +40,8 @@ export const wave = (now: number, periodMinutes: number, phase: number) =>
 
 /** Conditions at a world time. Never exposed directly. */
 export function worldConditions(now: number): Conditions {
-  const hour = mod(now / HOUR, 24);
-  const sunElevationDeg = 60 * Math.sin((TAU * (hour - 6)) / 24) - 5;
-  const sunBearingDeg = mod(90 + (hour - 6) * 15, 360);
+  // The real sun over latitude 51.0 N, longitude 10.0 E at this UTC time.
+  const { elevationDeg: sunElevationDeg, bearingDeg: sunBearingDeg } = sunHorizontal(now);
   const windSpeed = Math.max(
     0,
     3.4 +
@@ -78,6 +78,9 @@ export function hash(text: string): number {
 /** About +-2%, seeded by the object, the control and how often the object was used. */
 export const scatterOf = (id: string, control: string, uses: number) =>
   1 + (hash(`${id}:${control}:${uses}`) - 0.5) * 0.04;
+
+/** A finer scatter, about +-0.5%, for readings that are measured with care. */
+export const fineOf = (scatter: number) => 1 + (scatter - 1) / 4;
 
 export const round = (value: number, digits = 1) => value.toFixed(digits);
 export const bearing = (value: number) => mod(Math.round(value), 360);
@@ -130,9 +133,10 @@ export const control = (
 ): WorldControl => ({ id, description, value: { min, max, step, meaning } });
 export const act = (id: string, description: string): WorldControl => ({ id, description });
 
-/** The shadow tip of the pointer: length in cm and the bearing it falls toward. */
+/** The shadow tip of the 18 cm pin: length in cm and the bearing it falls toward. */
 export function shadowOf(conditions: Conditions, scatter: number) {
-  const length = (18 / Math.tan(rad(conditions.sunElevationDeg))) * scatter;
-  const falls = bearing(conditions.sunBearingDeg + 180 + (scatter - 1) * 100);
+  const fine = 1 + (scatter - 1) / 4;
+  const length = (18 / Math.tan(rad(conditions.sunElevationDeg))) * fine;
+  const falls = bearing(conditions.sunBearingDeg + 180 + (fine - 1) * 100);
   return { length, falls };
 }

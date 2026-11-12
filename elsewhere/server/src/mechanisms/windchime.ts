@@ -1,15 +1,39 @@
-import { act, control, numberOf, plural, round, scatterOf, type Mechanism } from './common.js';
+import {
+  act,
+  control,
+  fineOf,
+  numberOf,
+  plural,
+  round,
+  scatterOf,
+  type Mechanism,
+} from './common.js';
 
-/** Tube lengths in cm as hung; the collar can move the sounding length by up to 3 cm. */
-const TUBE_CM = [40, 34.4, 30.4, 27.2, 24.8];
-const K = 400;
+/** Sounding lengths in cm as hung; the collar can move the sounding length by up to 3 cm. */
+const TUBE_CM = [48, 42, 37, 33, 30];
+const OUTSIDE_M = 0.022;
+const WALL_M = 0.001;
+const YOUNGS_PA = 117e9;
+const DENSITY = 8960;
+/** Ratio of the first overtone to the fundamental for a free-free bar. */
+const OVERTONE_RATIO = 2.756;
+
+/** Fundamental in Hz of a free-free copper tube sounding along `lengthM`. */
+export function tubeFundamental(lengthM: number): number {
+  const inner = OUTSIDE_M - 2 * WALL_M;
+  const area = (Math.PI / 4) * (OUTSIDE_M ** 2 - inner ** 2);
+  const moment = (Math.PI / 64) * (OUTSIDE_M ** 4 - inner ** 4);
+  return (
+    (22.373 / (2 * Math.PI * lengthM ** 2)) * Math.sqrt((YOUNGS_PA * moment) / (DENSITY * area))
+  );
+}
 const THRESHOLDS = [4.5, 3.6, 2.8, 2.0, 1.2];
 /** Positive shift moves the collar so that less of the tube sounds. */
 const soundingCm = (tube: number, state: Record<string, unknown>) =>
   TUBE_CM[tube - 1] -
   (typeof state[`shift${tube}`] === 'number' ? (state[`shift${tube}`] as number) : 0) / 10;
 
-/** Acoustics and tuning: five tubes whose pitch and ring depend on how much of them sounds. */
+/** Acoustics and tuning: five copper tubes whose pitch and ring depend on how much of them sounds. */
 export const windchime: Mechanism = {
   controls: [
     control('strike', 'strike one tube', 1, 5, 'tube number'),
@@ -34,10 +58,12 @@ export const windchime: Mechanism = {
       return { reading: `Tube ${picked} sounds along ${round(cm)} cm.` };
     }
     if (id === 'strike') {
-      const length = soundingCm(value as number, state) / 40;
-      const pitch = (K / length ** 2) * scatter;
-      const ring = (8 * length ** 1.5 * scatter) / (1 + 0.15 * conditions.windSpeed);
-      return { reading: `The tube rings at ${round(pitch, 0)} Hz for ${round(ring)} s.` };
+      const length = soundingCm(value as number, state) / 100;
+      const pitch = tubeFundamental(length) * fineOf(scatter);
+      const ring = (18 * length * scatter) / (1 + 0.15 * conditions.windSpeed);
+      return {
+        reading: `The tube rings at ${round(pitch, 0)} Hz for ${round(ring)} s, with its first overtone at ${round(pitch * OVERTONE_RATIO, 0)} Hz.`,
+      };
     }
     const uses = numberOf(state, 'uses', 0);
     const rang: string[] = [];

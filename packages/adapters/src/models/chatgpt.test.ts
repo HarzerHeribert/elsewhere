@@ -427,3 +427,90 @@ it('surfaces gifted-plan ineligibility without OAuth loops, model substitution o
   expect(fixture.session.isAvailable()).toBe(false);
   expect(fixture.fetcher).toHaveBeenCalledTimes(2);
 });
+
+/** A reply that streams on without ending: harmless frames, `kilobytes` of them. */
+const runaway = (kilobytes: number) =>
+  stream(
+    Array.from({ length: kilobytes / 10 }, () =>
+      frame({ type: 'response.in_progress', pad: 'x'.repeat(10_000) }),
+    ).join(''),
+    16384,
+  );
+const decided = () => stream(frame(completed('{"action":{"type":"reflect"}}')));
+
+it('cuts a decision reply off at 150,000 bytes but lets other requests run to the general limit', async () => {
+  const decision = client(() => runaway(200));
+  await expect(new ChatGPTDecisionProvider(decision.api).propose(context)).rejects.toThrow(
+    'stream_too_large',
+  );
+  const portrait = client(() =>
+    stream(
+      frame({ type: 'response.in_progress', pad: 'x'.repeat(100_000) }).repeat(2) +
+        frame(completed('I follow how birds land.')),
+      16384,
+    ),
+  );
+  await expect(
+    new ChatGPTReflectionProvider(portrait.api).reflect({
+      form: 'portrait',
+      identity: 'Hubert',
+      pursuits: [],
+      creations: [],
+      readings: [],
+    }),
+  ).resolves.toBe('I follow how birds land.');
+});
+it('sends a decision again once when its reply ran away, without pausing anything', async () => {
+  let call = 0;
+  const fixture = client(() => (++call === 1 ? runaway(200) : decided()));
+  const retried = vi.fn();
+  const api = new ChatGPTClient(fixture.session, {
+    onUsageDetails: fixture.usage,
+    onRetry: retried,
+  });
+  expect(await new ChatGPTDecisionProvider(api).propose(context)).toEqual({
+    action: { type: 'reflect' },
+    why: '',
+  });
+  expect(fixture.fetcher).toHaveBeenCalledTimes(3); // The catalog, the runaway, the retry.
+  expect(retried).toHaveBeenCalledTimes(1);
+  expect(fixture.store.load()?.pause).toBeUndefined();
+  expect(fixture.session.isAvailable()).toBe(true);
+});
+it('reports the usage of both attempts when a reply was cut off and then came back whole', async () => {
+  let call = 0;
+  const fixture = client(() =>
+    ++call === 1
+      ? stream(
+          frame({
+            type: 'response.incomplete',
+            response: { usage: { input_tokens: 40, output_tokens: 9 } },
+          }),
+        )
+      : decided(),
+  );
+  await new ChatGPTDecisionProvider(fixture.api).propose(context);
+  expect(fixture.usage).toHaveBeenCalledTimes(2);
+  expect(fixture.usage).toHaveBeenNthCalledWith(1, {
+    inputTokens: 40,
+    outputTokens: 9,
+    cachedInputTokens: 0,
+  });
+});
+it('throws once, and pauses nothing, when the second attempt runs away too', async () => {
+  const fixture = client(() => runaway(200));
+  await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toThrow(
+    'stream_too_large',
+  );
+  expect(fixture.fetcher).toHaveBeenCalledTimes(3);
+  expect(fixture.store.load()?.pause).toBeUndefined();
+});
+it('does not send a request again after any other failure', async () => {
+  const fixture = client(() =>
+    stream(frame({ type: 'response.failed', response: { error: { code: 'server_error' } } })),
+  );
+  await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toMatchObject({
+    code: 'request_failed',
+  });
+  expect(fixture.fetcher).toHaveBeenCalledTimes(2);
+});

@@ -10,6 +10,33 @@ import {
 
 const MAX_LINES = 24;
 
+/** The painted bands, 0 to 12: what the wind does on land, with the speed (m/s) each begins at. */
+const BANDS: Array<{ from: number; phrase: string }> = [
+  { from: 0, phrase: 'calm; smoke rises straight up' },
+  { from: 0.5, phrase: 'light air; smoke drifts, vanes stay still' },
+  { from: 1.6, phrase: 'light breeze; wind felt on the face, leaves rustle' },
+  {
+    from: 3.4,
+    phrase: 'gentle breeze; leaves and twigs in constant motion, light flags stretched',
+  },
+  { from: 5.5, phrase: 'moderate breeze; dust and loose paper lift, small branches move' },
+  { from: 8, phrase: 'fresh breeze; small leafy trees sway' },
+  { from: 10.8, phrase: 'strong breeze; large branches move, wires whistle' },
+  { from: 13.9, phrase: 'near gale; whole trees sway, walking against it takes effort' },
+  { from: 17.2, phrase: 'gale; twigs break off, walking is hard' },
+  { from: 20.8, phrase: 'strong gale; slates and chimney pots blown off' },
+  { from: 24.5, phrase: 'storm; trees uprooted, much damage' },
+  { from: 28.5, phrase: 'violent storm; widespread damage' },
+  { from: 32.7, phrase: 'hurricane force; devastation' },
+];
+/** The band whose phrase fits a wind speed in m/s. */
+export const bandFor = (windSpeed: number) =>
+  BANDS.reduce((best, band, index) => (windSpeed >= band.from ? index : best), 0);
+const bandText = (windSpeed: number) => {
+  const band = bandFor(windSpeed);
+  return `The painted band that fits is ${band}: ${BANDS[band].phrase}.`;
+};
+
 /** Meteorology: the flag, and a tally board of what it showed. */
 export const weatherMarker: Mechanism = {
   controls: [
@@ -18,14 +45,16 @@ export const weatherMarker: Mechanism = {
     act('tally', 'read the tally board'),
   ],
   run: ({ control, conditions, scatter, state, now }) => {
-    const limp = conditions.windSpeed < 0.6;
+    const limp = conditions.windSpeed < 0.5;
     const flicks = Math.round(1.8 * conditions.windSpeed * scatter);
     const points = bearing(conditions.windBearingDeg + (scatter - 1) * 100);
     if (control === 'read') {
       return {
-        reading: limp
-          ? 'The flag hangs limp.'
-          : `The flag points toward ${points} degrees and flicks ${flicks} times in ten seconds.`,
+        reading: `${
+          limp
+            ? 'The flag hangs limp.'
+            : `The flag points toward ${points} degrees and flicks ${flicks} times in ten seconds.`
+        } ${bandText(conditions.windSpeed * (1 + (scatter - 1) / 4))}`,
       };
     }
     const lines = listOf(state, 'tally');

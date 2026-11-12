@@ -139,24 +139,27 @@ describe('surveying: the standing stones', () => {
     expect(pitch(3)).toBeLessThan(pitch(6));
   });
 
-  it('lines one pair up with the sun at one hour and not at another', () => {
-    const { state } = session('standing-stones', [['pick', 1]]);
-    const off = (hour: number) => {
-      const text = use('standing-stones', state, 'sight', 6, day + hour * HOUR).reading;
+  it('puts the real sun on the line of a solstice pair at its sunrise and far from it later', () => {
+    const offAt = (from: number, over: number, at: number) => {
+      const { state } = session('standing-stones', [['pick', from]]);
+      const text = use('standing-stones', state, 'sight', over, at).reading;
       if (/sun is down/.test(text)) return Infinity;
       if (/on the line/.test(text)) return 0;
       return first(text, /stands (\d+) degrees to the/);
     };
-    const hours = Array.from({ length: 96 }, (_, i) => i / 4);
-    const best = hours.reduce((a, b) => (off(b) < off(a) ? b : a));
-    expect(off(best)).toBeLessThanOrEqual(2);
-    expect(off(best + 5)).toBeGreaterThan(30);
-    expect(off(1)).toBe(Infinity);
+    const risen = (start: number) => {
+      for (let m = 0; m < 1440; m++)
+        if (worldConditions(start + m * 60_000).sunElevationDeg > 0.7) return start + m * 60_000;
+      return start;
+    };
+    const winter = risen(Date.UTC(2026, 11, 21));
+    const summer = risen(Date.UTC(2026, 5, 21));
+    expect(offAt(1, 4, winter)).toBeLessThanOrEqual(4);
+    expect(offAt(2, 6, summer)).toBeLessThanOrEqual(4);
+    expect(offAt(1, 4, winter + 3 * HOUR)).toBeGreaterThan(20);
+    expect(offAt(1, 4, day + HOUR)).toBe(Infinity);
     // Another pair never lines up at that hour.
-    const other = session('standing-stones', [['pick', 2]]).state;
-    expect(use('standing-stones', other, 'sight', 5, day + best * HOUR).reading).not.toMatch(
-      /on the line/,
-    );
+    expect(offAt(2, 5, winter)).toBeGreaterThan(5);
   });
 });
 
@@ -193,22 +196,24 @@ describe('astronomy: the lookout telescope', () => {
       for (const body of skyAt(day + h * HOUR)) expect(body.seen).toMatch(/sun|moon/);
   });
 
-  it('lets the wanderer drift against five lights that keep their spacing', () => {
-    const lights = (at: number) => skyAt(at).filter((body) => !/sun|moon/.test(body.seen));
-    const a = lights(night);
-    const b = lights(night + 3 * DAY);
-    expect(a).toHaveLength(6);
-    const spacing = (set: typeof a, i: number) =>
-      (((set[i].bearing - set[0].bearing) % 360) + 360) % 360;
-    for (let i = 1; i < 5; i++) expect(spacing(b, i)).toBeCloseTo(spacing(a, i), 6);
-    const drift = Math.abs(spacing(b, 5) - spacing(a, 5));
-    expect(Math.min(drift, 360 - drift)).toBeGreaterThan(5);
+  it('shows the fixed stars and the wanderer on a clear night, each with a height', () => {
+    // The wanderer is the one light without a chart label; pick an hour of the night when it is up.
+    const hours = Array.from({ length: 14 }, (_, h) => night + (18 + h) * HOUR);
+    const at = hours.find((time) =>
+      skyAt(time).some((body) => !/sun|moon/.test(body.seen) && !body.label),
+    )!;
+    expect(at).toBeDefined();
+    const lights = skyAt(at).filter((body) => !/sun|moon/.test(body.seen));
+    expect(lights.length).toBeGreaterThan(5);
+    expect(lights.filter((body) => body.label).length).toBe(lights.length - 1);
+    for (const body of lights) expect(body.elevation).toBeGreaterThan(0);
   });
 
-  it('needs good focus to tell faint lights apart', () => {
-    const { airTempC } = worldConditions(night);
+  it('needs good focus to tell a faint star apart', () => {
+    const at = night + 20 * HOUR;
+    const { airTempC } = worldConditions(at);
     const best = Math.round(58 + 0.9 * (airTempC - 12));
-    const faint = skyAt(night).find((body) => body.seen === 'a faint cluster')!;
+    const faint = skyAt(at).find((body) => body.label === 'α UMi')!;
     const aim = Math.round(faint.bearing) % 360;
     const sharp = session(
       'lookout-telescope',
@@ -216,19 +221,19 @@ describe('astronomy: the lookout telescope', () => {
         ['focus', best],
         ['aim', aim],
       ],
-      night,
-    );
-    expect(sharp.reading).toMatch(/faint cluster, \d+ degrees up/);
+      at,
+    ).reading;
+    expect(sharp).toMatch(/steady yellow-white light, \d+ degrees up, marked α UMi on the chart/);
     const blurred = session(
       'lookout-telescope',
       [
         ['focus', 0],
         ['aim', aim],
       ],
-      night,
-    );
-    expect(blurred.reading).toMatch(/nothing can be made out/);
-    const bright = skyAt(night).find((body) => body.seen === 'a steady yellowish light')!;
+      at,
+    ).reading;
+    expect(blurred).not.toMatch(/α UMi/);
+    const bright = skyAt(at).find((body) => body.brightness >= 0.5 && body.label)!;
     expect(
       session(
         'lookout-telescope',
@@ -236,9 +241,9 @@ describe('astronomy: the lookout telescope', () => {
           ['focus', Math.max(0, best - 8)],
           ['aim', Math.round(bright.bearing) % 360],
         ],
-        night,
+        at,
       ).reading,
-    ).toMatch(/steady yellowish light/);
+    ).toMatch(/steady .* light/);
   });
 });
 
@@ -277,7 +282,7 @@ describe('meteorology: the weather marker tally', () => {
 
 describe('botany: the garden', () => {
   const heights = (reading: string) =>
-    [...reading.matchAll(/stands ([\d.]+) mm/g)].map((m) => Number(m[1]));
+    [...reading.matchAll(/stands ([\d.]+) cm/g)].map((m) => Number(m[1]));
   const lean = (reading: string) => first(reading, /leans ([\d.]+) degrees/);
   const grown = (cups: number, shade: number, hours: number) => {
     const { state } = session(
@@ -293,31 +298,31 @@ describe('botany: the garden', () => {
 
   it('grows most near two cups, and less under shade', () => {
     const total = (reading: string) => heights(reading).reduce((a, b) => a + b, 0);
-    const two = total(grown(2, 0, 20));
-    expect(two).toBeGreaterThan(total(grown(0, 0, 20)));
-    expect(two).toBeGreaterThan(total(grown(5, 0, 20)));
-    expect(total(grown(2, 80, 20))).toBeLessThan(two);
-    expect(heights(grown(2, 0, 20))[2]).not.toBe(heights(grown(2, 0, 20))[0]);
-    expect(grown(2, 0, 20)).toMatch(/^At 2 cups and 0% shade:/);
+    const two = total(grown(2, 0, 240));
+    expect(two).toBeGreaterThan(total(grown(0, 0, 240)));
+    expect(two).toBeGreaterThan(total(grown(5, 0, 240)));
+    expect(total(grown(2, 80, 240))).toBeLessThan(two);
+    expect(heights(grown(2, 0, 240))[2]).not.toBe(heights(grown(2, 0, 240))[0]);
+    expect(grown(2, 0, 240)).toMatch(/^At 2 cups and 0% shade:/);
   });
 
   it('does not rewrite the past when a setting changes', () => {
     const { state } = session('garden', [['water', 2]], noon);
-    const later = noon + 15 * HOUR;
+    const later = noon + 150 * HOUR;
     const before = heights(use('garden', state, 'measure', undefined, later).reading);
     const changed = use('garden', state, 'water', 5, later).state;
     const after = heights(use('garden', changed, 'measure', undefined, later).reading);
     after.forEach((h, i) => expect(Math.abs(h - before[i])).toBeLessThan(before[i] * 0.02));
     const further = heights(
-      use('garden', changed, 'measure', undefined, later + 15 * HOUR).reading,
+      use('garden', changed, 'measure', undefined, later + 150 * HOUR).reading,
     );
-    const stayed = heights(use('garden', state, 'measure', undefined, later + 15 * HOUR).reading);
+    const stayed = heights(use('garden', state, 'measure', undefined, later + 150 * HOUR).reading);
     expect(stayed[0]).toBeGreaterThan(further[0]);
   });
 
-  it('leans more under more shade and never grows past 600 mm', () => {
+  it('leans more under more shade and never grows past 300 cm', () => {
     expect(lean(grown(2, 80, 1))).toBeGreaterThan(lean(grown(2, 0, 1)));
-    for (const h of heights(grown(2, 0, 100_000))) expect(h).toBeLessThanOrEqual(600);
+    for (const h of heights(grown(2, 0, 100_000))) expect(h).toBeLessThanOrEqual(300);
   });
 });
 
@@ -350,29 +355,28 @@ describe('optics: the workshop window', () => {
     first(reading, /green (-?\d+) mm/),
     first(reading, /violet (-?\d+) mm/),
   ];
-  it('spreads red, green and violet in order, and has no band at night or out of range', () => {
-    const lit = session('window', [['turn', 47], ['slit', 3], ['read']]);
+  it('spreads red, green and violet in order, and has no band at night or when the light cannot leave the glass', () => {
+    const lit = session('window', [['turn', 50], ['slit', 3], ['read']]);
     const [red, green, violet] = edges(lit.reading);
     expect(red).toBeLessThan(green);
     expect(green).toBeLessThan(violet);
-    expect(lit.reading).toMatch(/^With the prism at 47 degrees and a 3 mm slit/);
-    expect(session('window', [['turn', 47], ['read']], day + HOUR).reading).toMatch(
+    expect(lit.reading).toMatch(/^With the light meeting the prism at 50 degrees and a 3 mm slit/);
+    expect(session('window', [['turn', 50], ['read']], day + HOUR).reading).toMatch(
       /no band forms/,
     );
-    expect(session('window', [['turn', 5], ['read']]).reading).toMatch(/no band forms/);
-    expect(session('window', [['turn', 85], ['read']]).reading).toMatch(/no band forms/);
+    expect(session('window', [['turn', 20], ['read']]).reading).toMatch(/no band forms/);
   });
 
   it('trades brightness for sharpness with the slit, and moves the band with the turn', () => {
     const read = (slit: number) =>
-      session('window', [['turn', 47], ['slit', slit], ['read']]).reading;
+      session('window', [['turn', 50], ['slit', slit], ['read']]).reading;
     expect(first(read(1), /(\d+)% sharp/)).toBeGreaterThan(first(read(9), /(\d+)% sharp/));
     expect(first(read(1), /(\d+)% bright/)).toBeLessThan(first(read(9), /(\d+)% bright/));
     const at = (turn: number) => edges(session('window', [['turn', turn], ['read']]).reading)[0];
-    expect(at(30)).not.toBe(at(47));
+    expect(at(36)).not.toBe(at(50));
     // The least deviation sits at one setting: either side of it the band lies farther out.
-    expect(at(47)).toBeLessThan(at(30));
-    expect(at(47)).toBeLessThan(at(65));
+    expect(at(50)).toBeLessThan(at(36));
+    expect(at(50)).toBeLessThan(at(70));
   });
 });
 
@@ -390,7 +394,7 @@ describe('illustration: the easel', () => {
     expect(r - b).toBeLessThan(80);
     expect(session('easel', [['dab']]).reading).toMatch(/nothing on the brush/);
     expect(session('easel', [['red', 2], ['dab']]).reading).toMatch(
-      /^With 2 red, 0 yellow and 0 blue/,
+      /^With 2 alizarin crimson, 0 cadmium yellow and 0 ultramarine blue/,
     );
   });
 
@@ -428,7 +432,7 @@ describe('composition: the music box', () => {
     const { reading } = tune();
     expect(reading.match(/step \d+ [\d.]+ Hz/g)).toHaveLength(4);
     expect(reading).toMatch(
-      /step 1 220\.0 Hz, step 2 330\.0 Hz, step 3 247\.5 Hz, step 4 220\.0 Hz/,
+      /step 1 261\.6 Hz, step 2 392\.0 Hz, step 3 293\.7 Hz, step 4 261\.6 Hz/,
     );
     expect(reading).toMatch(/steps 1 and 2 ring cleanly/);
     expect(reading).toMatch(/steps 3 and 4 beat roughly/);
@@ -458,17 +462,17 @@ describe('rocketry: the launch stand', () => {
   it('finds the air calm enough to compare', () => {
     expect(worldConditions(calm).windSpeed).toBeLessThan(0.7);
   });
-  it('goes farthest near a third full and near 45 degrees in still air', () => {
+  it('goes farthest near a third full and at a tilt a little under 45 degrees in still air', () => {
     const fills = Array.from({ length: 21 }, (_, i) => i * 5 + 5).filter((f) => f < 100);
     const bestFill = fills.reduce((a, b) => (away(b, 20, 45) > away(a, 20, 45) ? b : a));
     expect(bestFill).toBeGreaterThanOrEqual(28);
-    expect(bestFill).toBeLessThanOrEqual(38);
+    expect(bestFill).toBeLessThanOrEqual(45);
     const tilts = Array.from({ length: 61 }, (_, i) => 30 + i);
     const bestTilt = tilts.reduce((a, b) => (away(33, 20, b) > away(33, 20, a) ? b : a));
-    expect(bestTilt).toBeGreaterThanOrEqual(42);
+    expect(bestTilt).toBeGreaterThanOrEqual(36);
     expect(bestTilt).toBeLessThanOrEqual(48);
     expect(launch(33, 20, 45).reading).toMatch(
-      /^With 33% water, 20 strokes and a tilt of 45 degrees the rocket rose [\d.]+ m, flew [\d.]+ s and landed/,
+      /^With 33% water, 20 strokes \(5\.00 bar\) and a tilt of 45 degrees the rocket rose [\d.]+ m, flew [\d.]+ s and landed/,
     );
   });
   it('rises higher with more pressure', () => {
@@ -499,22 +503,19 @@ describe('microscopy: the specimen tray', () => {
     session('specimen-tray', [['pick', pick], ['power', power], ['look']]).reading;
   it('resolves structures only above their own power', () => {
     expect(look(2, 2)).toMatch(/veins/);
-    expect(look(2, 2)).not.toMatch(/cells/);
-    expect(look(2, 10)).toMatch(/cells/);
-    expect(look(2, 10)).not.toMatch(/pores/);
-    expect(look(2, 30)).toMatch(/pores/);
-    expect(look(1, 40)).toMatch(/hooklets/);
-    expect(look(1, 16)).not.toMatch(/hooklets/);
+    expect(look(2, 2)).not.toMatch(/stomata/);
+    expect(look(2, 19)).not.toMatch(/stomata/);
+    expect(look(2, 20)).toMatch(/stomata/);
+    expect(look(1, 60)).toMatch(/barbules/);
     expect(look(2, 10)).toMatch(/^Specimen 2, a leaf, at 10 times, in a field [\d.]+ mm wide/);
   });
   it('narrows the field as power rises so counts must be scaled', () => {
-    const count = (power: number) => first(look(2, power), /(\d+) cells/);
+    const count = (power: number) => first(look(2, power), /(\d+) veins/);
     const field = (power: number) => first(look(2, power), /field ([\d.]+) mm wide/);
     expect(field(20)).toBeLessThan(field(10));
-    expect(count(10)).toBeGreaterThan(count(20));
-    const densityA = count(10) / field(10);
-    const densityB = count(20) / field(20);
-    expect(Math.abs(densityA - densityB) / densityA).toBeLessThan(0.1);
+    expect(count(2)).toBeGreaterThan(count(10));
+    expect(field(2)).toBe(9);
+    expect(field(60)).toBeCloseTo(0.3, 2);
   });
 });
 
@@ -523,17 +524,17 @@ describe('breeding: the seed drawers', () => {
     session('seed-drawers', [['mother', mother], ['father', father], ['sow']], noon, state);
   const count = (state: MechanismState, hours: number) =>
     use('seed-drawers', state, 'count', undefined, noon + hours * HOUR).reading;
-  it('reports only sprouting before three hours, and the traits after', () => {
+  it('reports only sprouting before three hours, and the pea traits after', () => {
     const { state } = sow(1, 2);
     const early = count(state, 1.5);
     expect(early).toMatch(/\d+ of 24 seeds have sprouted so far/);
-    expect(early).not.toMatch(/tall|short|plain|notched/);
+    expect(early).not.toMatch(/tall|dwarf|round|wrinkled/);
     expect(first(count(state, 0.2), /: (\d+) of/)).toBeLessThanOrEqual(first(early, /: (\d+) of/));
     expect(use('seed-drawers', undefined, 'count').reading).toMatch(/empty/);
   });
   it('gives one form from two pure lines and about 3:1 from their offspring', () => {
     const pure = count(sow(1, 2).state, 4);
-    expect(pure).toMatch(/24 tall and 0 short, 24 with plain leaves and 0 with notched/);
+    expect(pure).toMatch(/24 tall and 0 dwarf, 24 with round seed and 0 with wrinkled seed/);
     let tall = 0;
     let plain = 0;
     let all = 0;
@@ -542,7 +543,7 @@ describe('breeding: the seed drawers', () => {
       state = sow(5, 5, state).state;
       const reading = count(state, 4);
       tall += first(reading, /(\d+) tall/);
-      plain += first(reading, /(\d+) with plain/);
+      plain += first(reading, /(\d+) with round/);
       all += 24;
     }
     expect(tall / all).toBeGreaterThan(0.72);

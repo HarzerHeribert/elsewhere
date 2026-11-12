@@ -3,37 +3,37 @@ import { HOUR, act, control, hash, numberOf, round, type Mechanism } from './com
 const SEEDS = 24;
 const SPROUTED_BY_HOURS = 3;
 /**
- * Hidden: each line holds a pair of alleles for each of two traits. Capitals dominate:
- * T tall over t short, P plain leaf over p notched leaf.
+ * Garden peas (Pisum sativum). Hidden: each line holds a pair of alleles for each of two
+ * traits. Capitals dominate: T tall stem over t dwarf, R round seed over r wrinkled.
  */
-const LINES: Array<{ height: string; leaf: string }> = [
-  { height: 'TT', leaf: 'PP' },
-  { height: 'tt', leaf: 'pp' },
-  { height: 'TT', leaf: 'pp' },
-  { height: 'tt', leaf: 'PP' },
-  { height: 'Tt', leaf: 'Pp' },
-  { height: 'Tt', leaf: 'pp' },
+const LINES: Array<{ stem: string; seed: string }> = [
+  { stem: 'TT', seed: 'RR' },
+  { stem: 'tt', seed: 'rr' },
+  { stem: 'TT', seed: 'rr' },
+  { stem: 'tt', seed: 'RR' },
+  { stem: 'Tt', seed: 'Rr' },
+  { stem: 'Tt', seed: 'rr' },
 ];
 
 const pick = (pair: string, seed: string) => pair[hash(seed) < 0.5 ? 0 : 1];
 
-/** The seedlings of a sowing: how many are tall and how many plain-leaved. */
+/** The plants of a sowing: how many are tall and how many bear round seed. */
 function offspring(salt: string, mother: number, father: number) {
   let tall = 0;
-  let plain = 0;
+  let roundCount = 0;
   for (let i = 0; i < SEEDS; i++) {
     const seed = `${salt}:${mother}:${father}:${i}`;
-    const height =
-      pick(LINES[mother - 1].height, `${seed}:h:m`) + pick(LINES[father - 1].height, `${seed}:h:f`);
-    const leaf =
-      pick(LINES[mother - 1].leaf, `${seed}:l:m`) + pick(LINES[father - 1].leaf, `${seed}:l:f`);
-    if (/T/.test(height)) tall++;
-    if (/P/.test(leaf)) plain++;
+    const stem =
+      pick(LINES[mother - 1].stem, `${seed}:h:m`) + pick(LINES[father - 1].stem, `${seed}:h:f`);
+    const shape =
+      pick(LINES[mother - 1].seed, `${seed}:l:m`) + pick(LINES[father - 1].seed, `${seed}:l:f`);
+    if (/T/.test(stem)) tall++;
+    if (/R/.test(shape)) roundCount++;
   }
-  return { tall, short: SEEDS - tall, plain, notched: SEEDS - plain };
+  return { tall, dwarf: SEEDS - tall, round: roundCount, wrinkled: SEEDS - roundCount };
 }
 
-/** Breeding: six seed lines, a sowing tray, and what comes up. */
+/** Breeding: six lines of garden pea, a sowing tray, and what comes up. */
 export const seedDrawers: Mechanism = {
   controls: [
     control('mother', 'take the seed of one line as the mother', 1, 6, 'line number'),
@@ -83,7 +83,7 @@ export const seedDrawers: Mechanism = {
     }
     const result = offspring(`${object.id}:cross:${numberOf(state, 'sowing', 0)}`, m, f);
     return {
-      reading: `${head}: ${SEEDS} seedlings, ${result.tall} tall and ${result.short} short, ${result.plain} with plain leaves and ${result.notched} with notched leaves.`,
+      reading: `${head}: ${SEEDS} plants, ${result.tall} tall and ${result.dwarf} dwarf, ${result.round} with round seed and ${result.wrinkled} with wrinkled seed.`,
     };
   },
 };
