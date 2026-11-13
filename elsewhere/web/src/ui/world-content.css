@@ -130,53 +130,7 @@
   display: flex;
   flex-direction: column;
 }
-.now-stream {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 16px;
-}
-.stream-note {
-  margin: 0 0 8px;
-  font-size: var(--ew-text-small);
-  line-height: 1.5;
-  text-align: center;
-  text-wrap: balance;
-  color: var(--ew-text-muted);
-}
-.stream-thought {
-  margin: 0;
-  line-height: var(--ew-leading-body);
-  color: var(--ew-text);
-}
-.stream-thought[data-age='3'] {
-  opacity: 0.45;
-}
-.stream-thought[data-age='2'] {
-  opacity: 0.65;
-}
-.stream-marker {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-  font-size: var(--ew-text-small);
-  color: var(--ew-text-muted);
-}
-.stream-marker::before,
-.stream-marker::after {
-  content: '';
-  flex: 1;
-  min-width: 12px;
-  height: 1px;
-  background: var(--ew-line);
-}
-.stream-marker span {
-  min-width: 0;
-  text-align: center;
-  text-wrap: balance;
-}
+
 .now-focus {
   padding: 20px 22px 22px;
   border: 1px solid var(--ew-line);
@@ -190,35 +144,7 @@
   letter-spacing: -0.015em;
   overflow-wrap: anywhere;
 }
-.now-focus .journal-draft {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.now-focus .journal-draft p {
-  font-size: 1.5rem;
-}
-.attention {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-  font-size: var(--ew-text-small);
-  color: var(--ew-text-muted);
-}
-.attention b {
-  padding: 3px 10px;
-  border: 1px solid var(--ew-line-strong);
-  border-radius: var(--ew-radius-pill);
-  font-weight: 400;
-  color: var(--ew-text);
-  white-space: nowrap;
-}
-.now-stream .panel-actions {
-  margin: 0;
-}
+
 .now-stats {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
@@ -235,43 +161,14 @@
 .journal .panel-intro {
   margin: 0;
 }
-.journal-draft {
-  padding: 18px 22px 20px;
-  border: 1px dashed var(--ew-accent);
-  border-radius: 16px;
-  background: var(--ew-surface);
-}
-.journal-draft small {
-  display: block;
-  font-size: var(--ew-text-caption);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ew-accent-hover);
-}
-.journal-draft p,
-.journal-page p,
+
 .story-item blockquote {
   margin: 0;
   font: 700 1.214rem / 1.5 var(--ew-font-display);
   color: var(--ew-text);
   overflow-wrap: anywhere;
 }
-.journal-draft p {
-  margin-top: 10px;
-}
-.journal-draft.on-dark {
-  margin-top: 10px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.journal-draft.on-dark small {
-  display: none;
-}
-.journal-draft.on-dark p {
-  color: var(--ew-surface);
-}
+
 .day-rule {
   display: flex;
   align-items: center;
@@ -283,19 +180,6 @@
   flex: 1;
   height: 1px;
   background: var(--ew-line);
-}
-.journal-page {
-  padding: 20px 22px 16px;
-  border: 1px solid var(--ew-line);
-  border-left: 3px solid var(--ew-line-strong);
-  border-radius: 4px 16px 16px 4px;
-  background: var(--ew-surface);
-}
-.journal-page time {
-  display: block;
-  margin-top: 12px;
-  font: var(--ew-text-caption) var(--ew-font-mono);
-  color: var(--ew-text-muted);
 }
 
 /* Memories */
@@ -939,36 +823,409 @@
 .story-item .story-thought {
   font-style: italic;
 }
-.note-topics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.note-topics li > * {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--ew-line-strong);
-  border-radius: var(--ew-radius-pill);
-  background: transparent;
-  font-size: var(--ew-text-caption);
-  color: var(--ew-text-muted);
-  text-decoration: none;
-}
-.note-topics button {
-  cursor: pointer;
-}
-.note-topics button:hover,
-.note-topics a:hover {
-  border-color: var(--ew-ink);
-  color: var(--ew-text);
-}
+
 .source-row.reading .source-status {
   border-color: var(--ew-accent);
   color: var(--ew-accent);
   font-weight: 600;
+}
+
+/* A resident’s record: one set of pieces for a question, a reading, a note and a made page,
+   in the same order on every panel. */
+.now-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.now-why {
+  margin: 10px 0 0;
+  line-height: var(--ew-leading-body);
+  overflow-wrap: anywhere;
+}
+.now-focus .now-stats {
+  margin-top: 18px;
+}
+.now-page .panel-actions {
+  margin: 0;
+}
+.record {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--ew-line);
+}
+.record-part {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.record-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.record-head span {
+  padding: 0 7px;
+  border: 1px solid var(--ew-line);
+  border-radius: var(--ew-radius-pill);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.question-title {
+  margin: 0;
+  font: 700 1.286rem / 1.35 var(--ew-font-display);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.question-why {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--ew-text-muted);
+  overflow-wrap: anywhere;
+}
+.question-counts {
+  font-size: var(--ew-text-caption);
+  color: var(--ew-text-muted);
+}
+.status-tag {
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--ew-line-strong);
+  border-radius: var(--ew-radius-pill);
+  font-size: var(--ew-text-caption);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--ew-text-muted);
+  white-space: nowrap;
+}
+.status-tag.active {
+  border-color: var(--ew-accent);
+  background: var(--ew-accent-soft);
+  color: var(--ew-accent-hover);
+}
+.status-tag.set-aside {
+  border-style: dashed;
+}
+.row-time {
+  flex: none;
+  font: var(--ew-text-caption) / 1.6 var(--ew-font-mono);
+  color: var(--ew-text-muted);
+  white-space: nowrap;
+}
+.row-time span {
+  display: block;
+}
+.reading-list,
+.step-list,
+.open-questions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.reading-row,
+.step-list li {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--ew-line);
+}
+.reading-list > li:first-child,
+.step-list > li:first-child,
+.reading-for + .reading-row {
+  border-top: 0;
+}
+.reading-row p {
+  margin: 0;
+  font-size: var(--ew-text-small);
+  line-height: 1.5;
+  color: var(--ew-text-muted);
+  overflow-wrap: anywhere;
+}
+.reading-what {
+  display: block;
+  margin-bottom: 2px;
+  font: 600 var(--ew-text-caption) / 1.5 var(--ew-font-mono);
+  color: var(--ew-accent-hover);
+}
+.qty {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--ew-text);
+  white-space: nowrap;
+}
+.reading-for {
+  padding: 10px 0 0;
+  border-top: 1px solid var(--ew-line);
+  font-size: var(--ew-text-caption);
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--ew-text-muted);
+  overflow-wrap: anywhere;
+}
+.more-rows > summary,
+.question-kin > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  font-size: var(--ew-text-small);
+  color: var(--ew-text-muted);
+  list-style: none;
+  cursor: pointer;
+}
+.more-rows > summary::-webkit-details-marker,
+.question-kin > summary::-webkit-details-marker,
+.question-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.more-rows > summary:hover,
+.question-kin > summary:hover {
+  color: var(--ew-text);
+}
+.more-rows > summary svg,
+.question-kin > summary svg,
+.question-fold > summary > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  transition: transform var(--ew-duration-control) var(--ew-ease);
+}
+.more-rows[open] > summary svg,
+.question-kin[open] > summary svg,
+.question-fold[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.more-rows[open] > .reading-list > li:first-child {
+  border-top: 1px solid var(--ew-line);
+}
+.note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.more-rows[open] > .note-list,
+.more-rows[open] > .made-link {
+  margin-top: 8px;
+}
+.note-list .reading-for {
+  margin: 0 0 8px;
+  padding-top: 4px;
+  border-top: 0;
+}
+.note-card {
+  padding: 14px 16px 12px;
+  border: 1px solid var(--ew-line);
+  border-left: 3px solid var(--ew-line-strong);
+  border-radius: 4px 14px 14px 4px;
+  background: var(--ew-surface);
+}
+.note-card p {
+  margin: 0;
+  font: 700 1.071rem / 1.5 var(--ew-font-display);
+  color: var(--ew-text);
+  overflow-wrap: anywhere;
+}
+.note-card footer {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: var(--ew-text-caption);
+  color: var(--ew-text-muted);
+}
+.note-card footer .row-time span {
+  display: inline;
+  margin-right: 6px;
+}
+.made-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--ew-line);
+  border-radius: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+a.made-link:hover {
+  border-color: var(--ew-ink);
+}
+.made-link + .made-link {
+  margin-top: 8px;
+}
+.record-part > .made-link + .made-link {
+  margin-top: 0;
+}
+.made-link > span {
+  flex: none;
+  font-size: 20px;
+  color: var(--ew-accent);
+}
+.made-link > div {
+  flex: 1;
+  min-width: 0;
+}
+.made-link strong {
+  display: block;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.made-link small {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--ew-text-caption);
+  line-height: 1.5;
+  color: var(--ew-text-muted);
+  overflow-wrap: anywhere;
+}
+.made-link > svg {
+  flex: none;
+  width: 15px;
+}
+.open-questions li {
+  position: relative;
+  padding: 5px 0 5px 20px;
+  font-size: var(--ew-text-small);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.open-questions li::before {
+  content: '?';
+  position: absolute;
+  left: 3px;
+  font-weight: 700;
+  color: var(--ew-accent);
+}
+.question-row {
+  min-width: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--ew-line);
+}
+.question-list > .question-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.question-row > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.question-row strong,
+.question-fold summary strong {
+  min-width: 0;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.question-row > small,
+.question-fold summary small {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--ew-text-caption);
+  line-height: 1.5;
+  color: var(--ew-text-muted);
+  overflow-wrap: anywhere;
+}
+.question-fold {
+  min-width: 0;
+  padding: 0 14px;
+  border: 1px solid var(--ew-line);
+  border-radius: 14px;
+}
+.question-fold[open] {
+  padding-bottom: 14px;
+}
+.question-fold > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  list-style: none;
+  cursor: pointer;
+}
+.question-fold > summary > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.question-fold summary strong {
+  display: block;
+}
+.question-fold > summary > svg {
+  margin-top: 4px;
+}
+.question-fold > .record-part,
+.question-fold > .question-kin {
+  margin-top: 12px;
+}
+.step-list p {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--ew-text-small);
+  line-height: 1.6;
+}
+.step-list b {
+  flex: none;
+  font-weight: 600;
+}
+.step-list p span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ew-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.record > .follow-link {
+  align-self: flex-start;
+}
+.notebook-thread > header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.journal > .record:first-of-type {
+  padding-top: 4px;
+  border-top: 0;
+}
+
+/* Activity: steps gathered under the question they were taken for */
+.story-question {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--ew-accent);
+  border-radius: 4px 12px 12px 4px;
+  background: var(--ew-paper);
+}
+.story-question span {
+  font-size: var(--ew-text-caption);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ew-text-muted);
+}
+.story-question strong {
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.story-item .story-text {
+  color: var(--ew-text-muted);
+  overflow-wrap: anywhere;
+}
+.story-item .note-card,
+.story-item .made-link {
+  margin-top: 8px;
 }

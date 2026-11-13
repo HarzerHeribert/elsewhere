@@ -13,9 +13,19 @@ import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { HubertPortrait } from '../HubertPortrait';
 import { Icon } from '../Icon';
 import { Meter } from '../Meter';
-import { activityRows } from '../activityFeed';
 import { trailLabel } from '../trailLabels';
 import { formatTime } from '../formatTime';
+import { pursuitThreads, questionText, threadHasRecord } from '../pursuitThreads';
+import {
+  QuestionKin,
+  QuestionRow,
+  SectionHead,
+  StatusTag,
+  ThreadRecord,
+  When,
+  threadCounts,
+  threadSpan,
+} from './Record';
 import { useWallTime } from '../worldClock';
 
 export type CharacterTab = 'now' | 'notebook' | 'memories' | 'about';
@@ -39,7 +49,6 @@ export function CharacterPanel({
   onMailPreferences = async () => false,
   recalledMemory,
   creations,
-  events = [],
   memories = [],
   trail = [],
   pursuits = [],
@@ -63,7 +72,6 @@ export function CharacterPanel({
   recalledMemory?: PublicSnapshot['recalledMemory'];
   artifacts?: PublicSnapshot['artifacts'];
   creations?: PublicSnapshot['creations'];
-  events?: PublicSnapshot['events'];
   memories?: PublicSnapshot['memories'];
   trail?: PublicSnapshot['trail'];
   pursuits?: PublicSnapshot['pursuits'];
@@ -95,22 +103,13 @@ export function CharacterPanel({
     if (active && bar)
       bar.scrollLeft = Math.max(0, active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2);
   }, [tab]);
-  // Only what the world already publishes: the latest steps of the trail and what was seen.
-  const earlier = [
-    ...trail.slice(-3).map((entry) => ({
-      id: 'step:' + entry.id,
-      at: entry.at,
-      // A portrait is long; the stream only marks that it was written.
-      note: entry.kind === 'portrait' ? '' : entry.why || entry.text || '',
-      seen: entry.kind !== 'portrait' && (entry.why || entry.text) ? '' : trailLabel(entry),
-    })),
-    ...activityRows(events)
-      .slice(0, 3)
-      .map((row) => ({ id: 'event:' + row.event.id, at: row.event.at, note: '', seen: row.text })),
-  ]
-    .sort((a, b) => a.at - b.at)
-    .slice(-5);
-  const following = pursuits.filter((pursuit) => pursuit.status !== 'set-aside').slice(0, 3);
+  const threads = pursuitThreads(pursuits);
+  const main = threads[0];
+  const others = threads.slice(1);
+  const latest = trail.at(-1);
+  const lastSteps = trail.slice(-5).reverse();
+  const mainLabel =
+    main?.status === 'active' ? 'The question I’m on' : 'The question I was last on';
   return (
     <>
       <div className="page-tabs" role="group" aria-label={character.name + '’s pages'} ref={pages}>
@@ -122,54 +121,19 @@ export function CharacterPanel({
         ))}
       </div>
       {tab === 'now' && (
-        <div className="now-stream">
-          <p className="stream-note">
-            What I’m doing and following, as it happens, in my own words.
-            {onDay && (
-              <>
-                {' '}
-                <button className="inline-link" onClick={onDay}>
-                  See my whole day
-                </button>
-              </>
-            )}
-          </p>
-          {earlier.map((item, index) =>
-            item.note ? (
-              <p
-                key={item.id}
-                className="stream-thought"
-                data-age={Math.min(3, earlier.length - index)}
-              >
-                {item.note}
-              </p>
-            ) : (
-              <p key={item.id} className="stream-marker">
-                <span>
-                  {item.seen} · {formatTime(toWall(item.at))}
-                </span>
-              </p>
-            ),
-          )}
+        <div className="now-page">
           <section className="now-focus" aria-label="Right now">
             <p className="now-label">
               <i />
               Right now
             </p>
             <h3>{character.activity}</h3>
+            {latest?.why && latest.kind !== 'portrait' && <p className="now-why">{latest.why}</p>}
+            <div className="stats now-stats">
+              <Meter label="Mood" value={character.mood} />
+              <Meter label="Energy" value={character.energy} />
+            </div>
           </section>
-          <div className="stats now-stats">
-            <Meter label="Mood" value={character.mood} />
-            <Meter label="Energy" value={character.energy} />
-          </div>
-          {following.length > 0 && (
-            <p className="attention">
-              <span>What I’m following</span>
-              {following.map((pursuit) => (
-                <b key={pursuit.id}>{pursuit.question}</b>
-              ))}
-            </p>
-          )}
           <div className="panel-actions">
             <Button onClick={onMessage}>
               <Icon name="mail" />
@@ -180,6 +144,65 @@ export function CharacterPanel({
               See through my eyes
             </Button>
           </div>
+          {main ? (
+            <section className="record" aria-label={mainLabel}>
+              <SectionHead label={mainLabel} />
+              <h3 className="question-title">{questionText(main.lead, pursuits)}</h3>
+              {main.lead.why && <p className="question-why">{main.lead.why}</p>}
+              <QuestionKin thread={main} all={pursuits} />
+              <ThreadRecord thread={main} all={pursuits} readingLimit={5} noteLimit={2} />
+              {threadHasRecord(main) && (
+                <button className="follow-link" onClick={() => choose('notebook')}>
+                  All of it in my notebook <Icon name="arrow" />
+                </button>
+              )}
+            </section>
+          ) : (
+            <p className="muted-copy">I have not taken up a question yet.</p>
+          )}
+          {others.length > 0 && (
+            <section className="record" aria-label="Other questions">
+              <SectionHead label="Other questions" count={others.length} />
+              {others.map((thread) => (
+                <details className="question-fold" key={thread.id}>
+                  <summary>
+                    <span>
+                      <strong>{questionText(thread.lead, pursuits)}</strong>
+                      <small>
+                        {[threadSpan(thread), threadCounts(thread)].filter(Boolean).join(' · ')}
+                      </small>
+                    </span>
+                    <StatusTag status={thread.status} />
+                    <Icon name="chevron-down" />
+                  </summary>
+                  {thread.lead.why && <p className="question-why">{thread.lead.why}</p>}
+                  <QuestionKin thread={thread} all={pursuits} />
+                  <ThreadRecord thread={thread} all={pursuits} readingLimit={3} noteLimit={1} />
+                </details>
+              ))}
+            </section>
+          )}
+          {lastSteps.length > 0 && (
+            <section className="record" aria-label="My last steps">
+              <SectionHead label="My last steps" />
+              <ol className="step-list">
+                {lastSteps.map((step) => (
+                  <li key={step.id}>
+                    <When at={step.at} />
+                    <p>
+                      <b>{trailLabel(step)}</b>
+                      {step.kind !== 'portrait' && step.text && <span>{step.text}</span>}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+              {onDay && (
+                <button className="follow-link" onClick={onDay}>
+                  See my whole day <Icon name="arrow" />
+                </button>
+              )}
+            </section>
+          )}
         </div>
       )}
       {tab === 'notebook' && <NotebookPanel pursuits={pursuits} />}
@@ -237,25 +260,18 @@ export function CharacterPanel({
   );
 }
 
-/** Each pursuit with what it has gathered, without its notes (those live in the notebook). */
+/** Each line of questions with what it has gathered, without its notes (those live in the notebook). */
 export function PursuitList({ pursuits }: { pursuits: PublicSnapshot['pursuits'] }) {
   if (!pursuits.length) return <p className="muted-copy">I have not taken up a question yet.</p>;
   return (
-    <div className="character-interests">
-      {pursuits.map((pursuit) => (
-        <div className="interest-row" key={pursuit.id}>
-          <div>
-            <strong>{pursuit.question}</strong>
-            <span>{pursuit.status === 'set-aside' ? 'set aside' : pursuit.status}</span>
-          </div>
-          {pursuit.why && <small>{pursuit.why}</small>}
-          <small>
-            {pursuit.entries.filter((entry) => entry.kind === 'note').length} notes ·{' '}
-            {pursuit.entries.filter((entry) => entry.kind === 'tried').length} tries ·{' '}
-            {pursuit.questions.length} open questions
-          </small>
-          {pursuit.setAsideReason && <small>{pursuit.setAsideReason}</small>}
-        </div>
+    <div className="question-list">
+      {pursuitThreads(pursuits).map((thread) => (
+        <QuestionRow key={thread.id} pursuit={thread.lead} all={pursuits}>
+          {threadCounts(thread) && (
+            <small className="question-counts">{threadCounts(thread)}</small>
+          )}
+          <QuestionKin thread={thread} all={pursuits} />
+        </QuestionRow>
       ))}
     </div>
   );

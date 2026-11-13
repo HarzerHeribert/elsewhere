@@ -744,7 +744,6 @@ export function App() {
                   recalledMemory={snapshot?.recalledMemory}
                   artifacts={snapshot?.artifacts}
                   creations={snapshot?.creations}
-                  events={snapshot?.events}
                   memories={snapshot?.memories}
                   trail={snapshot?.trail}
                   pursuits={snapshot?.pursuits}
@@ -804,6 +803,8 @@ export function App() {
                   events={snapshot.events ?? []}
                   memories={snapshot.memories ?? []}
                   trail={snapshot.trail}
+                  pursuits={snapshot.pursuits}
+                  creations={snapshot.creations}
                   notices={notices}
                   activity={character?.activity}
                   now={snapshot.runtime.simulatedAt}

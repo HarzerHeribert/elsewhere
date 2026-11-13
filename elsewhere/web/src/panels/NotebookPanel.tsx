@@ -1,82 +1,33 @@
 import type { PublicPursuit } from '@elsewhere/character-interfaces';
-import { formatDay, calendarDay, formatTime } from '../formatTime';
-import { useWallTime } from '../worldClock';
+import { pursuitThreads, questionText, threadHasRecord } from '../pursuitThreads';
+import { QuestionKin, StatusTag, ThreadRecord, threadCounts } from './Record';
 
-/** Per pursuit, what the resident wrote down and what it still wants to find out. */
+/** Per line of questions: what was tried, what came of it, what was made, what is still open. */
 export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPursuit[] }) {
-  const toWall = useWallTime();
-  const withNotes = [...pursuits]
-    .filter(
-      (pursuit) =>
-        pursuit.questions.length > 0 ||
-        pursuit.entries.some((e) => e.kind === 'note' || e.kind === 'tried' || e.kind === 'made'),
-    )
-    .sort((a, b) => b.lastAt - a.lastAt);
+  // A line of questions with nothing written under it has no page yet.
+  const threads = pursuitThreads(pursuits).filter(threadHasRecord);
   return (
     <div className="journal">
       <p className="panel-intro">
-        What I found out, and what I still want to know, in my own words.
+        What I tried, what I found out, and what I still want to know, in my own words.
       </p>
-      {withNotes.map((pursuit) => {
-        const notes = pursuit.entries.flatMap((entry) => (entry.kind === 'note' ? [entry] : []));
-        const tried = pursuit.entries.flatMap((entry) => (entry.kind === 'tried' ? [entry] : []));
-        const made = pursuit.entries.flatMap((entry) => (entry.kind === 'made' ? [entry] : []));
-        let lastDay: number | undefined;
-        return (
-          <section key={pursuit.id} aria-label={pursuit.question}>
-            <p className="eyebrow">{pursuit.question}</p>
-            {[...notes].reverse().map((note) => {
-              const day = calendarDay(toWall(note.at));
-              const heading = day !== lastDay;
-              lastDay = day;
-              return (
-                <div key={note.id}>
-                  {heading && <p className="day-rule eyebrow">{formatDay(day)}</p>}
-                  <article className="journal-page">
-                    <p>{note.text}</p>
-                    {note.surprised && <small>That surprised me.</small>}
-                    <time>{formatTime(toWall(note.at))}</time>
-                  </article>
-                </div>
-              );
-            })}
-            {tried.length > 0 && (
-              <ul className="note-topics" aria-label="Tried">
-                {tried.map((entry) => (
-                  <li key={entry.id}>
-                    <span>{entry.text}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {made.length > 0 && (
-              <ul className="note-topics" aria-label="Made">
-                {made.map((entry) => (
-                  <li key={entry.id}>
-                    {entry.url.startsWith('https://') ? (
-                      <a href={entry.url} target="_blank" rel="noopener noreferrer">
-                        {entry.title} ↗
-                      </a>
-                    ) : (
-                      <span>{entry.title}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {pursuit.questions.length > 0 && (
-              <ul className="note-topics" aria-label="Still to find out">
-                {pursuit.questions.map((question) => (
-                  <li key={question}>
-                    <span>{question}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        );
-      })}
-      {!withNotes.length && (
+      {threads.map((thread) => (
+        <section
+          className="record notebook-thread"
+          key={thread.id}
+          aria-label={thread.lead.question}
+        >
+          <header>
+            <StatusTag status={thread.status} />
+            <h3 className="question-title">{questionText(thread.lead, pursuits)}</h3>
+            {thread.lead.why && <p className="question-why">{thread.lead.why}</p>}
+            <small className="question-counts">{threadCounts(thread)}</small>
+          </header>
+          <QuestionKin thread={thread} all={pursuits} />
+          <ThreadRecord thread={thread} all={pursuits} readingLimit={5} noteLimit={6} days />
+        </section>
+      ))}
+      {!threads.length && (
         <p className="empty-state">
           My notebook is quiet for now. Notes appear when I have something to share.
         </p>
