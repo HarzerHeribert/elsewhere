@@ -216,6 +216,11 @@ const PLATE: Record<string, { detail: string; previous: string[] }> = {
       'Each drawer is labelled with a number only. A tray of damp soil waits on the shelf below.',
     ],
   },
+  'reckoning-bench': {
+    detail:
+      'A slate-topped bench with a stick of chalk, a slide rule and a brass arithmometer. A card says what the bench does: it will reckon a written sum (angles in degrees), tally a list of numbers into their mean and standard deviation, and fit pairs of numbers by least squares with a straight line and a power curve.',
+    previous: [],
+  },
   'launch-stand': {
     detail:
       'A clear 1.5 litre PET bottle, 89 mm across with a 21.5 mm opening and an empty mass of 0.12 kg, hangs mouth down in a wooden tripod. A rubber bung seals it and a bicycle pump hose with a pressure gauge in bar feeds it. The grass around it is flattened and damp.',
@@ -478,6 +483,20 @@ function craftObjects(): WorldObject[] {
       tags: ['making', 'sky', 'meadow'],
       affordances: ['inspect', 'interact'],
       detail: PLATE['launch-stand'].detail,
+    },
+    {
+      id: 'reckoning-bench',
+      name: 'The reckoning bench',
+      kind: 'reckoning-bench',
+      description:
+        'A slate-topped bench by the workbench, with chalk, a slide rule and a brass arithmometer; a written sum, list or pairs of numbers can be set to it.',
+      position: { x: -6, z: -4.4 },
+      radius: 0.8,
+      height: 1,
+      color: '#5d6468',
+      tags: ['numbers', 'making', 'workshop'],
+      affordances: ['inspect', 'interact'],
+      detail: PLATE['reckoning-bench'].detail,
     },
   ];
 }
@@ -1507,10 +1526,18 @@ export function executeWorldCommand(
       }
       let used: ReturnType<typeof operate> | undefined;
       if (command.type === 'use') {
-        used = operate(object, command.control, command.value, world.mechanisms?.[object.id], now, {
-          objects: world.objects,
-          places: world.places,
-        });
+        used = operate(
+          object,
+          command.control,
+          command.value,
+          world.mechanisms?.[object.id],
+          now,
+          {
+            objects: world.objects,
+            places: world.places,
+          },
+          command.text,
+        );
         if (!used.ok) {
           outcome.summary = used.problem;
           return { world, outcome };

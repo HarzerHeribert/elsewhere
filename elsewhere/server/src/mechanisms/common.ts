@@ -111,6 +111,7 @@ export interface RunInput {
   object: WorldObject;
   control: string;
   value: number | undefined;
+  text: string | undefined;
   state: MechanismState;
   conditions: Conditions;
   scatter: number;
@@ -131,6 +132,13 @@ export const control = (
   meaning: string,
   step = 1,
 ): WorldControl => ({ id, description, value: { min, max, step, meaning } });
+/** A control that takes written text of at most `max` characters. */
+export const written = (
+  id: string,
+  description: string,
+  max: number,
+  meaning: string,
+): WorldControl => ({ id, description, text: { max, meaning } });
 export const act = (id: string, description: string): WorldControl => ({ id, description });
 
 /** The shadow tip of the 18 cm pin: length in cm and the bearing it falls toward. */

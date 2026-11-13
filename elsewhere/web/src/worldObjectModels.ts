@@ -594,6 +594,19 @@ function buildSundial({ root: g, craft: k }: WorldObjectBuildContext) {
 
 /** Anything unrecognised still belongs to the world: a stone plinth with a brass plate. */
 /** A low wooden tripod holding a clear bottle rocket, nose up and slightly tilted. */
+/** A slate-topped bench with chalk, a slide rule and a brass arithmometer. */
+function buildReckoningBench({ root: g, craft: k }: WorldObjectBuildContext) {
+  const walnut = k.wood('walnut'),
+    top = WORLD_SCALE.workTop;
+  k.box(g, walnut, 1.2, 0.05, 0.6, 0, top - 0.05, 0, { grain: 'x', radius: 0.01 });
+  k.box(g, k.stone(), 1.1, 0.025, 0.5, 0, top, 0, { radius: 0.005, tile: 2 });
+  for (const x of [-0.5, 0.5])
+    for (const z of [-0.22, 0.22])
+      k.box(g, walnut, 0.07, top - 0.05, 0.07, x, 0, z, { grain: 'y' });
+  k.box(g, k.paint(P.cream, 0.6), 0.3, 0.012, 0.05, -0.2, top + 0.025, 0.15, { radius: 0.003 });
+  k.box(g, k.metal(), 0.28, 0.07, 0.16, 0.3, top + 0.025, -0.08, { radius: 0.01 });
+}
+
 function buildLaunchStand({ root: g, craft: k }: WorldObjectBuildContext) {
   const walnut = k.wood('walnut'),
     head = 0.62;
@@ -679,6 +692,11 @@ export const WORLD_OBJECT_MODEL_DEFINITIONS: readonly WorldObjectModelDefinition
     id: 'musicBox',
     matches: ({ id, kind }) => id === 'music-box' || kind === 'music-box',
     build: buildMusicBox,
+  },
+  {
+    id: 'reckoningBench',
+    matches: ({ id, kind }) => id === 'reckoning-bench' || kind === 'reckoning-bench',
+    build: buildReckoningBench,
   },
   {
     id: 'launchStand',

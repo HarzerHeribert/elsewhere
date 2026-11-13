@@ -58,7 +58,9 @@ export interface Obstacle extends Bounds {
 export type WorldControl = {
   id: string;
   description: string;
+  /** A number range, written text, or neither: one control takes one kind of input. */
   value?: { min: number; max: number; step?: number; meaning: string };
+  text?: { max: number; meaning: string };
 };
 export interface WorldObject {
   id: string;

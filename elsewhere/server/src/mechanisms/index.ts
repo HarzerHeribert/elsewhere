@@ -14,6 +14,7 @@ import { launchStand } from './launch-stand.js';
 import { musicBox } from './music-box.js';
 import { orchardTree } from './orchard-tree.js';
 import { pond } from './pond.js';
+import { reckoningBench } from './reckoning-bench.js';
 import { seedDrawers } from './seed-drawers.js';
 import { specimenTray } from './specimen-tray.js';
 import { standingStones } from './standing-stones.js';
@@ -43,6 +44,7 @@ const mechanisms: Record<string, Mechanism> = {
   'launch-stand': launchStand,
   'magnifying-glass': specimenTray,
   'seed-library': seedDrawers,
+  'reckoning-bench': reckoningBench,
 };
 
 /** The controls an object of this kind offers, or undefined when it cannot be worked. */
@@ -59,6 +61,7 @@ export function operate(
   state: MechanismState | undefined,
   now: number,
   scene?: Scene,
+  text?: string,
 ): OperateResult {
   const mechanism = mechanisms[object.kind];
   if (!mechanism) return { ok: false, problem: 'That object has no controls.' };
@@ -88,12 +91,28 @@ export function operate(
     // A control cannot be set finer than its step: the nearest setting is what takes effect.
     used = range.step ? Math.round(value / range.step) * range.step : value;
   }
+  const spec = chosen.text;
+  let written: string | undefined;
+  if (spec) {
+    const trimmed = text?.trim() ?? '';
+    if (!trimmed) {
+      return { ok: false, problem: `${control} needs written input (${spec.meaning}).` };
+    }
+    if (trimmed.length > spec.max) {
+      return {
+        ok: false,
+        problem: `${control} needs written input of at most ${spec.max} characters (${spec.meaning}).`,
+      };
+    }
+    written = trimmed;
+  }
   const current = state ?? {};
   const uses = typeof current.uses === 'number' ? current.uses : 0;
   const result = mechanism.run({
     object,
     control,
     value: used,
+    text: written,
     state: current,
     conditions: worldConditions(now),
     scatter: scatterOf(object.id, control, uses),
