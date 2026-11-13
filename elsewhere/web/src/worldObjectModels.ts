@@ -20,7 +20,7 @@ export interface WorldObjectModelDependencies {
 export interface WorldObjectBuildContext extends WorldObjectModelDependencies {
   object: WorldObject;
   root: THREE.Group;
-  ambient: { windParts: THREE.Mesh[]; ripples: THREE.Mesh[] };
+  ambient: { windParts: THREE.Mesh[]; ripples: THREE.Mesh[]; pendulums: THREE.Mesh[] };
 }
 /** Add a definition to extend world objects without adding rendering branches to Scene. */
 export interface WorldObjectModelDefinition {
@@ -183,40 +183,54 @@ function buildGarden({ root: g, object, craft: k }: WorldObjectBuildContext) {
   k.box(g, k.paint(P.soil, 1), width - 0.12, 0.05, depth - 0.12, 0, h - 0.05, 0, { radius: 0 });
 }
 
-/** A faceted keepsake in a brass cradle. Its base is the object's own elevation. */
-function buildArtifact({ root: g, object, craft: k }: WorldObjectBuildContext) {
-  const centre = Math.max(0.24, (object.observationHeight ?? 1.45) - (object.elevation ?? 0)),
-    brass = k.metal();
-  k.rod(g, k.wood('walnut'), 0.12, 0.025, 0, 0, 0, { sides: 20 });
-  const ring = k.solid(g, brass, new THREE.TorusGeometry(0.075, 0.009, 8, 20), 0, 0.03, 0);
-  ring.rotation.x = Math.PI / 2;
-  for (let i = 0; i < 3; i++) {
-    const a = i * 2.094 + 0.4;
-    k.strut(
-      g,
-      brass,
-      [Math.cos(a) * 0.075, 0.03, Math.sin(a) * 0.075],
-      [Math.cos(a) * 0.1, centre - 0.02, Math.sin(a) * 0.1],
-      0.006,
-      6,
-    );
-  }
-  const gem = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.14, 0),
-    new THREE.MeshPhysicalMaterial({
-      color: P.gem,
-      emissive: P.gem,
-      emissiveIntensity: 0.45,
-      roughness: 0.12,
-      clearcoat: 1,
-      flatShading: true,
-    }),
+/**
+ * The pendulum stand on the workbench riser: a post and arm, a protractor arc, a cord and
+ * brass bob that swing, and four spare bobs on the base. It is as tall as the object's height.
+ */
+function buildArtifact({ root: g, object, craft: k, ambient }: WorldObjectBuildContext) {
+  const top = Math.max(0.4, object.height),
+    pivot = top - 0.035,
+    length = pivot - 0.12,
+    walnut = k.wood('walnut'),
+    brass = k.metal(),
+    ink = k.paint(P.iron, 0.8);
+  k.box(g, walnut, 0.34, 0.022, 0.17, 0, 0, 0, { grain: 'x', radius: 0.006 });
+  k.box(g, walnut, 0.024, top - 0.022, 0.024, 0, 0.022, -0.055, { grain: 'y', radius: 0.004 });
+  k.box(g, walnut, 0.024, 0.02, 0.1, 0, top - 0.02, -0.017, { grain: 'z', radius: 0.004 });
+  k.ball(g, brass, 0.009, 0, pivot, 0.02);
+  // The protractor: a sector plate on the post, its apex at the pivot, ticked every few degrees.
+  const arc = k.solid(
+    g,
+    k.paint(P.cream, 0.8),
+    new THREE.CylinderGeometry(0.2, 0.2, 0.004, 20, 1, false, -0.55, 1.1),
+    0,
+    pivot,
+    -0.04,
   );
-  gem.scale.y = 1.3;
-  gem.position.y = centre;
-  gem.rotation.y = 0.5;
-  gem.castShadow = true;
-  g.add(separate(gem));
+  arc.rotation.x = Math.PI / 2;
+  for (let i = -3; i <= 3; i++) {
+    const a = i * 0.15,
+      tick = k.box(g, ink, 0.003, 0.022, 0.002, Math.sin(a) * 0.18, 0, -0.037, { radius: 0 });
+    tick.position.y = pivot - Math.cos(a) * 0.18;
+    tick.rotation.z = a;
+  }
+  const cord = new THREE.CylinderGeometry(0.003, 0.003, length, 6),
+    bob = new THREE.SphereGeometry(0.03, 16, 12);
+  cord.translate(0, -length / 2, 0);
+  bob.translate(0, -length, 0);
+  for (const [geometry, material] of [
+    [cord, ink],
+    [bob, brass],
+  ] as const) {
+    const part = separate(new THREE.Mesh(geometry, material));
+    part.position.set(0, pivot, 0.02);
+    part.castShadow = true;
+    g.add(part);
+    ambient.pendulums.push(part);
+  }
+  [0.012, 0.016, 0.02, 0.024].forEach((radius, i) =>
+    k.ball(g, brass, radius, [-0.13, -0.085, 0.08, 0.13][i], 0.022 + radius, 0.05),
+  );
 }
 
 function buildTree(context: WorldObjectBuildContext) {
@@ -592,46 +606,111 @@ function buildSundial({ root: g, craft: k }: WorldObjectBuildContext) {
   }
 }
 
-/** Anything unrecognised still belongs to the world: a stone plinth with a brass plate. */
-/** A low wooden tripod holding a clear bottle rocket, nose up and slightly tilted. */
-/** A slate-topped bench with chalk, a slide rule and a brass arithmometer. */
+/** A slate-topped bench with a chalked sum, chalk, a slide rule and a brass arithmometer. */
 function buildReckoningBench({ root: g, craft: k }: WorldObjectBuildContext) {
   const walnut = k.wood('walnut'),
-    top = WORLD_SCALE.workTop;
+    brass = k.metal(),
+    iron = k.metal(P.iron, 0.6),
+    chalk = k.paint(P.paper, 0.95),
+    top = WORLD_SCALE.workTop,
+    slate = top + 0.02;
   k.box(g, walnut, 1.2, 0.05, 0.6, 0, top - 0.05, 0, { grain: 'x', radius: 0.01 });
-  k.box(g, k.stone(), 1.1, 0.025, 0.5, 0, top, 0, { radius: 0.005, tile: 2 });
+  k.box(g, k.paint(P.iron, 0.5), 1.1, 0.02, 0.5, 0, top, 0, { radius: 0.004 });
   for (const x of [-0.5, 0.5])
     for (const z of [-0.22, 0.22])
       k.box(g, walnut, 0.07, top - 0.05, 0.07, x, 0, z, { grain: 'y' });
-  k.box(g, k.paint(P.cream, 0.6), 0.3, 0.012, 0.05, -0.2, top + 0.025, 0.15, { radius: 0.003 });
-  k.box(g, k.metal(), 0.28, 0.07, 0.16, 0.3, top + 0.025, -0.08, { radius: 0.01 });
+  for (const z of [-0.22, 0.22]) k.box(g, walnut, 0.94, 0.05, 0.035, 0, 0.2, z, { grain: 'x' });
+  // A sum chalked on the slate: two rows, a rule and the answer, with the chalk beside it.
+  [0.13, 0.09, 0.17, 0.12].forEach((width, row) =>
+    k.box(
+      g,
+      chalk,
+      width,
+      0.002,
+      row === 2 ? 0.004 : 0.014,
+      -0.1 - width / 2,
+      slate,
+      -0.15 + row * 0.04,
+      {
+        radius: 0,
+      },
+    ),
+  );
+  k.strut(g, chalk, [-0.43, slate + 0.006, -0.12], [-0.37, slate + 0.006, -0.1], 0.006, 6);
+  k.strut(g, chalk, [-0.41, slate + 0.006, -0.06], [-0.36, slate + 0.006, -0.085], 0.006, 6);
+  // The slide rule, its slide drawn out to the right under a brass cursor.
+  const rule = new THREE.Group();
+  rule.position.set(-0.22, slate, 0.15);
+  rule.rotation.y = 0.1;
+  g.add(rule);
+  k.box(rule, k.paint(P.cream, 0.6), 0.34, 0.01, 0.05, 0, 0, 0, { radius: 0.003 });
+  k.box(rule, chalk, 0.34, 0.013, 0.016, 0.06, 0, 0, { radius: 0.002 });
+  k.box(rule, brass, 0.014, 0.016, 0.058, -0.04, 0, 0, { radius: 0.002 });
+  // The arithmometer: a walnut case, a brass plate of setting slides, the result carriage
+  // behind it and the crank on the right.
+  const machine = new THREE.Group();
+  machine.position.set(0.27, slate, -0.06);
+  g.add(machine);
+  k.box(machine, walnut, 0.42, 0.045, 0.2, 0, 0, 0, { grain: 'x', radius: 0.008 });
+  k.box(machine, brass, 0.4, 0.006, 0.11, 0, 0.045, 0.035, { radius: 0 });
+  k.box(machine, brass, 0.4, 0.024, 0.055, 0.02, 0.045, -0.062, { radius: 0.004 });
+  for (let i = 0; i < 6; i++) {
+    const x = -0.17 + i * 0.045;
+    k.box(machine, iron, 0.005, 0.002, 0.085, x, 0.051, 0.035, { radius: 0 });
+    k.ball(machine, brass, 0.008, x, 0.058, 0.035 + (((i * 5) % 7) - 3) * 0.011);
+  }
+  for (let i = 0; i < 8; i++)
+    k.rod(machine, iron, 0.009, 0.002, -0.14 + i * 0.045, 0.069, -0.062, { sides: 12 });
+  k.rod(machine, brass, 0.007, 0.032, 0.155, 0.051, 0.035, { sides: 10 });
+  k.strut(machine, brass, [0.155, 0.081, 0.035], [0.185, 0.081, 0.06], 0.005, 6);
+  k.rod(machine, walnut, 0.008, 0.028, 0.185, 0.081, 0.06, { sides: 10 });
 }
 
-/** A Stevenson screen on a post: white louvred box, a rain gauge beside it. */
+/**
+ * A Stevenson screen on its stand: a white box louvred on every side under a sloped roof,
+ * with a brass rain gauge standing clear of it.
+ */
 function buildInstrumentShelter({ root: g, craft: k }: WorldObjectBuildContext) {
   const white = k.paint(P.cream, 0.8),
-    iron = k.metal(P.iron, 0.6);
-  for (const [x, z] of [
-    [-0.3, -0.25],
-    [0.3, -0.25],
-    [-0.3, 0.25],
-    [0.3, 0.25],
-  ] as const)
-    k.box(g, k.wood('walnut'), 0.06, 1.0, 0.06, x, 0, z, { grain: 'y' });
-  k.box(g, white, 0.76, 0.05, 0.64, 0, 1.0, 0, { radius: 0.005 });
-  for (let i = 0; i < 6; i++)
-    k.box(g, white, 0.7, 0.012, 0.58, 0, 1.06 + i * 0.045, 0, { radius: 0 });
-  k.box(g, white, 0.74, 0.05, 0.62, 0, 1.34, 0, { radius: 0.005 });
-  k.box(g, white, 0.02, 0.28, 0.58, -0.36, 1.05, 0, { radius: 0 });
-  k.box(g, white, 0.02, 0.28, 0.58, 0.36, 1.05, 0, { radius: 0 });
-  k.rod(g, k.metal(), 0.045, 0.3, 0.7, 0, 0, { sides: 14 });
-  k.rod(g, iron, 0.052, 0.02, 0.7, 0.3, 0, { sides: 14 });
+    brass = k.metal(),
+    floor = 1.0,
+    corners = [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ] as const;
+  for (const [x, z] of corners)
+    k.box(g, k.wood('walnut'), 0.06, floor, 0.06, x * 0.3, 0, z * 0.25, { grain: 'y' });
+  k.box(g, white, 0.76, 0.05, 0.64, 0, floor, 0, { radius: 0.005 });
+  // An inner box, with the slats standing proud of it between four corner posts.
+  k.box(g, white, 0.62, 0.3, 0.5, 0, floor + 0.05, 0, { radius: 0 });
+  for (let i = 0; i < 7; i++)
+    k.box(g, white, 0.72, 0.012, 0.6, 0, floor + 0.075 + i * 0.038, 0, { radius: 0 });
+  for (const [x, z] of corners)
+    k.box(g, white, 0.04, 0.3, 0.04, x * 0.35, floor + 0.05, z * 0.29, { radius: 0.004 });
+  k.box(g, white, 0.76, 0.04, 0.64, 0, floor + 0.35, 0, { radius: 0.005 });
+  k.box(g, white, 0.9, 0.025, 0.78, 0, floor + 0.4075, 0, { radius: 0.005 }).rotation.x = 0.05;
+  // The rain gauge: a stepped brass cylinder with a rim and a dark mouth.
+  const [x, z] = [0.8, 0.3];
+  k.rod(g, brass, 0.07, 0.1, x, 0, z, { sides: 18 });
+  k.rod(g, brass, 0.058, 0.22, x, 0.1, z, { sides: 18 });
+  k.rod(g, brass, 0.066, 0.014, x, 0.32, z, { sides: 18 });
+  k.rod(g, k.metal(P.iron, 0.6), 0.054, 0.003, x, 0.334, z, { sides: 18 });
 }
 
-/** The ticker-tape telegraph under a glass dome, on a small table. */
+/**
+ * A ticker-tape telegraph on a small table: a paper reel, a type wheel in a brass frame and
+ * two coils under a bell jar, the tape spilling over the table's edge and a wire leading away.
+ */
 function buildDispatchWire({ root: g, craft: k }: WorldObjectBuildContext) {
   const walnut = k.wood('walnut'),
-    brass = k.metal();
+    brass = k.metal(),
+    iron = k.metal(P.iron, 0.6),
+    paper = k.paint(P.paper, 0.9),
+    glass = k.glass(),
+    top = 0.67,
+    deck = top + 0.03;
   for (const [x, z] of [
     [-0.22, -0.22],
     [0.22, -0.22],
@@ -640,52 +719,159 @@ function buildDispatchWire({ root: g, craft: k }: WorldObjectBuildContext) {
   ] as const)
     k.box(g, walnut, 0.05, 0.62, 0.05, x, 0, z, { grain: 'y' });
   k.box(g, walnut, 0.56, 0.05, 0.56, 0, 0.62, 0, { grain: 'x', radius: 0.01 });
-  k.box(g, brass, 0.3, 0.07, 0.2, 0, 0.67, 0, { radius: 0.01 });
-  k.rod(g, brass, 0.07, 0.03, -0.1, 0.74, 0, { sides: 16 });
-  k.rod(g, k.paint(P.cream, 0.8), 0.06, 0.04, -0.1, 0.77, 0, { sides: 16 });
-  k.box(g, k.paint(P.linen, 0.9), 0.2, 0.004, 0.025, 0.14, 0.75, 0.05, { radius: 0 });
+  k.rod(g, k.paint(P.iron, 0.5), 0.2, 0.03, 0, top, 0, { sides: 28 });
+  // The works stand in the x–y plane, so every wheel turns about z.
+  const wheel = (material: THREE.Material, radius: number, depth: number, x: number, y: number) =>
+    (k.solid(
+      g,
+      material,
+      new THREE.CylinderGeometry(radius, radius, depth, 20),
+      x,
+      y,
+      0,
+    ).rotation.x = Math.PI / 2);
+  for (const z of [-0.035, 0.035])
+    k.box(g, brass, 0.11, 0.1, 0.008, 0.03, deck, z, { radius: 0.003 });
+  wheel(iron, 0.036, 0.05, 0.03, deck + 0.062);
+  wheel(brass, 0.012, 0.086, 0.03, deck + 0.062);
+  k.box(g, brass, 0.012, 0.09, 0.006, -0.085, deck, -0.016, { radius: 0 });
+  wheel(paper, 0.06, 0.02, -0.085, deck + 0.085);
+  wheel(brass, 0.013, 0.036, -0.085, deck + 0.085);
+  for (const x of [-0.005, 0.045]) {
+    k.rod(g, k.paint(P.forest, 0.7), 0.02, 0.06, x, deck, -0.085, { sides: 14 });
+    k.rod(g, brass, 0.022, 0.006, x, deck + 0.06, -0.085, { sides: 14 });
+  }
+  // The tape: off the reel, over the type wheel, out under the jar and down past the table's edge.
+  const path = [
+    [-0.085, deck + 0.146],
+    [0.03, deck + 0.1],
+    [0.068, deck + 0.064],
+    [0.283, top + 0.004],
+    [0.285, 0.42],
+    [0.25, 0.33],
+    [0.3, 0.25],
+  ] as const;
+  for (let i = 1; i < path.length; i++) {
+    const [ax, ay] = path[i - 1]!,
+      [bx, by] = path[i]!;
+    const strip = k.box(g, paper, Math.hypot(bx - ax, by - ay), 0.002, 0.018, (ax + bx) / 2, 0, 0, {
+      radius: 0,
+    });
+    strip.position.y = (ay + by) / 2;
+    strip.rotation.z = Math.atan2(by - ay, bx - ax);
+  }
+  k.strut(g, iron, [-0.14, deck - 0.012, -0.13], [-0.268, top + 0.004, -0.268], 0.004, 5);
+  k.strut(g, iron, [-0.268, top + 0.004, -0.268], [-0.255, 0, -0.255], 0.004, 5);
+  k.solid(g, glass, new THREE.CylinderGeometry(0.185, 0.185, 0.12, 28, 1, true), 0, deck + 0.06, 0);
   k.solid(
     g,
-    k.glass(),
-    new THREE.SphereGeometry(0.28, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+    glass,
+    new THREE.SphereGeometry(0.185, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2),
     0,
-    0.67,
+    deck + 0.12,
     0,
   );
+  k.ball(g, glass, 0.018, 0, deck + 0.318, 0);
 }
 
-/** A weatherproof ledger on a post, under a small pitched cover. */
+/** A weatherproof ledger on a post: an open, written book on a sloped desk under glass, facing +z. */
 function buildSightingsLedger({ root: g, craft: k }: WorldObjectBuildContext) {
-  const walnut = k.wood('walnut');
+  const walnut = k.wood('walnut'),
+    brass = k.metal(),
+    page = k.paint(P.paper, 0.9),
+    ink = k.paint(P.iron, 0.8);
   k.box(g, walnut, 0.09, 1.0, 0.09, 0, 0, 0, { grain: 'y' });
-  k.box(g, walnut, 0.5, 0.04, 0.38, 0, 1.0, 0, { grain: 'x', radius: 0.008 });
-  k.box(g, k.paint(P.forest, 0.7), 0.42, 0.04, 0.3, 0, 1.04, 0, { radius: 0.01 });
-  k.box(g, k.paint(P.cream, 0.8), 0.38, 0.015, 0.26, 0, 1.08, 0, { radius: 0.002 });
-  k.box(g, k.glass(), 0.46, 0.012, 0.34, 0, 1.18, 0, { radius: 0.002 });
-  for (const [x, z] of [
-    [-0.22, -0.16],
-    [0.22, -0.16],
-    [-0.22, 0.16],
-    [0.22, 0.16],
-  ] as const)
-    k.box(g, walnut, 0.02, 0.12, 0.02, x, 1.06, z, { grain: 'y' });
+  const desk = new THREE.Group();
+  desk.position.set(0, 0.98, 0);
+  desk.rotation.x = 0.35;
+  g.add(desk);
+  k.box(desk, walnut, 0.52, 0.04, 0.4, 0, 0, 0, { grain: 'x', radius: 0.008 });
+  k.box(desk, walnut, 0.52, 0.035, 0.025, 0, 0.04, 0.1875, { grain: 'x', radius: 0.006 });
+  k.box(desk, walnut, 0.52, 0.14, 0.02, 0, 0.04, -0.19, { grain: 'x', radius: 0.006 });
+  k.box(desk, k.paint(P.forest, 0.7), 0.44, 0.014, 0.3, 0, 0.04, 0, { radius: 0.005 });
+  for (const side of [-1, 1]) {
+    k.box(desk, page, 0.2, 0.02, 0.27, side * 0.105, 0.054, 0, { radius: 0.004 });
+    for (let row = 0; row < 5; row++) {
+      const width = 0.15 - ((row * 3 + side + 1) % 4) * 0.02;
+      k.box(
+        desk,
+        ink,
+        width,
+        0.001,
+        0.005,
+        side * 0.105 - 0.075 + width / 2,
+        0.074,
+        -0.09 + row * 0.04,
+        {
+          radius: 0,
+        },
+      );
+    }
+    k.box(desk, brass, 0.012, 0.13, 0.012, side * 0.24, 0.04, 0.165, { radius: 0.002 });
+  }
+  k.box(desk, k.paint(P.clay, 0.8), 0.012, 0.002, 0.32, 0, 0.056, 0.025, { radius: 0 });
+  k.box(desk, k.glass(), 0.5, 0.008, 0.37, 0, 0.172, -0.005, { radius: 0.002 });
 }
 
-/** A low stone ring of a well with two posts, a crossbar, a windlass drum and a bucket. */
+/**
+ * A round stone well, open down to the water, with a windlass on two posts: an oak drum on
+ * an iron axle with a crank, the rope wound on it and an oak bucket hanging in the mouth.
+ */
 function buildWishingWell({ root: g, craft: k }: WorldObjectBuildContext) {
-  const oak = k.wood('walnut');
-  k.rod(g, k.stone(), 0.8, 0.75, 0, 0, 0, { sides: 24 });
-  k.solid(g, k.stone(), new THREE.TorusGeometry(0.72, 0.1, 8, 24), 0, 0.75, 0).rotation.x =
+  const walnut = k.wood('walnut'),
+    oak = k.wood('oak'),
+    iron = k.metal(P.iron, 0.6),
+    rope = k.paint(P.linen, 0.9),
+    axle = 1.32,
+    tile = 1.3;
+  // The wall's profile runs up the outside, across the top and down the inside to the water;
+  // the repeated points keep its corners sharp.
+  const wall = new THREE.LatheGeometry(
+    [
+      [0.8, 0],
+      [0.8, 0.75],
+      [0.8, 0.75],
+      [0.6, 0.75],
+      [0.6, 0.75],
+      [0.6, 0.2],
+    ].map(([radius, y]) => new THREE.Vector2(radius, y)),
+    28,
+  );
+  const coping = new THREE.TorusGeometry(0.7, 0.1, 8, 28);
+  for (const [geometry, along] of [
+    [wall, 0],
+    [coping, Math.PI * 0.2],
+  ] as const) {
+    const at = geometry.getAttribute('position'),
+      uv = geometry.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++)
+      uv.setXY(
+        i,
+        (uv.getX(i) * Math.PI * 1.6) / tile,
+        (along ? uv.getY(i) * along : at.getY(i) + 0.8 - Math.hypot(at.getX(i), at.getZ(i))) / tile,
+      );
+  }
+  k.solid(g, k.stone(), wall);
+  k.solid(g, k.stone(), coping, 0, 0.75, 0).rotation.x = Math.PI / 2;
+  k.rod(g, k.paint(P.forest, 0.35), 0.6, 0.02, 0, 0.2, 0, { sides: 28 });
+  for (const x of [-0.7, 0.7]) k.box(g, walnut, 0.1, 1.6, 0.1, x, 0, 0, { grain: 'y' });
+  k.solid(g, oak, new THREE.CylinderGeometry(0.09, 0.09, 1.3, 14), 0, axle, 0).rotation.z =
     Math.PI / 2;
-  k.rod(g, k.paint(P.forest, 0.2), 0.62, 0.02, 0, 0.74, 0, { sides: 24 });
-  for (const x of [-0.72, 0.72]) k.box(g, oak, 0.1, 1.6, 0.1, x, 0, 0, { grain: 'y' });
-  k.box(g, oak, 1.56, 0.1, 0.1, 0, 1.5, 0, { grain: 'x' });
-  // The windlass drum, 20 cm across, lies along the crossbar; the bucket hangs below it.
-  k.solid(g, oak, new THREE.CylinderGeometry(0.1, 0.1, 1.3, 12), 0, 1.25, 0).rotation.z =
+  k.solid(g, rope, new THREE.CylinderGeometry(0.1, 0.1, 0.22, 14), 0, axle, 0).rotation.z =
     Math.PI / 2;
-  k.rod(g, oak, 0.1, 0.18, 0.0, 0.8, 0, { sides: 12 });
+  k.strut(g, iron, [-0.79, axle, 0], [0.9, axle, 0], 0.016);
+  k.strut(g, iron, [0.9, axle + 0.012, 0], [0.9, axle - 0.22, 0], 0.014);
+  k.strut(g, walnut, [0.885, axle - 0.22, 0], [1.05, axle - 0.22, 0], 0.02);
+  // The bucket hangs in the mouth of the well, just clear of the coping.
+  k.strut(g, rope, [0, axle - 0.09, 0], [0, 1.095, 0], 0.008, 6);
+  k.solid(g, iron, new THREE.TorusGeometry(0.125, 0.006, 6, 14, Math.PI), 0, 0.97, 0);
+  k.rod(g, oak, 0.095, 0.22, 0, 0.76, 0, { top: 0.125, sides: 16 });
+  k.rod(g, iron, 0.104, 0.012, 0, 0.8, 0, { top: 0.1055, sides: 16 });
+  k.rod(g, iron, 0.12, 0.012, 0, 0.92, 0, { top: 0.1215, sides: 16 });
+  k.rod(g, k.paint(P.soil, 0.9), 0.112, 0.002, 0, 0.98, 0, { sides: 16 });
 }
 
+/** A low wooden tripod holding a clear bottle rocket, nose up and slightly tilted. */
 function buildLaunchStand({ root: g, craft: k }: WorldObjectBuildContext) {
   const walnut = k.wood('walnut'),
     head = 0.62;
@@ -719,6 +905,7 @@ function buildLaunchStand({ root: g, craft: k }: WorldObjectBuildContext) {
   }
 }
 
+/** Anything unrecognised still belongs to the world: a stone plinth with a brass plate. */
 function buildFallback({ root: g, craft: k }: WorldObjectBuildContext) {
   k.box(g, k.stone(), 0.46, 0.5, 0.46, 0, 0, 0, { radius: 0.04, tile: 2 });
   k.box(g, k.stone(), 0.56, 0.07, 0.56, 0, 0.5, 0, { radius: 0.025, tile: 2 });
@@ -820,7 +1007,11 @@ export function createWorldObjectModel(
   const group = new THREE.Group();
   group.position.set(object.position.x, object.elevation ?? 0, object.position.z);
   group.userData.objectId = object.id;
-  const ambient = { windParts: [] as THREE.Mesh[], ripples: [] as THREE.Mesh[] };
+  const ambient = {
+    windParts: [] as THREE.Mesh[],
+    ripples: [] as THREE.Mesh[],
+    pendulums: [] as THREE.Mesh[],
+  };
   const context = { ...dependencies, object, root: group, ambient };
   const definition = definitions.find((candidate) => candidate.matches(object));
   (definition?.build ?? buildFallback)(context);
@@ -849,6 +1040,8 @@ export function createWorldObjectModel(
     updateAmbient(worldTime, wind) {
       for (const chime of ambient.windParts)
         chime.rotation.z = Math.sin(worldTime * 0.0014 + chime.userData.phase) * wind * 0.018;
+      // A pendulum keeps its own time: about 11° either side, every couple of seconds.
+      for (const part of ambient.pendulums) part.rotation.z = Math.sin(worldTime * 0.0028) * 0.2;
       for (const ripple of ambient.ripples) {
         const wave = (Math.sin(worldTime * 0.0007 + ripple.userData.phase) + 1) / 2;
         ripple.scale.setScalar(0.9 + wave * 0.2);
@@ -861,7 +1054,7 @@ export function createWorldObjectModel(
       dependencies.assets.detach(group);
       releaseObjectResources(group);
       group.removeFromParent();
-      ambient.windParts.length = ambient.ripples.length = 0;
+      ambient.windParts.length = ambient.ripples.length = ambient.pendulums.length = 0;
     },
   };
 }
