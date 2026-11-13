@@ -7,7 +7,9 @@ import {
   activePursuit,
   addPursuitQuestion,
   openPursuit,
+  pursueProblem,
   pursuitContext,
+  repairPursuitQuestions,
   publicPursuits,
   recordPursuitEntry,
   resumePursuit,
@@ -237,7 +239,7 @@ export function upgradeHubertState(input: HubertState): HubertState {
     delete (state as unknown as Record<string, unknown>)[retired];
   state.readings ??= [];
   state.portraits ??= [];
-  state.pursuits ??= createPursuitState();
+  state.pursuits = repairPursuitQuestions(state.pursuits ?? createPursuitState());
   state.trail ??= [];
   state.research ??= createResearchState();
   return state;
@@ -815,7 +817,12 @@ function actionChoices(
     ),
     { type: 'rest' },
     { type: 'pursue', where: { question: 'any', why: 'any' } },
-    ...listed('pursue', 'pursuitId', pursuitIds),
+    // Going back to the pursuit that is already active would change nothing, so it is not offered.
+    ...listed(
+      'pursue',
+      'pursuitId',
+      pursuitIds.filter((id) => id !== state.pursuits.activeId),
+    ),
     ...listed('set_aside', 'pursuitId', pursuitIds, { reason: 'any' }),
     ...(state.pursuits.activeId
       ? [{ type: 'note' as const, where: { text: 'any' as const } }]
@@ -911,6 +918,15 @@ export function workingContext(
           }),
         ),
         research,
+        // What the resident asked the people who look after the world for, and what came of it.
+        wishes: (state.wishes ?? [])
+          .filter((wish) => typeof wish.text === 'string' && wish.text.trim() !== '')
+          .slice(-6)
+          .map(({ text, status, createdAt }) => ({
+            text,
+            status,
+            askedAt: createdAt,
+          })),
         ...(state.portrait
           ? { self: { portrait: state.portrait.text, writtenAt: state.portrait.at } }
           : {}),
@@ -1045,15 +1061,15 @@ function mindStepProblem(
   const active = activePursuit(state.pursuits);
   switch (action.type) {
     case 'pursue':
-      return action.pursuitId && !state.pursuits.items.some((item) => item.id === action.pursuitId)
-        ? 'That pursuit does not exist. Use a pursuitId from state.pursuits.'
-        : undefined;
+      return pursueProblem(state.pursuits, action);
     case 'set_aside':
       return state.pursuits.items.some((item) => item.id === action.pursuitId)
         ? undefined
         : 'That pursuit does not exist. Use a pursuitId from state.pursuits.';
     case 'note':
-      return active ? undefined : 'A note needs an active pursuit. Open one with pursue first.';
+      return active
+        ? noteProblem(state, action.text)
+        : 'A note needs an active pursuit. Open one with pursue first.';
     case 'search':
       if (!researchEnabled) return 'Web search is not available.';
       return active ? undefined : 'A search needs an active pursuit. Open one with pursue first.';
@@ -1065,8 +1081,6 @@ function mindStepProblem(
       return wishProblem(state);
     case 'reply':
       return replyProblem(state, action.messageId);
-    case 'note':
-      return noteProblem(state, action.text);
     case 'reflect':
       return 'Reflecting is not something you can choose. Choose one of the listed actions.';
     case 'work':

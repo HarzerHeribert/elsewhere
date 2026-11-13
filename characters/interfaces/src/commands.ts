@@ -310,9 +310,13 @@ function narrowProperty(
   const canonical =
     'const' in property ? [property.const] : Array.isArray(property.enum) ? property.enum : null;
   const pattern = typeof property.pattern === 'string' ? new RegExp(property.pattern) : null;
-  const allowed = [...new Set(values)].filter(
-    (value) => (!canonical || canonical.includes(value)) && (!pattern || pattern.test(value)),
-  );
+  // Sorted, so the same set of choices always gives the same format whatever order it came in:
+  // a provider can only reuse a cached prompt whose format is identical.
+  const allowed = [...new Set(values)]
+    .filter(
+      (value) => (!canonical || canonical.includes(value)) && (!pattern || pattern.test(value)),
+    )
+    .sort();
   return allowed.length ? { type: 'string', enum: allowed } : null;
 }
 

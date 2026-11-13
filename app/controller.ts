@@ -1004,9 +1004,19 @@ export class ElsewhereController {
       this.recordTrail(command, why, observation.placeId, now, { text, url });
     try {
       if (command.type === 'pursue') {
-        s.hubert = applyPursue(s.hubert, command, 'pursuit-' + randomUUID(), now);
+        const id = 'pursuit-' + randomUUID();
+        s.hubert = applyPursue(s.hubert, command, id, now);
         const opened = activePursuit(s.hubert.pursuits)!;
-        outcome('completed', `Following a question: ${opened.question}`, 'Following a question');
+        // A near-copy of a question that is already there goes back to it; say so, so the next
+        // step continues that record instead of asking once more.
+        const joined = command.question !== undefined && opened.id !== id;
+        outcome(
+          'completed',
+          joined
+            ? `That is close to a question you already have, so no second pursuit was opened. You are following it again: ${opened.question}`
+            : `Following a question: ${opened.question}`,
+          'Following a question',
+        );
         trail(opened.question);
       } else if (command.type === 'set_aside') {
         s.hubert = applySetAside(s.hubert, command, now);
