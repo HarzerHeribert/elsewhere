@@ -144,7 +144,7 @@ describe('world object model builders', () => {
     dependencies.dispose();
   });
 
-  it('uses the canonical garden footprint and keeps the artifact at its observed world height', () => {
+  it('uses the canonical garden footprint and hangs the pendulum across its observed world height', () => {
     const dependencies = setup(),
       world = createInitialWorld(1);
     const garden = world.objects.find((value) => value.id === 'garden')!;
@@ -156,8 +156,17 @@ describe('world object model builders', () => {
     expect(bed.y).toBeLessThan(garden.height + 0.2);
     const artifact = world.objects.find((value) => value.id === 'artifact')!;
     const artifactModel = createWorldObjectModel(artifact, dependencies);
-    const gem = artifactModel.root.children.find((child) => child.userData.separate)!;
-    expect(gem.getWorldPosition(new THREE.Vector3()).y).toBeCloseTo(artifact.observationHeight!);
+    // The cord and bob hang from the top of the stand, across the height it is looked at, and swing.
+    const pendulum = artifactModel.root.children.filter((child) => child.userData.separate);
+    expect(pendulum).toHaveLength(2);
+    artifactModel.root.updateMatrixWorld(true);
+    const reach = new THREE.Box3();
+    for (const part of pendulum) reach.expandByObject(part);
+    expect(reach.max.y).toBeCloseTo(artifact.elevation! + artifact.height, 1);
+    expect(reach.min.y).toBeLessThan(artifact.observationHeight!);
+    expect(reach.min.y).toBeGreaterThan(artifact.elevation!);
+    artifactModel.updateAmbient(561, 3);
+    for (const part of pendulum) expect(part.rotation.z).toBeCloseTo(0.2, 3);
     model.dispose();
     artifactModel.dispose();
     dependencies.dispose();
