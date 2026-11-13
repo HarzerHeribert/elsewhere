@@ -33,6 +33,7 @@ import {
   publicWorld,
   upgradeWorldLayout,
   RETIRED_FEATURE_IDS,
+  type FeedSnapshot,
 } from '@elsewhere/server';
 import {
   advanceHubert,
@@ -169,6 +170,8 @@ export interface ControllerOptions {
   research?: CharacterResearchPort;
   /** Where the character can publish files of its own; without one it cannot make things. */
   studio?: CharacterStudio;
+  /** Real data from outside for the objects that read it; without it the world is closed off. */
+  feeds?: { snapshot(): FeedSnapshot };
 }
 
 /** Character definitions supply their body dimensions; the shared world stays species-agnostic. */
@@ -918,7 +921,13 @@ export class ElsewhereController {
         } else if (isMindCommand(policy.command)) {
           await this.mindStep(policy.command, decision.why, observation, now);
         } else {
-          const result = executeWorldCommand(s.world, 'hubert', policy.command, now);
+          const result = executeWorldCommand(
+            s.world,
+            'hubert',
+            policy.command,
+            now,
+            this.options.feeds?.snapshot(),
+          );
           s.world = result.world;
           const duration = hubertActivityDurationMs(policy.command, s.hubert.stats.energy);
           if (result.outcome.status !== 'rejected' && duration > 0)

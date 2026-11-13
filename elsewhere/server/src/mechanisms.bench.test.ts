@@ -6,7 +6,7 @@ const world = createInitialWorld(0);
 const bench = world.objects.find((item) => item.id === 'reckoning-bench')!;
 const at = Date.UTC(2026, 10, 9, 12);
 const run = (control: string, text?: string) =>
-  operate(bench, control, undefined, undefined, at, undefined, text);
+  operate(bench, control, undefined, undefined, at, undefined, { text });
 const reading = (control: string, text: string) => {
   const result = run(control, text);
   if (!result.ok) throw new Error(result.problem);
@@ -112,7 +112,7 @@ describe('written input at the door', () => {
   });
   it('ignores text given to a control that takes none', () => {
     const music = world.objects.find((item) => item.kind === 'music-box')!;
-    const result = operate(music, 'play', undefined, undefined, at, undefined, 'hello');
+    const result = operate(music, 'play', undefined, undefined, at, undefined, { text: 'hello' });
     expect(result.ok).toBe(true);
   });
   it('keeps no hidden state beyond the use count', () => {

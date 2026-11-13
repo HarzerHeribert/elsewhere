@@ -1,3 +1,4 @@
+import type { FeedSnapshot } from '../feeds/types.js';
 import type { WorldControl, WorldObject } from '@elsewhere/character-interfaces';
 import {
   scatterOf,
@@ -8,14 +9,17 @@ import {
   type MechanismState,
 } from './common.js';
 import { artifact } from './artifact.js';
+import { dispatchWire } from './dispatch-wire.js';
 import { easel } from './easel.js';
 import { garden } from './garden.js';
+import { instrumentShelter } from './instrument-shelter.js';
 import { launchStand } from './launch-stand.js';
 import { musicBox } from './music-box.js';
 import { orchardTree } from './orchard-tree.js';
 import { pond } from './pond.js';
 import { reckoningBench } from './reckoning-bench.js';
 import { seedDrawers } from './seed-drawers.js';
+import { sightingsLedger } from './sightings-ledger.js';
 import { specimenTray } from './specimen-tray.js';
 import { standingStones } from './standing-stones.js';
 import { sundial } from './sundial.js';
@@ -45,6 +49,9 @@ const mechanisms: Record<string, Mechanism> = {
   'magnifying-glass': specimenTray,
   'seed-library': seedDrawers,
   'reckoning-bench': reckoningBench,
+  'instrument-shelter': instrumentShelter,
+  'dispatch-wire': dispatchWire,
+  'sightings-ledger': sightingsLedger,
 };
 
 /** The controls an object of this kind offers, or undefined when it cannot be worked. */
@@ -61,7 +68,7 @@ export function operate(
   state: MechanismState | undefined,
   now: number,
   scene?: Scene,
-  text?: string,
+  options: { text?: string; feeds?: FeedSnapshot } = {},
 ): OperateResult {
   const mechanism = mechanisms[object.kind];
   if (!mechanism) return { ok: false, problem: 'That object has no controls.' };
@@ -94,7 +101,7 @@ export function operate(
   const spec = chosen.text;
   let written: string | undefined;
   if (spec) {
-    const trimmed = text?.trim() ?? '';
+    const trimmed = options.text?.trim() ?? '';
     if (!trimmed) {
       return { ok: false, problem: `${control} needs written input (${spec.meaning}).` };
     }
@@ -114,10 +121,11 @@ export function operate(
     value: used,
     text: written,
     state: current,
-    conditions: worldConditions(now),
+    conditions: worldConditions(now, options.feeds),
     scatter: scatterOf(object.id, control, uses),
     now,
     scene,
+    feeds: options.feeds,
   });
   if ('problem' in result) return { ok: false, problem: result.problem };
   return {

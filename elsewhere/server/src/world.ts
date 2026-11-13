@@ -19,6 +19,7 @@ import {
   type WorldState,
 } from '@elsewhere/character-interfaces';
 import { mechanismFor, operate } from './mechanisms/index.js';
+import type { FeedSnapshot } from './feeds/types.js';
 import { advanceEntities, createInitialEntities, publicEntity } from './entities.js';
 
 const SPEED = 0.0022; // world units / millisecond
@@ -84,6 +85,12 @@ const TEXT = {
     'A cabinet of six drawers of garden-pea seed beside a sowing tray; two lines can be crossed, sown and the plants counted.',
   'launch-stand':
     'A tripod holding a 1.5 litre bottle rocket in the meadow; it can be filled, pumped, tilted and launched.',
+  'instrument-shelter':
+    'A white louvred box on a post beside the wind flag, with a rain gauge next to it; its thermometers, barometer, rain gauge and the sky can be read.',
+  'dispatch-wire':
+    'A ticker-tape telegraph under a glass dome in the library; the river gauge, the earthquakes and the sun can be read off the tape.',
+  'sightings-ledger':
+    'A weatherproof ledger on a post in the orchard; the birds, insects, mammals and plants that observers have recorded nearby can be read.',
 } as const;
 const PREVIOUS_OBJECT_TEXT: Record<string, string[]> = {
   artifact: ['Something small rests beside the workbench.'],
@@ -219,6 +226,21 @@ const PLATE: Record<string, { detail: string; previous: string[] }> = {
   'reckoning-bench': {
     detail:
       'A slate-topped bench with a stick of chalk, a slide rule and a brass arithmometer. A card says what the bench does: it will reckon a written sum (angles in degrees), tally a list of numbers into their mean and standard deviation, and fit pairs of numbers by least squares with a straight line and a power curve.',
+    previous: [],
+  },
+  'instrument-shelter': {
+    detail:
+      'A white louvred wooden box on a post, a Stevenson screen, shades its instruments from sun and rain while air passes through: a psychrometer (a dry-bulb and a wet-bulb thermometer) and an aneroid barometer with a marker hand to set against the pressure. Beside it stands a rain gauge, a funnel over a measuring tube. The figures are current observations for this place from Open-Meteo.',
+    previous: [],
+  },
+  'dispatch-wire': {
+    detail:
+      'A ticker-tape telegraph under a glass dome prints three kinds of news on a paper tape: the water level at the nearest river gauge, earthquakes of magnitude 4.5 and above, and space weather (the planetary K index and the solar wind speed). The sources are the German waterways gauge service (Pegelonline), the US Geological Survey and the NOAA Space Weather Prediction Center.',
+    previous: [],
+  },
+  'sightings-ledger': {
+    detail:
+      'A weatherproof ledger on a post, ruled in four columns: birds, insects, mammals and plants. It records what observers have reported within about 30 km in this calendar month over the years, as occurrence records of species under their scientific names. The data come from GBIF, the Global Biodiversity Information Facility.',
     previous: [],
   },
   'launch-stand': {
@@ -497,6 +519,45 @@ function craftObjects(): WorldObject[] {
       tags: ['numbers', 'making', 'workshop'],
       affordances: ['inspect', 'interact'],
       detail: PLATE['reckoning-bench'].detail,
+    },
+    {
+      id: 'instrument-shelter',
+      name: 'The instrument shelter',
+      kind: 'instrument-shelter',
+      description: TEXT['instrument-shelter'],
+      position: { x: 20.6, z: -6.6 },
+      radius: 1,
+      height: 1.4,
+      color: '#ece8dc',
+      tags: ['weather', 'measurement', 'meadow'],
+      affordances: ['inspect', 'interact'],
+      detail: PLATE['instrument-shelter'].detail,
+    },
+    {
+      id: 'dispatch-wire',
+      name: 'The wire',
+      kind: 'dispatch-wire',
+      description: TEXT['dispatch-wire'],
+      position: { x: -25, z: -12 },
+      radius: 0.6,
+      height: 1,
+      color: '#8a6a4b',
+      tags: ['news', 'earth', 'library'],
+      affordances: ['inspect', 'interact'],
+      detail: PLATE['dispatch-wire'].detail,
+    },
+    {
+      id: 'sightings-ledger',
+      name: 'The sightings ledger',
+      kind: 'sightings-ledger',
+      description: TEXT['sightings-ledger'],
+      position: { x: -24, z: 11 },
+      radius: 0.6,
+      height: 1.2,
+      color: '#6f7d57',
+      tags: ['nature', 'records', 'orchard'],
+      affordances: ['inspect', 'interact'],
+      detail: PLATE['sightings-ledger'].detail,
     },
   ];
 }
@@ -1347,6 +1408,8 @@ export function executeWorldCommand(
   characterId: string,
   rawCommand: CharacterCommand,
   now = input.updatedAt,
+  /** Real data from outside for objects that read it; none means the world is closed off. */
+  feeds?: FeedSnapshot,
 ): { world: WorldState; outcome: WorldOutcome } {
   const world = advanceWorld(input, now);
   const result = CharacterCommandSchema.safeParse(rawCommand);
@@ -1536,7 +1599,7 @@ export function executeWorldCommand(
             objects: world.objects,
             places: world.places,
           },
-          command.text,
+          { text: command.text, feeds },
         );
         if (!used.ok) {
           outcome.summary = used.problem;

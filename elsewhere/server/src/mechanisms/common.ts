@@ -1,4 +1,5 @@
 import type { Bounds, Position, WorldControl, WorldObject } from '@elsewhere/character-interfaces';
+import type { FeedSnapshot } from '../feeds/types.js';
 import { sunHorizontal } from './sky.js';
 
 /**
@@ -38,8 +39,14 @@ export const mod = (value: number, base: number) => ((value % base) + base) % ba
 export const wave = (now: number, periodMinutes: number, phase: number) =>
   Math.sin((TAU * now) / (periodMinutes * MINUTE) + phase);
 
-/** Conditions at a world time. Never exposed directly. */
-export function worldConditions(now: number): Conditions {
+/** A weather value fetched within this long is taken as the weather over Elsewhere. */
+export const WEATHER_FRESH_MS = 2 * HOUR;
+
+/**
+ * Conditions at a world time. Never exposed directly. With a fresh weather value in `feeds`,
+ * wind and air temperature are the real ones; otherwise they are simulated.
+ */
+export function worldConditions(now: number, feeds?: FeedSnapshot): Conditions {
   // The real sun over latitude 51.0 N, longitude 10.0 E at this UTC time.
   const { elevationDeg: sunElevationDeg, bearingDeg: sunBearingDeg } = sunHorizontal(now);
   const windSpeed = Math.max(
@@ -60,6 +67,17 @@ export function worldConditions(now: number): Conditions {
     3 * wave(now, 320, 1.1) +
     1.5 * wave(now, 107, 0.2) +
     0.8 * wave(now, 41, 2.9);
+  const live = feeds?.weather;
+  if (live && Math.abs(now - live.fetchedAt) <= WEATHER_FRESH_MS) {
+    return {
+      sunElevationDeg,
+      sunBearingDeg,
+      windSpeed: live.windSpeedMs,
+      // Reported as the direction the wind comes from; the world's bearing is where it blows to.
+      windBearingDeg: mod(live.windFromDeg + 180, 360),
+      airTempC: live.temperatureC,
+    };
+  }
   return { sunElevationDeg, sunBearingDeg, windSpeed, windBearingDeg, airTempC };
 }
 
@@ -117,6 +135,8 @@ export interface RunInput {
   scatter: number;
   now: number;
   scene: Scene | undefined;
+  /** Real data from outside; undefined when there is none. */
+  feeds: FeedSnapshot | undefined;
 }
 export type RunResult = { reading: string; state?: MechanismState } | { problem: string };
 export interface Mechanism {

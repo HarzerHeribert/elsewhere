@@ -1,0 +1,92 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "count": 15
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.8,
+        "place": "59 km WSW of Houma, Tonga",
+        "time": 1794568692734,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-175.8541, -21.3036, 162.78]
+      },
+      "id": "us7000txzd"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.9,
+        "place": "southeast of the Loyalty Islands",
+        "time": 1794563745053,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [173.4492, -22.3729, 10]
+      },
+      "id": "us7000txz3"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.6,
+        "place": "84 km E of Barcelona, Philippines",
+        "time": 1794562847087,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [127.2035, 8.2136, 10]
+      },
+      "id": "us7000txz0"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.6,
+        "place": "18 km WNW of Río Grande, Panama",
+        "time": 1794556917936,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-81.4943, 7.7821, 10]
+      },
+      "id": "us7000txyr"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.7,
+        "place": "27 km NNE of Labuan Lombok, Indonesia",
+        "time": 1794545373549,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.7507, -8.262, 9.626]
+      },
+      "id": "us7000txy5"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "mag": 4.9,
+        "place": "Pagan region, Northern Mariana Islands",
+        "time": 1794538503370,
+        "type": "earthquake"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [145.6025, 18.8925, 219.572]
+      },
+      "id": "us7000txxy"
+    }
+  ]
+}

@@ -1,0 +1,344 @@
+[
+  {
+    "uuid": "5c735fa8-270e-42c3-b22f-b27418db10cf",
+    "number": "41700105",
+    "shortname": "HELDRA",
+    "longname": "HELDRA",
+    "km": 77.32,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 10.196998,
+    "latitude": 51.125008,
+    "voiceServiceNumber": "+49 228 286527 732",
+    "water": {
+      "shortname": "WERRA",
+      "longname": "WERRA"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 141.0,
+          "stateMnwMhw": "normal",
+          "stateNswHsw": "unknown"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NN",
+          "value": 168.019,
+          "validFrom": "1970-07-19"
+        }
+      },
+      {
+        "shortname": "WT",
+        "longname": "WASSERTEMPERATUR ROHDATEN",
+        "unit": "°C",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 7.5
+        }
+      },
+      {
+        "shortname": "Q",
+        "longname": "ABFLUSS",
+        "unit": "m³/s",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T05:00:00+01:00",
+          "value": 13.4
+        }
+      }
+    ]
+  },
+  {
+    "uuid": "d1ba62a4-767b-49ba-9ce8-ab17537b2fe1",
+    "number": "42700100",
+    "shortname": "ROTENBURG",
+    "longname": "ROTENBURG",
+    "km": 95.69,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 9.72045,
+    "latitude": 51.003768,
+    "voiceServiceNumber": "+49 228 286527 186",
+    "water": {
+      "shortname": "FULDA",
+      "longname": "FULDA"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 125.0,
+          "stateMnwMhw": "normal",
+          "stateNswHsw": "unknown"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NHN",
+          "value": 179.523,
+          "validFrom": "2003-11-01"
+        }
+      },
+      {
+        "shortname": "Q",
+        "longname": "ABFLUSS",
+        "unit": "m³/s",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T05:00:00+01:00",
+          "value": 7.06
+        }
+      }
+    ]
+  },
+  {
+    "uuid": "5b58af00-6817-4214-b151-34830ac563cc",
+    "number": "41900104",
+    "shortname": "ALLENDORF",
+    "longname": "ALLENDORF",
+    "km": 40.79,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 9.966471,
+    "latitude": 51.276767,
+    "voiceServiceNumber": "+49 228 286527 731",
+    "water": {
+      "shortname": "WERRA",
+      "longname": "WERRA"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 68.0,
+          "stateMnwMhw": "normal",
+          "stateNswHsw": "unknown"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NN",
+          "value": 143.52,
+          "validFrom": "1970-05-12"
+        }
+      }
+    ]
+  },
+  {
+    "uuid": "acd63934-e40d-4650-a094-01cea45432be",
+    "number": "42700202",
+    "shortname": "GREBENAU",
+    "longname": "GREBENAU",
+    "km": 55.49,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 9.498194,
+    "latitude": 51.193131,
+    "voiceServiceNumber": "+49 228 286527 185",
+    "water": {
+      "shortname": "FULDA",
+      "longname": "FULDA"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 137.0,
+          "stateMnwMhw": "normal",
+          "stateNswHsw": "unknown"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NHN",
+          "value": 151.007,
+          "validFrom": "2004-08-05"
+        }
+      },
+      {
+        "shortname": "Q",
+        "longname": "ABFLUSS",
+        "unit": "m³/s",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T05:00:00+01:00",
+          "value": 8.71
+        }
+      }
+    ]
+  },
+  {
+    "uuid": "213a585d-d665-4be7-96a4-78a992b9614d",
+    "number": "42900100",
+    "shortname": "GUNTERSHAUSEN",
+    "longname": "GUNTERSHAUSEN",
+    "km": 43.99,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 9.469333,
+    "latitude": 51.22658,
+    "voiceServiceNumber": "+49 228 286527 184",
+    "water": {
+      "shortname": "FULDA",
+      "longname": "FULDA"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 113.0,
+          "stateMnwMhw": "normal",
+          "stateNswHsw": "normal"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NN",
+          "value": 140.896,
+          "validFrom": "1987-03-26"
+        }
+      },
+      {
+        "shortname": "Q",
+        "longname": "ABFLUSS",
+        "unit": "m³/s",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T05:00:00+01:00",
+          "value": 11.4
+        }
+      }
+    ]
+  },
+  {
+    "uuid": "59219312-9e87-4b8c-8dde-325af733d282",
+    "number": "41900206",
+    "shortname": "LETZTER HELLER",
+    "longname": "LETZTER HELLER",
+    "km": 2.32,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 9.678081,
+    "latitude": 51.415651,
+    "voiceServiceNumber": "+49 228 286527 730",
+    "water": {
+      "shortname": "WERRA",
+      "longname": "WERRA"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 156.0,
+          "stateMnwMhw": "low",
+          "stateNswHsw": "unknown"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NN",
+          "value": 117.4,
+          "validFrom": "1988-11-01"
+        }
+      },
+      {
+        "shortname": "Q",
+        "longname": "ABFLUSS",
+        "unit": "m³/s",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T05:00:00+01:00",
+          "value": 12.8
+        }
+      }
+    ]
+  },
+  {
+    "uuid": "23721dfd-9b89-4b69-af80-063229917f27",
+    "number": "42900201",
+    "shortname": "BONAFORTH",
+    "longname": "BONAFORTH",
+    "km": 3.61,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 9.632042,
+    "latitude": 51.403492,
+    "voiceServiceNumber": "+49 228 286527 183",
+    "water": {
+      "shortname": "FULDA",
+      "longname": "FULDA"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 211.0,
+          "stateMnwMhw": "low",
+          "stateNswHsw": "normal"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NHN",
+          "value": 117.679,
+          "validFrom": "2004-04-19"
+        }
+      },
+      {
+        "shortname": "Q",
+        "longname": "ABFLUSS",
+        "unit": "m³/s",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T05:00:00+01:00",
+          "value": 21.6
+        }
+      }
+    ]
+  },
+  {
+    "uuid": "227e53ca-4dd9-482b-be62-52fdc62a4b4e",
+    "number": "43100109",
+    "shortname": "HANN.MUENDEN",
+    "longname": "HANN.MUENDEN",
+    "km": 0.65,
+    "agency": "HANN-MÜNDEN",
+    "longitude": 9.640917,
+    "latitude": 51.425789,
+    "voiceServiceNumber": "+49 228 286527 746",
+    "water": {
+      "shortname": "WESER",
+      "longname": "WESER"
+    },
+    "timeseries": [
+      {
+        "shortname": "W",
+        "longname": "WASSERSTAND ROHDATEN",
+        "unit": "cm",
+        "equidistance": 15,
+        "currentMeasurement": {
+          "timestamp": "2026-11-13T13:00:00+01:00",
+          "value": 84.0,
+          "stateMnwMhw": "low",
+          "stateNswHsw": "normal"
+        },
+        "gaugeZero": {
+          "unit": "m. ü. NN",
+          "value": 114.95,
+          "validFrom": "1988-05-01"
+        }
+      }
+    ]
+  }
+]
