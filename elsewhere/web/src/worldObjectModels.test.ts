@@ -73,6 +73,11 @@ describe('world object model builders', () => {
       object('seed-library'),
       object('music-box'),
       object('launch-stand'),
+      object('reckoning-bench'),
+      object('instrument-shelter'),
+      object('dispatch-wire'),
+      object('sightings-ledger'),
+      object('wishing-well'),
       object('standing-stones'),
       object('windchime'),
       object('weather-station'),
@@ -88,7 +93,7 @@ describe('world object model builders', () => {
           ),
         ),
       ).size,
-    ).toBe(20);
+    ).toBe(25);
     for (const value of examples) {
       const model = createWorldObjectModel(value, dependencies);
       dependencies.scene.add(model.root);

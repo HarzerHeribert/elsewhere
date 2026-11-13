@@ -58,6 +58,7 @@ export function CharacterPanel({
   onViewpoint,
   onWishes,
   onDay,
+  carrying = [],
 }: {
   character: PublicSnapshot['character'];
   tab?: CharacterTab;
@@ -82,6 +83,8 @@ export function CharacterPanel({
   onWishes: () => void;
   /** When given, the page links to the full account of the day. */
   onDay?: () => void;
+  /** What the resident has on them, as the world reports it. */
+  carrying?: ReadonlyArray<{ kind: string; name: string; count: number }>;
 }) {
   const toWall = useWallTime();
   const [ownTab, setOwnTab] = useState<CharacterTab>('now');
@@ -133,6 +136,15 @@ export function CharacterPanel({
               <Meter label="Mood" value={character.mood} />
               <Meter label="Energy" value={character.energy} />
             </div>
+            {carrying.some((item) => item.count > 0) && (
+              <p className="now-carrying">
+                Carrying{' '}
+                {carrying
+                  .filter((item) => item.count > 0)
+                  .map((item) => `${item.count} ${item.name}${item.count === 1 ? '' : 's'}`)
+                  .join(', ')}
+              </p>
+            )}
           </section>
           <div className="panel-actions">
             <Button onClick={onMessage}>

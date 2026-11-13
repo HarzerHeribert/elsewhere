@@ -3,7 +3,7 @@ import { createCharacterMail } from './character-mail';
 import { resolve } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { closeApiServer, createApiServer } from '@elsewhere/server';
+import { LiveFeeds, closeApiServer, createApiServer } from '@elsewhere/server';
 import { ElsewhereController, type ControllerState } from './controller';
 import { appConfig } from './config';
 import {
@@ -30,6 +30,7 @@ const registry = hubertResourceRegistry(
 );
 const token = ownerToken(directory, process.env.ADMIN_TOKEN);
 const lifetime = new AbortController();
+const feeds = new LiveFeeds({ enabled: config.LIVE_FEEDS === 'on' });
 let ready = false;
 let auth: Awaited<ReturnType<typeof createLocalAuth>> | undefined;
 let controller: ElsewhereController | undefined;
@@ -156,6 +157,7 @@ async function initialize() {
     decisionIntervalMs: config.DECISION_INTERVAL_MS,
     simulationRate: config.SIMULATION_RATE,
     realTimeClock: true,
+    feeds,
     modelProvider: providers.model,
     reflectionProvider: providers.reflection,
     expressionProvider: providers.expression,
@@ -187,6 +189,7 @@ async function initialize() {
 
 function startClock() {
   if (!ready) return;
+  feeds.start();
   let ticking = false;
   timer = setInterval(() => {
     if (ticking || !ready) return;
@@ -231,6 +234,7 @@ function shutdown(code = 0): Promise<void> {
   lifetime.abort();
   clearInterval(timer);
   clearInterval(mailTimer);
+  feeds.stop();
   stopping = (async () => {
     await closeApiServer(server);
     await startup.catch(() => undefined);

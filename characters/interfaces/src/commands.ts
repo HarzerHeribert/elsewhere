@@ -52,10 +52,11 @@ const definitions = [
           .max(40)
           .regex(/^[a-z][a-z-]*$/),
         value: z.number().finite().optional(),
+        text: z.string().min(1).max(400).optional(),
       })
       .strict(),
     instruction:
-      'use: works one control of an object within reach. targetId is the object, control is one of the control ids listed for it in state.actionOffers, and value is a number only when that control lists a range. The result is a reading.',
+      'use: works one control of an object within reach. targetId is the object, control is one of the control ids listed for it in state.actionOffers, value is a number only when that control lists a range, and text is what you write only when that control lists text. The result is a reading.',
   },
   {
     schema: z.object({ type: z.literal('work'), targetId }).strict(),
@@ -223,7 +224,7 @@ function fieldFormat(schema: z.ZodTypeAny): JsonSchema {
 }
 
 /** Commands the model is never offered: disabled by policy, or retired in favour of another. */
-const MODEL_HIDDEN: readonly string[] = ['say', 'delegate', 'work', 'reflect'];
+const MODEL_HIDDEN: readonly string[] = ['say', 'delegate', 'work', 'reflect', 'wish'];
 
 export const MODEL_ACTION_FORMAT = {
   type: 'object',
@@ -252,7 +253,7 @@ export const MODEL_ACTION_FORMAT = {
     }),
 };
 export const MODEL_ACTION_INSTRUCTIONS = definitions
-  .filter((item) => !['work', 'reflect'].includes(item.schema.shape.type.value))
+  .filter((item) => !['work', 'reflect', 'wish'].includes(item.schema.shape.type.value))
   .map((item) => item.instruction)
   .join(' ');
 

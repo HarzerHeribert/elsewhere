@@ -11,6 +11,8 @@ const schema = z.object({
   TICK_INTERVAL_MS: z.coerce.number().int().min(250).max(60_000).default(2000),
   DECISION_INTERVAL_MS: z.coerce.number().int().min(1000).max(3_600_000).default(90_000),
   SIMULATION_RATE: z.coerce.number().min(0.1).max(60).default(3),
+  /** Real weather, river, earthquake, space weather and species data behind some objects. */
+  LIVE_FEEDS: z.enum(['on', 'off']).default('on'),
   MODEL_PROVIDER: z
     .enum(['local', 'compatible', 'ollama', 'routed', 'chatgpt', 'broker'])
     .default('local'),

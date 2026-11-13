@@ -29,10 +29,12 @@ import {
   advanceWorld,
   createInitialWorld,
   executeWorldCommand,
+  grantWeeklyCoins,
   observeWorld,
   publicWorld,
   upgradeWorldLayout,
   RETIRED_FEATURE_IDS,
+  type FeedSnapshot,
 } from '@elsewhere/server';
 import {
   advanceHubert,
@@ -169,6 +171,8 @@ export interface ControllerOptions {
   research?: CharacterResearchPort;
   /** Where the character can publish files of its own; without one it cannot make things. */
   studio?: CharacterStudio;
+  /** Real data from outside for the objects that read it; without it the world is closed off. */
+  feeds?: { snapshot(): FeedSnapshot };
 }
 
 /** Character definitions supply their body dimensions; the shared world stays species-agnostic. */
@@ -685,6 +689,7 @@ export class ElsewhereController {
           ((s.runtime.lastCommandType !== undefined && isMindType(s.runtime.lastCommandType)) ||
             now - s.runtime.lastDecisionAt >= (this.options.decisionIntervalMs ?? 90_000))));
     if (ready) {
+      s.world = grantWeeklyCoins(s.world, resident.id, this.wallNow());
       const observation = observeWorld(s.world, 'hubert', now);
       // Only a missing provider or repeatedly unreadable replies wait for the owner. Failed
       // requests, outages and an exhausted allowance pass by themselves, so they only delay the
@@ -918,7 +923,13 @@ export class ElsewhereController {
         } else if (isMindCommand(policy.command)) {
           await this.mindStep(policy.command, decision.why, observation, now);
         } else {
-          const result = executeWorldCommand(s.world, 'hubert', policy.command, now);
+          const result = executeWorldCommand(
+            s.world,
+            'hubert',
+            policy.command,
+            now,
+            this.options.feeds?.snapshot(),
+          );
           s.world = result.world;
           const duration = hubertActivityDurationMs(policy.command, s.hubert.stats.energy);
           if (result.outcome.status !== 'rejected' && duration > 0)
@@ -930,6 +941,21 @@ export class ElsewhereController {
                   ? result.outcome.evidence
                   : result.outcome.summary,
             });
+          if (
+            policy.command.type === 'use' &&
+            result.outcome.status === 'completed' &&
+            result.outcome.offered
+          ) {
+            // Words handed over with the action are a wish, kept with real times like any other.
+            const text = result.outcome.offered;
+            s.hubert = applyWish(
+              s.hubert,
+              { type: 'wish', text },
+              'wish-' + randomUUID(),
+              this.wallNow(),
+            );
+            this.recordTrail({ type: 'wish' }, decision.why, observation.placeId, now, { text });
+          }
           s.hubert = applyOutcome(
             s.hubert,
             result.outcome,

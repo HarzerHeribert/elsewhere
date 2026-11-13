@@ -10,7 +10,7 @@ import {
 import { SqliteSnapshotStore, type SnapshotStore } from '../packages/persistence/src/index';
 
 import { browserFixtureAction } from './e2e/decision-fixture';
-import { scriptedProvider } from './scripted-provider';
+import { scriptedProvider, tossingAtTheWell } from './scripted-provider';
 
 // Old simulation fixtures explicitly select an offline test provider. Production has no fallback.
 // It looks at what is offered and examines whatever it has not yet examined, then reflects.
@@ -575,16 +575,13 @@ describe('authoritative controller lifecycle', () => {
 });
 
 const bench = 'I would like a bench by the pond, so I can watch the mallard sitting down.';
-/** Wishes the resident makes with the `wish` command, then the usual offline behaviour. */
+/** Wishes the resident makes by tossing coins into the well, then the usual offline behaviour. */
 const wishing = (...texts: string[]) =>
-  scriptedProvider(
-    texts.map((text) => ({ type: 'wish' as const, text })),
-    {
-      id: 'wish-fixture',
-      managesAllowance: true,
-      fallback: (context) => browserFixtureAction(context, 'memories'),
-    },
-  );
+  scriptedProvider([], {
+    id: 'wish-fixture',
+    managesAllowance: true,
+    fallback: tossingAtTheWell(texts, (context) => browserFixtureAction(context, 'memories')),
+  });
 async function reachWish(controller: ElsewhereController, count = 1) {
   for (let i = 0; i < 100 && (controller.getSnapshot().wishes?.length ?? 0) < count; i++)
     await controller.step();

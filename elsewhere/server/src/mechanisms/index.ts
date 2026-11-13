@@ -1,3 +1,4 @@
+import type { FeedSnapshot } from '../feeds/types.js';
 import type { WorldControl, WorldObject } from '@elsewhere/character-interfaces';
 import {
   scatterOf,
@@ -8,17 +9,22 @@ import {
   type MechanismState,
 } from './common.js';
 import { artifact } from './artifact.js';
+import { dispatchWire } from './dispatch-wire.js';
 import { easel } from './easel.js';
 import { garden } from './garden.js';
+import { instrumentShelter } from './instrument-shelter.js';
 import { launchStand } from './launch-stand.js';
 import { musicBox } from './music-box.js';
 import { orchardTree } from './orchard-tree.js';
 import { pond } from './pond.js';
+import { reckoningBench } from './reckoning-bench.js';
 import { seedDrawers } from './seed-drawers.js';
+import { sightingsLedger } from './sightings-ledger.js';
 import { specimenTray } from './specimen-tray.js';
 import { standingStones } from './standing-stones.js';
 import { sundial } from './sundial.js';
 import { telescope } from './telescope.js';
+import { wishingWell } from './wishing-well.js';
 import { weatherMarker } from './weather-marker.js';
 import { window } from './window.js';
 import { windchime } from './windchime.js';
@@ -43,6 +49,11 @@ const mechanisms: Record<string, Mechanism> = {
   'launch-stand': launchStand,
   'magnifying-glass': specimenTray,
   'seed-library': seedDrawers,
+  'reckoning-bench': reckoningBench,
+  'instrument-shelter': instrumentShelter,
+  'dispatch-wire': dispatchWire,
+  'sightings-ledger': sightingsLedger,
+  'wishing-well': wishingWell,
 };
 
 /** The controls an object of this kind offers, or undefined when it cannot be worked. */
@@ -59,6 +70,7 @@ export function operate(
   state: MechanismState | undefined,
   now: number,
   scene?: Scene,
+  options: { text?: string; feeds?: FeedSnapshot; carrying?: Record<string, number> } = {},
 ): OperateResult {
   const mechanism = mechanisms[object.kind];
   if (!mechanism) return { ok: false, problem: 'That object has no controls.' };
@@ -88,22 +100,42 @@ export function operate(
     // A control cannot be set finer than its step: the nearest setting is what takes effect.
     used = range.step ? Math.round(value / range.step) * range.step : value;
   }
+  const spec = chosen.text;
+  let written: string | undefined;
+  if (spec) {
+    const trimmed = options.text?.trim() ?? '';
+    if (!trimmed) {
+      return { ok: false, problem: `${control} needs written input (${spec.meaning}).` };
+    }
+    if (trimmed.length > spec.max) {
+      return {
+        ok: false,
+        problem: `${control} needs written input of at most ${spec.max} characters (${spec.meaning}).`,
+      };
+    }
+    written = trimmed;
+  }
   const current = state ?? {};
   const uses = typeof current.uses === 'number' ? current.uses : 0;
   const result = mechanism.run({
     object,
     control,
     value: used,
+    text: written,
     state: current,
-    conditions: worldConditions(now),
+    conditions: worldConditions(now, options.feeds),
     scatter: scatterOf(object.id, control, uses),
     now,
     scene,
+    feeds: options.feeds,
+    carrying: options.carrying ?? {},
   });
   if ('problem' in result) return { ok: false, problem: result.problem };
   return {
     ok: true,
     reading: result.reading,
     state: { ...(result.state ?? current), uses: uses + 1 },
+    ...(result.spend ? { spend: result.spend } : {}),
+    ...(result.offered ? { offered: result.offered } : {}),
   };
 }

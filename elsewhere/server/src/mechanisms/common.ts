@@ -1,4 +1,5 @@
 import type { Bounds, Position, WorldControl, WorldObject } from '@elsewhere/character-interfaces';
+import type { FeedSnapshot } from '../feeds/types.js';
 import { sunHorizontal } from './sky.js';
 
 /**
@@ -18,7 +19,7 @@ export interface Conditions {
 export type StateValue = number | number[];
 export type MechanismState = Record<string, StateValue>;
 export type OperateResult =
-  | { ok: true; reading: string; state: MechanismState }
+  | { ok: true; reading: string; state: MechanismState; spend?: string; offered?: string }
   | { ok: false; problem: string };
 /** What an object may be able to see of the rest of the world (public facts only). */
 export interface Scene {
@@ -38,8 +39,14 @@ export const mod = (value: number, base: number) => ((value % base) + base) % ba
 export const wave = (now: number, periodMinutes: number, phase: number) =>
   Math.sin((TAU * now) / (periodMinutes * MINUTE) + phase);
 
-/** Conditions at a world time. Never exposed directly. */
-export function worldConditions(now: number): Conditions {
+/** A weather value fetched within this long is taken as the weather over Elsewhere. */
+export const WEATHER_FRESH_MS = 2 * HOUR;
+
+/**
+ * Conditions at a world time. Never exposed directly. With a fresh weather value in `feeds`,
+ * wind and air temperature are the real ones; otherwise they are simulated.
+ */
+export function worldConditions(now: number, feeds?: FeedSnapshot): Conditions {
   // The real sun over latitude 51.0 N, longitude 10.0 E at this UTC time.
   const { elevationDeg: sunElevationDeg, bearingDeg: sunBearingDeg } = sunHorizontal(now);
   const windSpeed = Math.max(
@@ -60,6 +67,17 @@ export function worldConditions(now: number): Conditions {
     3 * wave(now, 320, 1.1) +
     1.5 * wave(now, 107, 0.2) +
     0.8 * wave(now, 41, 2.9);
+  const live = feeds?.weather;
+  if (live && Math.abs(now - live.fetchedAt) <= WEATHER_FRESH_MS) {
+    return {
+      sunElevationDeg,
+      sunBearingDeg,
+      windSpeed: live.windSpeedMs,
+      // Reported as the direction the wind comes from; the world's bearing is where it blows to.
+      windBearingDeg: mod(live.windFromDeg + 180, 360),
+      airTempC: live.temperatureC,
+    };
+  }
   return { sunElevationDeg, sunBearingDeg, windSpeed, windBearingDeg, airTempC };
 }
 
@@ -111,13 +129,27 @@ export interface RunInput {
   object: WorldObject;
   control: string;
   value: number | undefined;
+  text: string | undefined;
   state: MechanismState;
   conditions: Conditions;
   scatter: number;
   now: number;
   scene: Scene | undefined;
+  /** Real data from outside; undefined when there is none. */
+  feeds: FeedSnapshot | undefined;
+  /** What the actor carries, as a count by kind. */
+  carrying: Record<string, number>;
 }
-export type RunResult = { reading: string; state?: MechanismState } | { problem: string };
+export type RunResult =
+  | {
+      reading: string;
+      state?: MechanismState;
+      /** An item kind of which one piece is used up. */
+      spend?: string;
+      /** Words handed over with the action. */
+      offered?: string;
+    }
+  | { problem: string };
 export interface Mechanism {
   controls: WorldControl[];
   run: (input: RunInput) => RunResult;
@@ -131,6 +163,13 @@ export const control = (
   meaning: string,
   step = 1,
 ): WorldControl => ({ id, description, value: { min, max, step, meaning } });
+/** A control that takes written text of at most `max` characters. */
+export const written = (
+  id: string,
+  description: string,
+  max: number,
+  meaning: string,
+): WorldControl => ({ id, description, text: { max, meaning } });
 export const act = (id: string, description: string): WorldControl => ({ id, description });
 
 /** The shadow tip of the 18 cm pin: length in cm and the bearing it falls toward. */

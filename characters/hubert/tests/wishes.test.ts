@@ -6,7 +6,6 @@ import {
   publicWishes,
   recordWish,
   resolveWish,
-  wishProblem,
   type HubertState,
 } from '../src/index';
 import { WISHES_KEPT } from '../src/wishes';
@@ -33,18 +32,10 @@ const wished = (state = experienced(), at = epoch, id = 'wish-1', text = bench) 
   recordWish(state, { id, text }, at);
 
 describe('wishes in the resident’s own words', () => {
-  it('says in words the resident can read when three wishes are still waiting', () => {
+  it('no longer waits on unanswered wishes: the coins are the limit', () => {
     let state = wished();
-    expect(wishProblem(state)).toBeUndefined();
-    for (const n of [2, 3]) state = wished(state, epoch + n, 'wish-' + n, 'Another thing ' + n);
-    expect(wishProblem(state)).toMatch(/3 wishes that nobody has answered/);
-    // An answer from the owner, either way, makes room again.
-    const settled = resolveWish(
-      state,
-      { wishId: 'wish-2', decision: 'decline', receiptId: 'r' },
-      epoch + 10,
-    );
-    expect(wishProblem(settled)).toBeUndefined();
+    for (const n of [2, 3, 4]) state = wished(state, epoch + n, 'wish-' + n, 'Another thing ' + n);
+    expect(state.wishes.filter((wish) => wish.status === 'pending')).toHaveLength(4);
   });
 
   it('keeps exactly the words the resident wrote and publishes only declared fields', () => {
@@ -150,10 +141,6 @@ describe('wishes in the resident’s own words', () => {
       at: epoch - 1,
     });
     expect(publicWishes(state).map((wish) => wish.id)).toEqual(['wish-1']);
-    // A catalog wish never counts as one the resident is waiting on.
-    expect(wishProblem({ ...experienced(), wishes: [catalog, catalog, catalog] as never })).toBe(
-      undefined,
-    );
     const kept = preserveWishLedger(createInitialHubert(epoch + 1), state);
     expect(kept.wishes.map((wish) => wish.id)).toEqual(['wish-1']);
     expect(kept.wishReceipts).toEqual([]);

@@ -43,8 +43,8 @@ import {
   type HubertResearchState,
 } from './research';
 import type { CharacterWish, WishReceipt } from './wishes';
-import { wishProblem, recordWish } from './wishes';
-export { wishProblem, recordWish, resolveWish, preserveWishLedger, publicWishes } from './wishes';
+import { recordWish } from './wishes';
+export { recordWish, resolveWish, preserveWishLedger, publicWishes } from './wishes';
 export { portraitDue, portraitInput, recordPortrait } from './portrait';
 export { atMakingPlace } from './actionOffers';
 export type { CharacterWish, WishReceipt, WishResolution, WishStatus } from './wishes';
@@ -827,7 +827,6 @@ function actionChoices(
     ...(state.pursuits.activeId
       ? [{ type: 'note' as const, where: { text: 'any' as const } }]
       : []),
-    ...(wishProblem(state) ? [] : [{ type: 'wish' as const, where: { text: 'any' as const } }]),
     ...listed(
       'reply',
       'messageId',
@@ -919,6 +918,11 @@ export function workingContext(
         ),
         research,
         // What the resident asked the people who look after the world for, and what came of it.
+        carrying: (observation.carrying ?? []).map(({ kind, name, count }) => ({
+          kind,
+          name,
+          count,
+        })),
         wishes: (state.wishes ?? [])
           .filter((wish) => typeof wish.text === 'string' && wish.text.trim() !== '')
           .slice(-6)
@@ -1046,7 +1050,7 @@ function publicTexts(why: string, action: CharacterCommand): string[] {
   else if (action.type === 'set_aside') fields.push(action.reason);
   else if (action.type === 'search') fields.push(action.query);
   else if (action.type === 'note') fields.push(action.text, action.next);
-  else if (action.type === 'wish') fields.push(action.text);
+  else if (action.type === 'wish' || action.type === 'use') fields.push(action.text);
   else if (action.type === 'make') fields.push(action.title, action.about);
   return fields.filter((text): text is string => Boolean(text));
 }
@@ -1078,7 +1082,7 @@ function mindStepProblem(
         ? undefined
         : 'That source is not available to read. Use a sourceId from state.research.sources.';
     case 'wish':
-      return wishProblem(state);
+      return 'A wish is made by tossing a wishing coin into the wishing well. Choose one of the listed actions.';
     case 'reply':
       return replyProblem(state, action.messageId);
     case 'reflect':
@@ -1246,8 +1250,6 @@ export function applyWish(
   id: string,
   wallNow: number,
 ): HubertState {
-  const problem = wishProblem(input);
-  if (problem) throw new Error(problem);
   return recordWish(input, { id, text: command.text }, wallNow);
 }
 

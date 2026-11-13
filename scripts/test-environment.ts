@@ -47,5 +47,6 @@ export function isolatedAppEnvironment(
     MODEL_API_KEY: '',
     TICK_INTERVAL_MS: String(options.tickIntervalMs ?? 2000),
     SIMULATION_RATE: '3',
+    LIVE_FEEDS: 'off',
   };
 }

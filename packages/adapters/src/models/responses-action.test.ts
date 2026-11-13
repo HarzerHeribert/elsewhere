@@ -16,9 +16,9 @@ describe('Responses decision generation boundary', () => {
     expect(root.properties.why).toEqual({ type: 'string', maxLength: 200 });
     expect(root.additionalProperties).toBe(false);
     const alternatives = root.properties.action.anyOf;
-    // Rest duration, the number of a use, a correspondence recipient and the two optional note fields each have
+    // Rest duration, the number and the text of a use, a correspondence recipient and the two optional note fields each have
     // absent/present complete branches.
-    expect(alternatives).toHaveLength(MODEL_ACTION_FORMAT.anyOf.length + 1 + 1 + 1 + 3);
+    expect(alternatives).toHaveLength(MODEL_ACTION_FORMAT.anyOf.length + 1 + 3 + 1 + 3);
     expect(alternatives.map((item) => item.properties.type.const)).toEqual([
       'move',
       'move',
@@ -27,6 +27,8 @@ describe('Responses decision generation boundary', () => {
       'rest',
       'rest',
       'interact',
+      'use',
+      'use',
       'use',
       'use',
       'pin_creation',
@@ -42,7 +44,6 @@ describe('Responses decision generation boundary', () => {
       'note',
       'note',
       'note',
-      'wish',
       'reply',
     ]);
     for (const item of alternatives) {

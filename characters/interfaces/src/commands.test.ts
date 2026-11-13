@@ -207,8 +207,10 @@ describe('turn-specific action choices', () => {
       { type: 'note', where: { text: 'any' } },
       { type: 'read', where: { sourceId: [`source-${'b'.repeat(24)}`] } },
     ]);
-    // reflect is never offered to the model, so its choice adds no alternative.
-    expect(format).toHaveLength(13);
+    // reflect and wish are never offered to the model, so their choices add no alternative.
+    expect(format).toHaveLength(12);
+    expect(format.some((item) => item.properties.type.const === 'wish')).toBe(false);
+    expect(MODEL_ACTION_INSTRUCTIONS).not.toMatch(/\bwish:/);
     for (const alternative of format) {
       const command = Object.fromEntries(
         alternative.required.map((key) => {

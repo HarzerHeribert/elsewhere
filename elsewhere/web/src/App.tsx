@@ -726,6 +726,10 @@ export function App() {
               {panel === 'character' && character && (
                 <CharacterPanel
                   character={character}
+                  carrying={
+                    snapshot?.world.residents.find((resident) => resident.id === character.id)
+                      ?.carrying
+                  }
                   tab={characterTab}
                   onTabChange={(tab) => {
                     setCharacterTab(tab);
