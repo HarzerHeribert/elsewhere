@@ -52,6 +52,29 @@ const knownErrors = new Set([
 /** The only shape of provider error name ever kept or logged: a short lowercase identifier. */
 export const PROVIDER_ERROR_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
+/** What an unrecognised failure's message is about, as one of these fixed labels. */
+const FAILURE_HINTS: ReadonlyArray<[RegExp, string]> = [
+  [/overload|capacity|busy|unavailable/i, 'overloaded'],
+  [/rate.?limit|too many requests|quota/i, 'rate_limited'],
+  [/time.?out|timed out|deadline/i, 'timed_out'],
+  [/context|too long|too large|maximum.{0,40}tokens/i, 'too_long'],
+  [/schema|json|format/i, 'format'],
+  [/safety|policy|flagged|moderation/i, 'policy'],
+  [/auth|token|credential|permission|forbidden/i, 'auth'],
+  [/internal|server error|try again|retry/i, 'server_error'],
+];
+/** The field names of a provider error and a label for its message; never the message itself. */
+function failureShape(detail: unknown): { keys: string[]; hint?: string } {
+  const record = detail && typeof detail === 'object' ? (detail as Record<string, unknown>) : {};
+  const keys = Object.keys(record)
+    .filter((key) => PROVIDER_ERROR_NAME.test(key))
+    .sort()
+    .slice(0, 12);
+  const message = typeof record.message === 'string' ? record.message.slice(0, 2000) : '';
+  const hint = FAILURE_HINTS.find(([pattern]) => pattern.test(message))?.[1];
+  return { keys, ...(hint ? { hint } : {}) };
+}
+
 /** Never copy provider bodies, authorization codes or credentials into exception messages. */
 export function chatGPTFailure(
   payload: unknown,
@@ -77,6 +100,7 @@ export function chatGPTFailure(
         typeof value === 'string' && value !== 'error' && PROVIDER_ERROR_NAME.test(value),
     );
     if (named) failure.providerError = named;
+    failure.shape = failureShape(detail ?? (typeof body?.error === 'string' ? undefined : body));
   }
   return failure;
 }

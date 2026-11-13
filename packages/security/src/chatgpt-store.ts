@@ -21,6 +21,11 @@ export class ChatGPTError extends Error {
   diagnostics?: { contentType: string; keys: string[]; object?: string; status?: string };
   /** The provider's own name for an unrecognised failure: a short identifier for the service log. */
   providerError?: string;
+  /**
+   * Where an unrecognised failure came from and what it looked like, for the service log: the
+   * names of the fields the provider sent and a fixed label for its kind. Never its text.
+   */
+  shape?: { stage?: 'status' | 'failed_event' | 'error_event'; keys: string[]; hint?: string };
   constructor(
     readonly code: string,
     readonly status?: number,

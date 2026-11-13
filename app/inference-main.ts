@@ -111,7 +111,17 @@ try {
         // One bounded line per provider failure, so an outage can be diagnosed from the service
         // log: an allowlisted code, the HTTP status, the provider's request id and its own
         // short name for an unrecognised failure. Never a provider body, prompt or credential.
-        const failure = error as { status?: unknown; requestId?: unknown; providerError?: unknown };
+        const failure = error as {
+          status?: unknown;
+          requestId?: unknown;
+          providerError?: unknown;
+          shape?: { stage?: unknown; keys?: unknown; hint?: unknown };
+        };
+        // For a failure the provider did not name: where it came from (an HTTP status, a failed
+        // response, an error event), which fields it carried, and a fixed label for its kind.
+        const shape = failure.shape;
+        const named = (value: unknown): value is string =>
+          typeof value === 'string' && PROVIDER_ERROR_NAME.test(value);
         console.warn(
           JSON.stringify({
             event: 'provider_failure',
@@ -128,6 +138,11 @@ try {
             ...(typeof failure.providerError === 'string' &&
             PROVIDER_ERROR_NAME.test(failure.providerError)
               ? { providerError: failure.providerError }
+              : {}),
+            ...(named(shape?.stage) ? { stage: shape.stage } : {}),
+            ...(named(shape?.hint) ? { hint: shape.hint } : {}),
+            ...(Array.isArray(shape?.keys) && shape.keys.length
+              ? { fields: shape.keys.filter(named).slice(0, 12) }
               : {}),
           }),
         );

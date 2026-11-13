@@ -51,7 +51,13 @@ function formatObedientModel(seed: number) {
         else if (required && property.type === 'string' && property.pattern)
           command[key] = 'read'; // An identifier shaped like a control; the world judges the rest.
         else if (required && property.type === 'string')
-          command[key] = `a considered line number ${Math.floor(random() * 1000)}`;
+          // Four made-up words: free text that never repeats or nearly repeats an earlier line,
+          // which the world declines for what it says, not for breaking the format.
+          command[key] = Array.from({ length: 4 }, () =>
+            Math.floor(random() * 36 ** 6)
+              .toString(36)
+              .replace(/[0-9]/g, 'q'),
+          ).join(' ');
         else if (property.type === 'integer') {
           if (required || random() < 0.5) command[key] = 1000 + Math.floor(random() * 120_000);
         } else if (key === 'position')
