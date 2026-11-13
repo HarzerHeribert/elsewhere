@@ -16,11 +16,16 @@ export function settings(page: Page) {
 /** Opens Settings if needed, selects one section and returns the Settings region. */
 export async function openSettings(page: Page, section: SettingsSectionName = 'Account') {
   const region = settings(page);
-  if (!(await region.isVisible()))
+  if (!(await region.isVisible())) {
     await page
       .getByRole('navigation', { name: 'World navigation' })
-      .getByRole('button', { name: 'Settings', exact: true })
+      .getByRole('button', { name: 'Account', exact: true })
       .click();
+    await page
+      .getByLabel('World panel', { exact: true })
+      .getByRole('button', { name: 'Controls', exact: true })
+      .click();
+  }
   await region
     .getByRole('navigation', { name: 'Settings sections' })
     .getByRole('button', { name: section === 'World' ? /^World/ : section, exact: true })
@@ -41,4 +46,23 @@ export function accountSurface(page: Page) {
 export async function closeSettings(page: Page) {
   await page.getByRole('button', { name: 'Close settings', exact: true }).click();
   await expect(settings(page)).not.toBeVisible();
+}
+
+/** Follow the same public destinations on desktop and phone. */
+export async function visitPage(page: Page, name: string) {
+  const nav = page.getByRole('navigation', { name: 'World navigation' });
+  const panel = page.getByLabel('World panel', { exact: true });
+  if (name === 'Map') {
+    await nav.getByRole('button', { name: 'World', exact: true }).click();
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
+  } else if (name === 'Messages') {
+    await nav.getByRole('button', { name: 'Residents', exact: true }).click();
+    await panel.getByRole('button', { name: 'Select Hubert' }).click();
+    await panel.getByRole('button', { name: 'Write to Hubert' }).click();
+  } else if (name === 'Wishes') {
+    await nav.getByRole('button', { name: 'Account', exact: true }).click();
+    await panel.getByRole('button', { name: /^Wishes/ }).click();
+  } else {
+    await nav.getByRole('button', { name, exact: true }).click();
+  }
 }

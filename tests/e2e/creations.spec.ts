@@ -111,7 +111,7 @@ test('owner adds a creation link without pinning it, then explicitly pins it on 
     .getByRole('button', { name: 'Residents', exact: true })
     .click();
   await page.getByRole('button', { name: 'Select Hubert', exact: true }).click();
-  await page.getByRole('button', { name: 'About me', exact: true }).click();
+  await page.getByRole('button', { name: 'About Hubert', exact: true }).click();
   const shelf = page.getByRole('region', { name: 'Hubert’s creations' });
   await expect(shelf.getByRole('link', { name: /Orchard field guide/ })).toHaveAttribute(
     'href',
@@ -167,7 +167,7 @@ test('the public profile does not auto-promote legacy artifacts or unpinned crea
     .getByRole('button', { name: 'Residents', exact: true })
     .click();
   await page.getByRole('button', { name: 'Select Hubert', exact: true }).click();
-  await page.getByRole('button', { name: 'About me', exact: true }).click();
+  await page.getByRole('button', { name: 'About Hubert', exact: true }).click();
   const shelf = page.getByRole('region', { name: 'Hubert’s creations' });
   await expect(shelf).toContainText('No creations pinned yet.');
   await expect(page.getByText('LEGACY-WEATHER-CANARY', { exact: true })).toHaveCount(0);

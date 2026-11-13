@@ -2,24 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { createInitialWorld, publicWorld } from '../../elsewhere/server/src/world';
 import { createInitialHubert, publicCharacter } from '../../characters/hubert/src/index';
-import { settings } from './settings-fixture';
+import { settings, visitPage } from './settings-fixture';
 
 test.use({ timezoneId: 'Europe/Berlin', locale: 'en-GB' });
-
-// The navigation tree this walks. Every arrow is followed and then followed back.
-//
-//   World
-//   ├─ Residents ─ Hubert ┬ Right now ──→ Messages · Activity · My notebook · the place he is in
-//   │                     ├ My notebook
-//   │                     ├ My memories
-//   │                     └ About me ───→ Wishes
-//   ├─ Map ─ a place ─ an object        (a place ──→ the resident who is there)
-//   ├─ Messages
-//   ├─ Activity ─ a day ──→ a place · Hubert's page · Hubert's memories
-//   ├─ Wishes
-//   └─ Settings ─ a section             (closing returns to the panel it was opened over)
-//
-// On a phone, Activity, Wishes and Settings sit under More.
 
 const minute = 60_000,
   hour = 60 * minute,
@@ -141,18 +126,16 @@ function fixture(): PublicSnapshot {
   };
 }
 const panel = (page: Page) => page.getByLabel('World panel', { exact: true });
-const menu = (page: Page, name: string) =>
-  page
-    .getByRole('navigation', { name: 'World navigation' })
-    .getByRole('button', { name, exact: true })
-    .click();
+const menu = visitPage;
 const title = (page: Page) => panel(page).locator('.panel-header h2');
 const back = (page: Page, to: string) =>
   panel(page)
     .getByRole('button', { name: 'Back to ' + to, exact: true })
     .click();
 const tab = (page: Page, name: string) =>
-  panel(page).locator('.page-tabs').getByRole('button', { name, exact: true });
+  panel(page)
+    .locator('.page-tabs, .resident-index, .resident-shortcuts')
+    .getByRole('button', { name: name === 'About' ? /^About(?: Hubert)?$/ : name, exact: true });
 const scroller = (page: Page) => panel(page).locator('.panel-scroll');
 async function mount(page: Page) {
   const state = fixture();
@@ -185,14 +168,14 @@ test('a resident’s pages stay in reach from each other, however long the page'
   await mount(page);
   await openHubert(page);
   const order = [
-    'My notebook',
-    'My memories',
-    'About me',
-    'Right now',
-    'About me',
-    'My memories',
-    'My notebook',
-    'Right now',
+    'Notebook',
+    'Memories',
+    'About',
+    'Activity',
+    'About',
+    'Memories',
+    'Notebook',
+    'Activity',
   ];
   for (const name of order) {
     // From the very bottom of the page before it: the tabs are still there to be used.
@@ -200,7 +183,7 @@ test('a resident’s pages stay in reach from each other, however long the page'
     await tab(page, name).click({ timeout: 3_000 });
     await expect(tab(page, name)).toHaveAttribute('aria-pressed', 'true');
     await expect(scroller(page)).toHaveJSProperty('scrollTop', 0);
-    if (name === 'My notebook') {
+    if (name === 'Notebook') {
       await scroller(page).evaluate((element) => (element.scrollTop = 600));
       await page.screenshot({ path: info.outputPath('pages-' + order.indexOf(name) + '.png') });
     }
@@ -211,12 +194,14 @@ for (const [device, width, height] of [
   ['a desktop', 1440, 900],
   ['a phone', 390, 844],
 ] as const)
-  test(`on ${device} a resident’s page leads with now, in one order, with every line inside the panel`, async ({
+  test(`on ${device} a resident’s profile opens its activity, in one order, with every line inside the panel`, async ({
     page,
   }, info) => {
     await page.setViewportSize({ width, height });
     await mount(page);
     await openHubert(page);
+    await expect(panel(page).locator('.resident-intro h3')).toHaveText('Hubert');
+    await tab(page, 'Activity').click();
     const rightNow = panel(page).getByRole('region', { name: 'Right now' });
     const question = panel(page).getByRole('region', { name: 'The question I’m on' });
     await expect(rightNow).toBeVisible();
@@ -254,14 +239,14 @@ for (const [device, width, height] of [
 
     // Right now ⇄ My notebook, by the link and back by the tab.
     await question.getByRole('button', { name: 'All of it in my notebook' }).click();
-    await expect(tab(page, 'My notebook')).toHaveAttribute('aria-pressed', 'true');
+    await expect(tab(page, 'Notebook')).toHaveAttribute('aria-pressed', 'true');
     await expect(scroller(page)).toHaveJSProperty('scrollTop', 0);
     await expect(panel(page).locator('.notebook-thread')).toHaveCount(2);
-    await tab(page, 'Right now').click();
+    await tab(page, 'Activity').click();
     await expect(rightNow).toBeVisible();
 
     // With every fold open, on every page, no line runs past the panel's edge.
-    for (const name of ['Right now', 'My notebook', 'My memories', 'About me']) {
+    for (const name of ['Activity', 'Notebook', 'Memories', 'About']) {
       await tab(page, name).click();
       const past = await scroller(page).evaluate((element) => {
         element.querySelectorAll('details').forEach((fold) => (fold.open = true));
@@ -299,22 +284,22 @@ test('every link out of a panel leads back to exactly where it was followed from
   await panel(page).getByRole('button', { name: 'Select Hubert', exact: true }).click();
 
   // Hubert · About me ⇄ Wishes
-  await tab(page, 'About me').click();
+  await tab(page, 'About').click();
   await panel(page).getByRole('button', { name: 'My wishes' }).click();
   await expect(title(page)).toHaveText('Wishes');
   await back(page, 'Hubert');
-  await expect(tab(page, 'About me')).toHaveAttribute('aria-pressed', 'true');
+  await expect(tab(page, 'About')).toHaveAttribute('aria-pressed', 'true');
 
   // Hubert · Right now ⇄ Messages, Activity
-  await tab(page, 'Right now').click();
+  await tab(page, 'Activity').click();
   await panel(page).getByRole('button', { name: 'Message Hubert' }).click();
   await expect(title(page)).toHaveText('Messages');
   await page.screenshot({ path: info.outputPath('back-to-hubert.png') });
   await back(page, 'Hubert');
-  await expect(tab(page, 'Right now')).toHaveAttribute('aria-pressed', 'true');
+  await expect(tab(page, 'Activity')).toHaveAttribute('aria-pressed', 'true');
   await page.screenshot({ path: info.outputPath('right-now.png') });
   await panel(page).getByRole('button', { name: 'See my whole day' }).click();
-  await expect(title(page)).toHaveText('Activity');
+  await expect(title(page)).toHaveText('Days');
   await back(page, 'Hubert');
 
   // Hubert ⇄ the place he is in ⇄ Hubert again, two steps deep and back out
@@ -341,7 +326,7 @@ test('every link out of a panel leads back to exactly where it was followed from
   await expect(title(page)).toHaveText('Map');
 
   // Activity: an earlier day and a filter survive every trip away
-  await menu(page, 'Activity');
+  await menu(page, 'Days');
   const day = panel(page).locator('.day-nav strong');
   await expect(day).toContainText('today');
   await panel(page)
@@ -359,7 +344,7 @@ test('every link out of a panel leads back to exactly where it was followed from
     .first()
     .click();
   await expect(title(page)).toHaveText(place.name);
-  await back(page, 'Activity');
+  await back(page, 'Days');
   await expect(panel(page).getByRole('button', { name: /^My trail/ })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -374,32 +359,32 @@ test('every link out of a panel leads back to exactly where it was followed from
   await panel(page).getByRole('button', { name: 'Highlights', exact: true }).click();
   await panel(page).getByRole('button', { name: 'Open my page' }).click();
   await expect(title(page)).toHaveText('Hubert');
-  await back(page, 'Activity');
+  await back(page, 'Days');
   await panel(page)
     .getByRole('button', { name: /more memor/ })
     .click();
-  await expect(tab(page, 'My memories')).toHaveAttribute('aria-pressed', 'true');
-  await back(page, 'Activity');
-  await expect(title(page)).toHaveText('Activity');
+  await expect(tab(page, 'Memories')).toHaveAttribute('aria-pressed', 'true');
+  await back(page, 'Days');
+  await expect(title(page)).toHaveText('Days');
 
   // Settings closes back to the panel it was opened over; the menu starts a fresh visit
-  await menu(page, 'Settings');
+  await page.getByRole('button', { name: 'About Elsewhere', exact: true }).click();
   await expect(settings(page)).toBeVisible();
   await settings(page).getByRole('button', { name: 'Close settings' }).click();
-  await expect(title(page)).toHaveText('Activity');
+  await expect(title(page)).toHaveText('Days');
   await menu(page, 'Wishes');
-  await expect(panel(page).getByRole('button', { name: /^Back to/ })).toHaveCount(0);
+  await expect(panel(page).getByRole('button', { name: /^Back to/ })).toHaveCount(1);
   await page.keyboard.press('Escape');
   await expect(panel(page)).toHaveCount(0);
 });
 
-test('on a phone every page is in reach and More is a step back, not a dead end', async ({
+test('on a phone every page is in reach and Account links lead back to Account', async ({
   page,
 }, info) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mount(page);
   await openHubert(page);
-  for (const name of ['About me', 'My notebook', 'Right now', 'My memories']) {
+  for (const name of ['About', 'Notebook', 'Activity', 'Memories']) {
     await tab(page, name).click({ timeout: 3_000 });
     await expect(tab(page, name)).toHaveAttribute('aria-pressed', 'true');
     await expect(tab(page, name)).toBeInViewport({ ratio: 1 });
@@ -408,16 +393,16 @@ test('on a phone every page is in reach and More is a step back, not a dead end'
   await back(page, 'Residents');
   await expect(title(page)).toHaveText('Residents');
 
-  await menu(page, 'More');
-  for (const name of ['Activity', 'Wishes']) {
+  await menu(page, 'Account');
+  for (const name of ['Days', 'Wishes']) {
     await panel(page).getByRole('button', { name, exact: true }).click();
     await expect(title(page)).toHaveText(name);
-    if (name === 'Activity') await page.screenshot({ path: info.outputPath('phone-activity.png') });
-    await back(page, 'More');
-    await expect(title(page)).toHaveText('More');
+    if (name === 'Days') await page.screenshot({ path: info.outputPath('phone-activity.png') });
+    await back(page, 'Account');
+    await expect(title(page)).toHaveText('Account');
   }
   await panel(page).getByRole('button', { name: 'Controls', exact: true }).click();
   await expect(settings(page)).toBeVisible();
-  await settings(page).getByRole('button', { name: 'More', exact: true }).click();
-  await expect(title(page)).toHaveText('More');
+  await settings(page).getByRole('button', { name: 'Account', exact: true }).click();
+  await expect(title(page)).toHaveText('Account');
 });

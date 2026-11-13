@@ -8,6 +8,7 @@ import type {
 import { NotebookPanel } from './NotebookPanel';
 import { MemoriesPanel } from './MemoriesPanel';
 import { CreationsPanel } from './CreationsPanel';
+import { ResidentProfile } from './ResidentProfile';
 import { Button } from '../ui/Button';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import { HubertPortrait } from '../HubertPortrait';
@@ -28,16 +29,18 @@ import {
 } from './Record';
 import { useWallTime } from '../worldClock';
 
-export type CharacterTab = 'now' | 'notebook' | 'memories' | 'about';
+export type CharacterTab = 'profile' | 'now' | 'notebook' | 'memories' | 'about';
 const tabs: Array<{ id: CharacterTab; label: string }> = [
-  { id: 'now', label: 'Right now' },
-  { id: 'notebook', label: 'My notebook' },
-  { id: 'memories', label: 'My memories' },
-  { id: 'about', label: 'About me' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'now', label: 'Activity' },
+  { id: 'notebook', label: 'Notebook' },
+  { id: 'memories', label: 'Memories' },
+  { id: 'about', label: 'About' },
 ];
 
 export function CharacterPanel({
   character,
+  placeName,
   tab: controlledTab,
   onTabChange,
   mail,
@@ -61,6 +64,7 @@ export function CharacterPanel({
   carrying = [],
 }: {
   character: PublicSnapshot['character'];
+  placeName?: string;
   tab?: CharacterTab;
   onTabChange?: (tab: CharacterTab) => void;
   mail?: PublicCharacterMail | null;
@@ -87,7 +91,7 @@ export function CharacterPanel({
   carrying?: ReadonlyArray<{ kind: string; name: string; count: number }>;
 }) {
   const toWall = useWallTime();
-  const [ownTab, setOwnTab] = useState<CharacterTab>('now');
+  const [ownTab, setOwnTab] = useState<CharacterTab>('profile');
   const tab = controlledTab ?? ownTab;
   const choose = (next: CharacterTab) => {
     setOwnTab(next);
@@ -113,16 +117,32 @@ export function CharacterPanel({
   const lastSteps = trail.slice(-5).reverse();
   const mainLabel =
     main?.status === 'active' ? 'The question I’m on' : 'The question I was last on';
+  if (tab === 'profile') {
+    return (
+      <ResidentProfile
+        character={character}
+        placeName={placeName}
+        threads={threads}
+        memories={memories}
+        onChoose={choose}
+        onMessage={onMessage}
+        onWishes={onWishes}
+        onDay={onDay}
+        creations={creations}
+      />
+    );
+  }
   return (
-    <>
+    <div className={'resident-reading reading-' + tab}>
       <div className="page-tabs" role="group" aria-label={character.name + '’s pages'} ref={pages}>
         {tabs.map((item) => (
           <button key={item.id} aria-pressed={tab === item.id} onClick={() => choose(item.id)}>
-            {item.id === 'now' && <i />}
             {item.label}
           </button>
         ))}
       </div>
+      {tab === 'notebook' && <h3 className="reading-heading">Notebook</h3>}
+      {tab === 'memories' && <h3 className="reading-heading">Memories</h3>}
       {tab === 'now' && (
         <div className="now-page">
           <section className="now-focus" aria-label="Right now">
@@ -268,7 +288,7 @@ export function CharacterPanel({
           />
         </>
       )}
-    </>
+    </div>
   );
 }
 

@@ -111,7 +111,7 @@ test('the world shows real dates and times in the visitor’s timezone', async (
   await expect(page.getByText(/Day 0\d/)).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('clock-world.png') });
 
-  await navigate(page, 'Activity');
+  await navigate(page, 'Days');
   await expect(panel(page).locator('.day-nav strong')).toHaveText(/Tue,? 10 Nov · today/);
   await expect(panel(page)).toContainText('10:33'); // The note, five minutes ago.
   await expect(panel(page)).not.toContainText('08:0');
@@ -119,15 +119,15 @@ test('the world shows real dates and times in the visitor’s timezone', async (
 
   await navigate(page, 'Residents');
   await panel(page).getByRole('button', { name: 'Select Hubert', exact: true }).click();
-  await panel(page).getByRole('button', { name: 'My notebook', exact: true }).click();
+  await panel(page).getByRole('button', { name: 'Notebook', exact: true }).click();
   await expect(panel(page).locator('.day-rule')).toHaveText(/Tue,? 10 Nov/);
   await page.screenshot({ path: info.outputPath('clock-notebook.png') });
-  await panel(page).getByRole('button', { name: 'My memories', exact: true }).click();
+  await panel(page).getByRole('button', { name: 'Memories', exact: true }).click();
   await expect(panel(page).locator('.memory-row time')).toContainText('10 Nov');
   await expect(panel(page).locator('.memory-row time')).toContainText('07:38');
   await page.screenshot({ path: info.outputPath('clock-memories.png') });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('.phone-top .world-day')).toContainText('10:38');
+  await expect(page.locator('.village-masthead .world-day')).toContainText('10:38');
   await page.screenshot({ path: info.outputPath('clock-phone.png') });
 });

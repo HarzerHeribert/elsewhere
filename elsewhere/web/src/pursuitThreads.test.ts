@@ -190,6 +190,7 @@ const noop = () => undefined;
 describe('a resident’s page, in order', () => {
   const html = renderToStaticMarkup(
     createElement(CharacterPanel, {
+      tab: 'now',
       character,
       pursuits: live,
       trail: [

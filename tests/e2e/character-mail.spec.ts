@@ -59,7 +59,7 @@ test('a verified member independently subscribes to Hubert and sees truthful pen
   await page.goto('/');
   await page.getByRole('button', { name: 'Residents', exact: true }).click();
   await page.getByRole('button', { name: 'Select Hubert', exact: true }).click();
-  await page.getByRole('button', { name: 'About me', exact: true }).click();
+  await page.getByRole('button', { name: 'About Hubert', exact: true }).click();
   const prefs = page.getByRole('region', { name: 'Emails from Hubert' });
   await expect(prefs).toContainText('hubert@elswhr.dev');
   await expect(prefs).toContainText('Receiving is being verified');
@@ -317,7 +317,7 @@ test('a mail lookup outage keeps account and passkey controls available and does
   await closeSettings(page);
   await page.getByRole('button', { name: 'Residents', exact: true }).click();
   await page.getByRole('button', { name: 'Select Hubert', exact: true }).click();
-  await page.getByRole('button', { name: 'About me', exact: true }).click();
+  await page.getByRole('button', { name: 'About Hubert', exact: true }).click();
   const preferences = page.getByRole('region', { name: 'Emails from Hubert' });
   await expect(preferences).toContainText('Your email preferences are unavailable right now.');
   await expect(preferences.getByRole('checkbox')).toHaveCount(0);

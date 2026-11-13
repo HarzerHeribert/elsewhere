@@ -1,3 +1,4 @@
+import { visitPage } from './settings-fixture';
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -40,10 +41,7 @@ function panel(page: Page) {
   return page.getByLabel('World panel', { exact: true });
 }
 async function openPanel(page: Page, name: string) {
-  await page
-    .getByRole('navigation', { name: 'World navigation' })
-    .getByRole('button', { name, exact: true })
-    .click();
+  await visitPage(page, name);
   await expect(panel(page)).toBeVisible();
 }
 async function closePanel(page: Page) {
@@ -113,18 +111,12 @@ async function expectFullViewport(page: Page) {
   expect(Math.abs(geometry.shell.y)).toBeLessThanOrEqual(1);
   expect(geometry.shell.width).toBeGreaterThanOrEqual(geometry.viewportWidth - 1);
   expect(geometry.shell.height).toBeGreaterThanOrEqual(geometry.viewportHeight - 1);
-  expect(Math.abs(geometry.y)).toBeLessThanOrEqual(1);
+  const header = (await page.locator('.village-masthead').boundingBox())!;
+  expect(Math.abs(geometry.y - header.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.x)).toBeLessThanOrEqual(1);
   expect(geometry.right).toBeGreaterThanOrEqual(geometry.viewportWidth - 1);
-  if (geometry.viewportWidth > 800) {
-    // Desktop: a sidebar on the left, the world from its edge to the right and bottom.
-    expect(Math.abs(geometry.x - geometry.navigation.right)).toBeLessThanOrEqual(1);
-    expect(geometry.navigation.width).toBeLessThanOrEqual(260);
-    expect(geometry.bottom).toBeGreaterThanOrEqual(geometry.viewportHeight - 1);
-  } else {
-    // Phones: the world spans the width and ends where the tab bar begins.
-    expect(Math.abs(geometry.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(geometry.bottom - geometry.navigation.top)).toBeLessThanOrEqual(1);
-  }
+  const bottom = geometry.viewportWidth > 800 ? geometry.viewportHeight : geometry.navigation.top;
+  expect(Math.abs(geometry.bottom - bottom)).toBeLessThanOrEqual(1);
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.viewportWidth);
   expect(geometry.scrollHeight).toBeLessThanOrEqual(geometry.viewportHeight);
 }
@@ -243,7 +235,10 @@ test('the game fills the viewport and offers contextual object and character ins
   ).toBeVisible();
   await openPanel(page, 'Residents');
   await panel(page).getByRole('button', { name: 'Select Hubert', exact: true }).click();
-  await expect(panel(page).getByRole('heading', { name: 'Hubert', exact: true })).toBeVisible();
+  await expect(
+    panel(page).getByRole('heading', { name: 'Hubert', exact: true, level: 2 }),
+  ).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Activity', exact: true }).click();
   await expect(panel(page).getByRole('meter', { name: 'Mood', exact: true })).toBeVisible();
   await expect(panel(page).getByRole('meter', { name: 'Energy', exact: true })).toBeVisible();
   await closePanel(page);
@@ -276,7 +271,7 @@ test('verified memories and events are available through the activity sidebar', 
   await visit(page);
   await openPanel(page, 'Residents');
   await panel(page).getByRole('button', { name: 'Select Hubert', exact: true }).click();
-  await panel(page).getByRole('button', { name: 'My memories', exact: true }).click();
+  await panel(page).getByRole('button', { name: 'Memories', exact: true }).click();
   await panel(page).getByRole('button', { name: 'Time', exact: true }).click();
   await expect(panel(page).locator('.memory-row').first()).toBeVisible();
   await expect(
@@ -284,7 +279,7 @@ test('verified memories and events are available through the activity sidebar', 
       .locator('.memory-row')
       .filter({ hasText: world.memories.at(-1)!.summary }),
   ).toBeVisible();
-  await openPanel(page, 'Activity');
+  await openPanel(page, 'Days');
   await expect(panel(page).getByRole('region', { name: 'Right now' })).toBeVisible();
   await panel(page).getByRole('button', { name: 'All', exact: true }).click();
   await expect(panel(page).locator('.note-row').first()).toBeVisible();
@@ -497,7 +492,10 @@ test('encountering Hubert shows his actual activity and opens his inspector', as
   await expect(encounter).toBeVisible({ timeout: 10000 });
   await expect(encounter).toContainText(before.character.activity);
   await encounter.getByRole('button', { name: /Meet Hubert/ }).click();
-  await expect(panel(page).getByRole('heading', { name: 'Hubert', exact: true })).toBeVisible();
+  await expect(
+    panel(page).getByRole('heading', { name: 'Hubert', exact: true, level: 2 }),
+  ).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Activity', exact: true }).click();
   await expect(panel(page).getByRole('meter', { name: 'Mood', exact: true })).toBeVisible();
   await closePanel(page);
   await page.keyboard.press('e');
@@ -934,7 +932,7 @@ test('Hubert starts with no pursuits and only a real bird encounter creates a me
   expect(afterClaim.runtime.paused).toBe(true);
   expect(afterClaim.memories).toEqual(experienced.memories);
   expect(JSON.stringify(afterClaim)).not.toContain(fabricated);
-  await panel(page).getByRole('button', { name: 'My memories', exact: true }).click();
+  await panel(page).getByRole('button', { name: 'Memories', exact: true }).click();
   await panel(page).getByRole('button', { name: 'Time', exact: true }).click();
   await expect(
     panel(page).locator('.memory-row').filter({ hasText: episode!.summary }),
@@ -1496,21 +1494,21 @@ test('world navigation moves keyboard focus into panels and returns it on dismis
   await visit(page);
   await expect(page.getByRole('region', { name: 'Welcome to Elsewhere' })).toHaveCount(0);
   const navigation = page.getByRole('navigation', { name: 'World navigation' });
-  const messages = navigation.getByRole('button', { name: 'Messages', exact: true });
-  await messages.focus();
+  const days = navigation.getByRole('button', { name: 'Days', exact: true });
+  await days.focus();
   await page.keyboard.press('Enter');
-  await expect(panel(page).getByRole('heading', { name: 'Messages', exact: true })).toBeFocused();
-  await expect(messages).toHaveAttribute('aria-expanded', 'true');
+  await expect(panel(page).getByRole('heading', { name: 'Days', exact: true })).toBeFocused();
+  await expect(days).toHaveAttribute('aria-current', 'page');
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Close panel', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(messages).toBeFocused();
+  await expect(days).toBeFocused();
   await expect(panel(page)).not.toBeVisible();
-  await expect(messages).toHaveAttribute('aria-expanded', 'false');
+  await expect(days).not.toHaveAttribute('aria-current', 'page');
   await openPanel(page, 'Residents');
-  await messages.click();
+  await days.click();
   await page.keyboard.press('Escape');
-  await expect(messages).toBeFocused();
+  await expect(days).toBeFocused();
 });
 
 test('labeled navigation and camera controls remain reachable on desktop and narrow phones', async ({
@@ -1521,10 +1519,7 @@ test('labeled navigation and camera controls remain reachable on desktop and nar
     await page.setViewportSize({ width, height: width > 800 ? 1000 : 844 });
     const navigation = page.getByRole('navigation', { name: 'World navigation' });
     const views = page.getByRole('group', { name: 'Camera perspective' });
-    // The shell swaps between sidebar and tab bar; collect buttons from the one that belongs here.
-    await expect(
-      page.locator(width > 800 ? 'nav.world-sidebar' : 'nav.world-tabbar'),
-    ).toBeVisible();
+    await expect(navigation).toBeVisible();
     for (const button of [
       ...(await navigation.getByRole('button').all()),
       ...(await views.getByRole('button').all()),
@@ -1542,22 +1537,12 @@ test('labeled navigation and camera controls remain reachable on desktop and nar
     await expect.poll(() => panel(page).evaluate((node) => node.getAnimations().length)).toBe(0);
     const panelBounds = (await panel(page).boundingBox())!;
     const navigationBounds = (await navigation.boundingBox())!;
-    if (width <= 800) {
-      // Phones: the panel is a sheet resting on the tab bar, and the camera switch steps aside.
-      expect(panelBounds.width).toBeGreaterThan(width - 24);
-      expect(panelBounds.y + panelBounds.height).toBeLessThanOrEqual(navigationBounds.y + 1);
-      expect(panelBounds.y).toBeGreaterThan(200);
-      await expect(views).not.toBeVisible();
-      await page.getByRole('button', { name: 'Expand panel', exact: true }).click();
-      await expect.poll(async () => (await panel(page).boundingBox())!.y).toBeLessThanOrEqual(12);
-    } else {
-      // Desktop: the panel docks beside the sidebar and the world keeps the rest.
-      expect(
-        Math.abs(panelBounds.x - (navigationBounds.x + navigationBounds.width)),
-      ).toBeLessThanOrEqual(1);
-      const world = (await page.locator('.scene-canvas canvas').boundingBox())!;
-      expect(Math.abs(world.x - (panelBounds.x + panelBounds.width))).toBeLessThanOrEqual(1);
-    }
+    const header = (await page.locator('.village-masthead').boundingBox())!;
+    expect(Math.abs(panelBounds.y - header.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(panelBounds.width - width)).toBeLessThanOrEqual(1);
+    const bottom = width <= 800 ? navigationBounds.y : 1000;
+    expect(Math.abs(panelBounds.y + panelBounds.height - bottom)).toBeLessThanOrEqual(1);
+    await expect(views).not.toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
