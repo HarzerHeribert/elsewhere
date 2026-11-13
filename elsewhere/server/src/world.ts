@@ -233,7 +233,7 @@ const PLATE: Record<string, { detail: string; previous: string[] }> = {
   },
   'instrument-shelter': {
     detail:
-      'A white louvred wooden box on a post, a Stevenson screen, shades its instruments from sun and rain while air passes through: a psychrometer (a dry-bulb and a wet-bulb thermometer) and an aneroid barometer with a marker hand to set against the pressure. Beside it stands a rain gauge, a funnel over a measuring tube. The figures are current observations for this place from Open-Meteo.',
+      'A white louvred wooden box on a post, a Stevenson screen, shades its instruments from sun and rain while air passes through: a psychrometer (a dry-bulb and a wet-bulb thermometer) and an aneroid barometer with a marker hand to set against the pressure. Beside it stands a rain gauge, a funnel over a measuring tube. A small enamel sign gives the height of the ground here: 369 m above sea level. The figures are current observations for this place from Open-Meteo.',
     previous: [],
   },
   'dispatch-wire': {

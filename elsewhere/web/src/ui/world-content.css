@@ -846,6 +846,12 @@
 .now-focus .now-stats {
   margin-top: 18px;
 }
+.now-carrying {
+  margin: 14px 0 0;
+  color: var(--ew-text-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
 .now-page .panel-actions {
   margin: 0;
 }
