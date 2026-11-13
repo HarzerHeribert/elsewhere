@@ -210,9 +210,7 @@ a:focus-visible {
 .wildlife-icon,
 .stat > div:first-child,
 .entity-facts dt,
-.wildlife-directory small,
-.interest-row > small,
-.interest-row > div > span {
+.wildlife-directory small {
   color: var(--ew-text-muted);
 }
 .hubert-portrait {
@@ -243,8 +241,7 @@ a:focus-visible {
   line-height: var(--ew-leading-body);
 }
 .wish-card small,
-.notification-list article p,
-.artifact-link small {
+.notification-list article p {
   font-size: var(--ew-text-small);
   color: var(--ew-text-muted);
 }
@@ -279,8 +276,7 @@ a:focus-visible {
   background: var(--ew-surface-muted);
   border-radius: var(--ew-radius-control);
 }
-.place-number,
-.artifact-link > span {
+.place-number {
   color: var(--ew-accent);
 }
 .place-list button:hover,

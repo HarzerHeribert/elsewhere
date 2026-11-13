@@ -153,6 +153,34 @@ describe('authored notebook presentation', () => {
     expect(memories).toContain('MEMORY-FEED-CANARY');
     expect(memories).not.toContain('TRAIL-FEED-CANARY');
   });
+  it('points from a day with nothing made to the last day that has something', () => {
+    const day = 86_400_000;
+    const html = renderToStaticMarkup(
+      createElement(ActivityPanel, {
+        events: [],
+        memories: [],
+        trail: [],
+        creations: [
+          {
+            id: 'c',
+            characterId: 'hubert',
+            title: 'EARLIER-PAGE-CANARY',
+            description: '',
+            url: 'https://example.org/page',
+            kind: 'document',
+            createdAt: 3 * day,
+            provenance: 'character',
+          },
+        ],
+        notices: [],
+        now: 5 * day,
+        initialFilter: 'made',
+      }),
+    );
+    expect(html).toContain('Nothing of this kind on this day.');
+    expect(html).toContain('The last day with some · ' + formatDay(calendarDay(3 * day)));
+    expect(html).not.toContain('EARLIER-PAGE-CANARY');
+  });
   it('never renders withheld thought or reflection text on any page', () => {
     for (const tab of ['now', 'notebook', 'memories', 'about'] as const)
       expect(

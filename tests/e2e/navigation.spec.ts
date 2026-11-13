@@ -9,7 +9,7 @@ test.use({ timezoneId: 'Europe/Berlin', locale: 'en-GB' });
 // The navigation tree this walks. Every arrow is followed and then followed back.
 //
 //   World
-//   ├─ Residents ─ Hubert ┬ Right now ──→ Messages · Activity · the place he is in
+//   ├─ Residents ─ Hubert ┬ Right now ──→ Messages · Activity · My notebook · the place he is in
 //   │                     ├ My notebook
 //   │                     ├ My memories
 //   │                     └ About me ───→ Wishes
@@ -62,10 +62,16 @@ function fixture(): PublicSnapshot {
       modelCalls: 0,
       simulationRate: 1,
     },
-    // Live-sized: several pursuits, each with many notes and open questions.
-    pursuits: Array.from({ length: 6 }, (_, p) => ({
+    // Live-sized: several rewordings of one question worked at one object, each with many
+    // readings, notes and open questions, and one unrelated question beside them.
+    pursuits: Array.from({ length: 7 }, (_, p) => ({
       id: 'pursuit-' + p,
-      question: long('Why do the reeds lean, and which way (' + p + ')?'),
+      question:
+        p === 6
+          ? 'What keeps the heron so still by the water?'
+          : p === 2
+            ? 'Whydothereedsleanandwhichwaydotheylean'.repeat(6) + '?'
+            : long('Why do the reeds lean, and which way (' + p + ')?'),
       why: long('I keep walking past them.'),
       status: p === 0 ? ('active' as const) : p === 5 ? ('set-aside' as const) : ('open' as const),
       openedAt: now - (60 - p) * hour,
@@ -88,14 +94,48 @@ function fixture(): PublicSnapshot {
           surprised: n === 0,
           sourceIds: [],
         })),
+        ...(p === 6
+          ? []
+          : Array.from({ length: 12 }, (_, n) => ({
+              kind: 'tried' as const,
+              id: 'tried-' + p + '-' + n,
+              at: now - (p * 6 + n) * hour - minute,
+              text:
+                'Tried release 2 on the pendulum stand. Released from 2 degrees with the ' +
+                50 * ((n % 3) + 1) +
+                ' g bob on 80 cm of cord, ten full swings took 17.9' +
+                (n % 10) +
+                ' s, and after ' +
+                (50 + n) +
+                ' swings the swing had shrunk to half.',
+              objectId: 'artifact',
+            }))),
+        ...(p === 1
+          ? [
+              {
+                kind: 'made' as const,
+                id: 'made-1',
+                at: now - 2 * hour,
+                creationId: 'creation-1',
+                path: 'notes/pendulum-mass-and-decay-at-three-cord-lengths.html',
+                title: long('Pendulum mass and decay'),
+                url: 'https://example.org/notes/pendulum-mass-decay.html',
+                commitSha: 'abc',
+              },
+            ]
+          : []),
       ],
     })),
     trail: Array.from({ length: 40 }, (_, i) => ({
       id: 'step-' + i,
       at: now - (40 - i) * 30 * minute,
-      kind: (['pursue', 'search', 'read', 'note', 'move'] as const)[i % 5],
+      kind: (['pursue', 'search', 'read', 'note', 'move', 'use'] as const)[i % 6],
       why: i % 2 ? long('Because it matters.') : undefined,
-      text: long('Step ' + i + ' of the trail.'),
+      pursuitId: 'pursuit-' + (Math.floor(i / 6) % 2),
+      text:
+        i % 6 === 5
+          ? 'Released from 2 degrees with the 100 g bob on 80 cm of cord, ten full swings took 17.98 s, and after 64 swings the swing had shrunk to half.'
+          : long('Step ' + i + ' of the trail.'),
       placeId: place.id,
     })),
   };
@@ -167,6 +207,85 @@ test('a resident’s pages stay in reach from each other, however long the page'
   }
 });
 
+for (const [device, width, height] of [
+  ['a desktop', 1440, 900],
+  ['a phone', 390, 844],
+] as const)
+  test(`on ${device} a resident’s page leads with now, in one order, with every line inside the panel`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height });
+    await mount(page);
+    await openHubert(page);
+    const rightNow = panel(page).getByRole('region', { name: 'Right now' });
+    const question = panel(page).getByRole('region', { name: 'The question I’m on' });
+    await expect(rightNow).toBeVisible();
+    await page.screenshot({ path: info.outputPath('right-now-top.png') });
+
+    // Nothing but the tabs sits above what he is doing now; the question follows it.
+    const tabs = (await panel(page).locator('.page-tabs').boundingBox())!;
+    const lead = (await rightNow.boundingBox())!;
+    expect(lead.y - (tabs.y + tabs.height)).toBeLessThan(40);
+    expect((await question.boundingBox())!.y).toBeGreaterThan(lead.y + lead.height);
+
+    // One question leads; its rewordings are folded under it, the unrelated one is kept apart.
+    await expect(question.locator('.question-title')).toHaveCount(1);
+    await expect(question.locator('.question-kin > summary').first()).toHaveText(
+      'One of 6 questions at the pendulum stand',
+    );
+    await expect(question.locator('.record-part > .record-head')).toHaveText([
+      /^What I tried/,
+      /^What I concluded/,
+      /^What I made/,
+      /^Still to find out/,
+    ]);
+    const reading = question.locator('.reading-row').first();
+    await expect(reading.locator('.reading-what')).toHaveText('release 2');
+    await expect(reading.locator('.qty')).toHaveText([
+      '2 degrees',
+      /^\d+ g$/,
+      '80 cm',
+      /^17\.9\d s$/,
+      /^\d+ swings$/,
+    ]);
+    const others = panel(page).getByRole('region', { name: 'Other questions' });
+    await expect(others.locator('.question-fold')).toHaveCount(1);
+    await expect(others.locator('.question-fold .note-card').first()).toBeHidden();
+
+    // Right now ⇄ My notebook, by the link and back by the tab.
+    await question.getByRole('button', { name: 'All of it in my notebook' }).click();
+    await expect(tab(page, 'My notebook')).toHaveAttribute('aria-pressed', 'true');
+    await expect(scroller(page)).toHaveJSProperty('scrollTop', 0);
+    await expect(panel(page).locator('.notebook-thread')).toHaveCount(2);
+    await tab(page, 'Right now').click();
+    await expect(rightNow).toBeVisible();
+
+    // With every fold open, on every page, no line runs past the panel's edge.
+    for (const name of ['Right now', 'My notebook', 'My memories', 'About me']) {
+      await tab(page, name).click();
+      const past = await scroller(page).evaluate((element) => {
+        element.querySelectorAll('details').forEach((fold) => (fold.open = true));
+        const edge = element.getBoundingClientRect().right;
+        return {
+          wider: element.scrollWidth - element.clientWidth,
+          lines: [...element.querySelectorAll('*')]
+            .filter(
+              (node) =>
+                !node.closest('.page-tabs') &&
+                node.getBoundingClientRect().width > 0 &&
+                node.getBoundingClientRect().right > edge + 1,
+            )
+            .map((node) => node.tagName + '.' + node.className)
+            .slice(0, 5),
+        };
+      });
+      expect(past, name).toEqual({ wider: 0, lines: [] });
+      await page.screenshot({
+        path: info.outputPath(name.toLowerCase().replace(/ /g, '-') + '-open.png'),
+      });
+    }
+  });
+
 test('every link out of a panel leads back to exactly where it was followed from', async ({
   page,
 }, info) => {
@@ -229,6 +348,11 @@ test('every link out of a panel leads back to exactly where it was followed from
     .getByRole('button', { name: /^My trail/ })
     .click();
   await page.screenshot({ path: info.outputPath('activity-trail.png') });
+  // Steps are gathered under the question they were taken for, readings with their numbers.
+  await expect(panel(page).locator('.story-question strong').first()).toContainText(
+    'Why do the reeds lean',
+  );
+  await expect(panel(page).locator('.story-item .story-text .qty').first()).toBeVisible();
   await panel(page)
     .locator('.story-item')
     .getByRole('button', { name: place.name })

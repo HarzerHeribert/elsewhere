@@ -43,9 +43,9 @@ describe('character creations shelf', () => {
     const before = structuredClone(creations);
     const html = render(creations);
     expect(html.indexOf('Recent pin')).toBeLessThan(html.indexOf('Earlier pin'));
-    expect(html.indexOf('Earlier pin')).toBeLessThan(html.indexOf('<details>'));
-    expect(html).toContain('<summary>More creations · 1</summary>');
-    expect(html.indexOf('Unpinned draft')).toBeGreaterThan(html.indexOf('<details>'));
+    expect(html.indexOf('Earlier pin')).toBeLessThan(html.indexOf('<details'));
+    expect(html).toContain('More creations · 1');
+    expect(html.indexOf('Unpinned draft')).toBeGreaterThan(html.indexOf('<details'));
     expect(html).not.toContain('<details open');
     expect(creations).toEqual(before);
   });

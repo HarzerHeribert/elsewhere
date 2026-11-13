@@ -114,4 +114,36 @@ describe('compact public activity', () => {
     expect(filterStory(story!, 'highlights').map((item) => item.id)).toEqual(['step:c', 'step:a']);
     expect(filterStory(story!, 'all')).toHaveLength(3);
   });
+  it('keeps what was made on its day after the event log has moved on, and says it once', () => {
+    const creation = (id: string, createdAt: number, provenance: 'character' | 'owner') => ({
+      id,
+      characterId: 'hubert',
+      title: 'Page ' + id,
+      description: '',
+      url: 'https://example.org/' + id,
+      kind: 'document' as const,
+      createdAt,
+      provenance,
+    });
+    const stories = dayStories({
+      dayOf: (at) => Math.floor(at / 100),
+      events: [
+        { id: 'announce', at: 250, type: 'creation_made', message: 'Hubert made Page new.' },
+      ],
+      memories: [],
+      trail: [],
+      creations: [
+        creation('old', 50, 'character'),
+        creation('new', 250, 'character'),
+        creation('link', 260, 'owner'),
+      ],
+    });
+    expect(
+      stories.map((story) => [story.day, filterStory(story, 'made').map((item) => item.id)]),
+    ).toEqual([
+      [2, ['creation:new']],
+      [0, ['creation:old']],
+    ]);
+    expect(filterStory(stories[0]!, 'highlights').map((item) => item.id)).toEqual(['creation:new']);
+  });
 });

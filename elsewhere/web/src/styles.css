@@ -424,35 +424,7 @@ svg {
   width: 100%;
   margin-top: var(--ew-space-3);
 }
-.artifact-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: var(--ew-space-3) 0;
-  border-bottom: 1px solid var(--line);
-}
-.artifact-link > span {
-  font-size: 25px;
-  color: var(--ew-text-muted);
-}
-.artifact-link > div {
-  flex: 1;
-}
-.artifact-link strong {
-  display: block;
-  font-size: var(--ew-text-caption);
-  font-weight: 500;
-}
-.artifact-link small {
-  font-size: var(--ew-text-caption);
-  color: var(--ew-text-muted);
-  line-height: 1.6;
-  display: block;
-  margin-top: 5px;
-}
-.artifact-link > svg {
-  width: 15px;
-}
+
 .world-map {
   background: var(--ew-surface-muted);
   border: 1px solid var(--ew-line);
@@ -1254,32 +1226,7 @@ kbd {
   margin: 0;
   text-transform: capitalize;
 }
-.character-interests {
-  display: grid;
-  gap: 14px;
-}
-.interest-row > div:first-child {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--ew-space-2);
-  font-size: var(--ew-text-caption);
-}
-.interest-row strong {
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.interest-row strong svg {
-  width: 22px;
-  height: 22px;
-}
-.interest-row > div > span {
-  font-size: var(--ew-text-caption);
-  color: var(--ew-text-muted);
-  font-variant-numeric: tabular-nums;
-}
+
 .interest-track {
   height: 4px;
   background: var(--ew-surface-muted);
@@ -1295,12 +1242,6 @@ kbd {
 }
 .bird-interest .interest-track i {
   background: var(--ew-text-muted);
-}
-.interest-row > small {
-  display: block;
-  color: var(--ew-text-muted);
-  font-size: var(--ew-text-caption);
-  margin-top: 5px;
 }
 
 /* Elsewhere's crooked doorway and hand-drawn, font-independent lettering. */

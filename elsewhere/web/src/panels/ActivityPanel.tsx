@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { Fragment, useCallback, useMemo } from 'react';
 import type { PublicSnapshot } from '@elsewhere/character-interfaces';
 import {
   dayStories,
@@ -12,6 +12,9 @@ import { calendarDay, formatDay, formatTime } from '../formatTime';
 import { useWallTime } from '../worldClock';
 import { useRemembered } from '../useRemembered';
 import { Icon } from '../Icon';
+import { questionText } from '../pursuitThreads';
+import { MadeLink, Measured, NoteCard } from './Record';
+import { safeCreationUrl } from './CreationsPanel';
 
 const filters: Array<{ id: StoryFilter; label: string; kind?: StoryItem['kind'] }> = [
   { id: 'highlights', label: 'Highlights' },
@@ -24,6 +27,8 @@ export function ActivityPanel({
   events,
   memories,
   trail = [],
+  pursuits = [],
+  creations = [],
   notices,
   activity,
   now,
@@ -36,6 +41,10 @@ export function ActivityPanel({
   events: PublicSnapshot['events'];
   memories: PublicSnapshot['memories'];
   trail?: PublicSnapshot['trail'];
+  /** When given, steps are gathered under the question they were taken for. */
+  pursuits?: PublicSnapshot['pursuits'];
+  /** When given, a day shows what was made on it for as long as the work exists. */
+  creations?: PublicSnapshot['creations'];
   notices: ReadonlyArray<{ id: string; title: string; text: string }>;
   /** What the resident is doing at this moment, in the world's words. */
   activity?: string;
@@ -59,9 +68,10 @@ export function ActivityPanel({
         events,
         memories,
         trail,
+        creations,
         dayOf,
       }),
-    [events, memories, trail, dayOf],
+    [events, memories, trail, creations, dayOf],
   );
   const today = dayOf(now);
   const days = [...new Set([today, ...stories.map((story) => story.day)])].sort((a, b) => a - b);
@@ -98,6 +108,18 @@ export function ActivityPanel({
       </>
     );
   };
+  // The question each step served, in the resident's words.
+  const asked = new Map<string, string>();
+  for (const entry of trail)
+    if (entry.kind === 'pursue' && entry.pursuitId && entry.text)
+      asked.set(entry.pursuitId, entry.text);
+  for (const pursuit of pursuits) asked.set(pursuit.id, questionText(pursuit, pursuits));
+  const questionOf = (item: StoryItem | undefined) =>
+    item?.kind === 'step' && item.entry.pursuitId ? asked.get(item.entry.pursuitId) : undefined;
+  // An empty day is not a dead end: the nearest earlier day that has something of this kind.
+  const lastWith = items.length
+    ? undefined
+    : stories.find((item) => item.day < day && filterStory(item, filter).length > 0)?.day;
   const showRoutine = (filter === 'highlights' || filter === 'all') && story.routineCount > 0;
   return (
     <div className="activity">
@@ -125,9 +147,7 @@ export function ActivityPanel({
       </div>
       <div className="story-filters" role="group" aria-label="Show from this day">
         {filters.map((item) => {
-          const count = item.kind
-            ? story.items.filter((entry) => entry.kind === item.kind).length
-            : 0;
+          const count = item.kind ? filterStory(story, item.id).length : 0;
           return (
             <button
               key={item.id}
@@ -174,58 +194,92 @@ export function ActivityPanel({
         </div>
       )}
       <ol className="story-line">
-        {items.map((item) => (
-          <li key={item.id} className={'story-item ' + item.kind}>
-            <time>{formatTime(toWall(item.at))}</time>
-            <div>
-              {item.kind === 'step' ? (
-                <>
-                  <p className="story-label">
-                    <Icon name={item.entry.kind === 'note' ? 'pencil' : 'search'} />
-                    <span>
-                      {trailLabel(item.entry)}
-                      {where(item.entry.placeId)}
-                      {item.entry.times ? ` · ${item.entry.times} times` : ''}
-                    </span>
-                  </p>
-                  {item.entry.why && <p className="story-thought">{item.entry.why}</p>}
-                  {item.entry.text &&
-                    (item.entry.kind === 'note' ? (
-                      <blockquote>{item.entry.text}</blockquote>
-                    ) : (
-                      <p>{item.entry.text}</p>
-                    ))}
-                  {(item.entry.kind === 'read' || item.entry.kind === 'make') &&
-                    item.entry.url?.startsWith('https://') && (
-                      <a href={item.entry.url} target="_blank" rel="noopener noreferrer">
-                        {item.entry.kind === 'make' ? 'Open the file ↗' : 'Open the page ↗'}
-                      </a>
-                    )}
-                </>
-              ) : item.kind === 'memory' ? (
-                <>
-                  <p className="story-label">
-                    <Icon name="pin" />
-                    <span>I kept a memory{where(item.memory.placeId)}</span>
-                  </p>
-                  <p>{item.memory.summary}</p>
-                </>
-              ) : item.kind === 'made' ? (
-                <>
-                  <p className="story-label">
-                    <Icon name="star" />
-                    {item.event.type === 'artifact_created'
-                      ? 'I made something'
-                      : 'Elsewhere changed'}
-                  </p>
-                  <p className="story-made">{item.event.message}</p>
-                </>
-              ) : (
-                <p>{item.event.message}</p>
+        {items.map((item, index) => {
+          const question = questionOf(item);
+          const starts = !!question && question !== questionOf(items[index - 1]);
+          return (
+            <Fragment key={item.id}>
+              {starts && (
+                <li className="story-question">
+                  <span>For the question</span>
+                  <strong>{question}</strong>
+                </li>
               )}
-            </div>
-          </li>
-        ))}
+              <li className={'story-item ' + item.kind + (question ? ' under-question' : '')}>
+                <time>{formatTime(toWall(item.at))}</time>
+                <div>
+                  {item.kind === 'step' ? (
+                    <>
+                      <p className="story-label">
+                        <Icon name={item.entry.kind === 'note' ? 'pencil' : 'search'} />
+                        <span>
+                          {item.entry.kind === 'pursue' && question
+                            ? 'I took up this question'
+                            : trailLabel(item.entry)}
+                          {where(item.entry.placeId)}
+                          {item.entry.times ? ` · ${item.entry.times} times` : ''}
+                        </span>
+                      </p>
+                      {item.entry.why && <p className="story-thought">{item.entry.why}</p>}
+                      {item.entry.text &&
+                        (item.entry.kind === 'note' ? (
+                          <NoteCard text={item.entry.text} />
+                        ) : item.entry.kind === 'make' ? (
+                          <MadeLink
+                            title={item.entry.text}
+                            href={
+                              item.entry.url?.startsWith('https://') ? item.entry.url : undefined
+                            }
+                          />
+                        ) : item.entry.kind === 'pursue' && question ? null : (
+                          <p className="story-text">
+                            <Measured text={item.entry.text} />
+                          </p>
+                        ))}
+                      {item.entry.kind === 'read' && item.entry.url?.startsWith('https://') && (
+                        <a href={item.entry.url} target="_blank" rel="noopener noreferrer">
+                          Open the page ↗
+                        </a>
+                      )}
+                    </>
+                  ) : item.kind === 'memory' ? (
+                    <>
+                      <p className="story-label">
+                        <Icon name="pin" />
+                        <span>I kept a memory{where(item.memory.placeId)}</span>
+                      </p>
+                      <p>{item.memory.summary}</p>
+                    </>
+                  ) : item.kind === 'made' ? (
+                    <>
+                      <p className="story-label">
+                        <Icon name="star" />
+                        {item.event.type === 'artifact_created'
+                          ? 'I made something'
+                          : 'Elsewhere changed'}
+                      </p>
+                      <p className="story-made">{item.event.message}</p>
+                    </>
+                  ) : item.kind === 'creation' ? (
+                    <>
+                      <p className="story-label">
+                        <Icon name="star" />I made something
+                      </p>
+                      <MadeLink
+                        title={item.creation.title}
+                        href={safeCreationUrl(item.creation.url) ? item.creation.url : undefined}
+                      >
+                        {item.creation.description && <small>{item.creation.description}</small>}
+                      </MadeLink>
+                    </>
+                  ) : (
+                    <p>{item.event.message}</p>
+                  )}
+                </div>
+              </li>
+            </Fragment>
+          );
+        })}
       </ol>
       {hiddenMemories > 0 && (
         <button className="follow-link quiet" onClick={onMemories}>
@@ -265,11 +319,18 @@ export function ActivityPanel({
         </details>
       )}
       {!items.length && !showRoutine && (
-        <p className="empty-state">
-          {filter === 'highlights' || filter === 'all'
-            ? 'Nothing to tell from this day yet.'
-            : 'Nothing of this kind on this day.'}
-        </p>
+        <>
+          <p className="empty-state">
+            {filter === 'highlights' || filter === 'all'
+              ? 'Nothing to tell from this day yet.'
+              : 'Nothing of this kind on this day.'}
+          </p>
+          {lastWith !== undefined && (
+            <button className="follow-link" onClick={() => setChosenDay(lastWith)}>
+              The last day with some · {formatDay(lastWith)} <Icon name="arrow" />
+            </button>
+          )}
+        </>
       )}
     </div>
   );
