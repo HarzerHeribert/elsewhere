@@ -181,6 +181,45 @@ describe('following a question', () => {
   });
 });
 
+describe('one line of inquiry', () => {
+  it('goes back to the earlier pursuit for a near-copy, says so, and does not offer the active one again', async () => {
+    const provider = scriptedProvider([
+      pursue,
+      {
+        type: 'pursue',
+        question: 'How fast do rings spread on the pond?',
+        why: 'I threw a stone.',
+      },
+      {
+        type: 'pursue',
+        question: 'Why do sparrows hop instead of walking on the wall?',
+        why: 'Back to the sparrows.',
+      },
+      { type: 'rest' },
+    ]);
+    const { controller, store } = await create(provider);
+    await controller.step();
+    await controller.step();
+    await controller.step();
+    const state = (await store.load())!.value.hubert;
+    expect(state.pursuits.items.map((item) => item.question)).toEqual([
+      'Why do sparrows hop instead of walking?',
+      'How fast do rings spread on the pond?',
+    ]);
+    expect(state.pursuits.items[0]).toMatchObject({ status: 'active' });
+    expect(state.lastOutcome).toMatchObject({ action: 'pursue', status: 'completed' });
+    expect(state.lastOutcome?.summary).toContain('no second pursuit was opened');
+    expect(state.lastOutcome?.summary).toContain('Why do sparrows hop instead of walking?');
+    // The next decision may return to the pond question, never to the one already active.
+    await controller.step();
+    const offered = provider.contexts
+      .at(-1)!
+      .choices!.filter((choice) => choice.type === 'pursue')
+      .flatMap((choice) => choice.where?.pursuitId ?? []);
+    expect(offered).toEqual([state.pursuits.items[1].id]);
+  });
+});
+
 describe('what cannot be done', () => {
   it('rejects a search or a note without an active pursuit and records nothing', async () => {
     const research = port();

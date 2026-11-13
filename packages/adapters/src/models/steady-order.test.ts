@@ -31,6 +31,17 @@ describe('steadyFirstJson', () => {
     expect(text.startsWith('{"state":{"pursuits":{"reading"')).toBe(true);
   });
 
+  it('writes what rarely changes before the pursuits', () => {
+    const value = context(['a'], 1);
+    const text = steadyFirstJson({
+      ...value,
+      state: { ...value.state, wishes: [], self: { portrait: 'p' }, research: {}, creations: [] },
+    });
+    const order = ['"self"', '"creations"', '"wishes"', '"research"', '"pursuits"', '"stats"'];
+    const at = order.map((key) => text.indexOf(key));
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+
   it('keeps everything up to the newest entry identical between two turns', () => {
     const before = steadyFirstJson(context(['a', 'b'], 1));
     const after = steadyFirstJson(context(['a', 'b', 'c'], 9));

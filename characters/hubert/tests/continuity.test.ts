@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Observation } from '@elsewhere/character-interfaces';
 import {
+  applyNote,
   applyPursue,
   chooseActionWithProvider,
   createInitialHubert,
@@ -213,5 +214,83 @@ describe('the self-portrait', () => {
     expect(input.readings).toHaveLength(12);
     expect(input.pursuits[0]).toMatchObject({ question: 'Question p1 here?', status: 'active' });
     expect(JSON.stringify(input)).not.toContain('PRIVATE-GUEST-CANARY');
+  });
+});
+
+describe('a line of inquiry stays one pursuit', () => {
+  const proposing = (action: object) => ({
+    id: 'scripted',
+    propose: async () => ({ action, why: 'I want to see it once more.' }),
+  });
+  const decide = (state: HubertState, action: object) =>
+    chooseActionWithProvider(state, observation, epoch + minute, proposing(action) as never);
+  const SWING = 'Does the heavier bob’s slower swing decay repeat in a matched pair at 60 cm?';
+
+  it('declines opening the pursuit that is already active, by id or by its question', async () => {
+    const state = pursue(createInitialHubert(epoch), 'pursuit-a', epoch, SWING);
+    await expect(decide(state, { type: 'pursue', pursuitId: 'pursuit-a' })).rejects.toMatchObject({
+      code: 'unavailable_action',
+      message: expect.stringContaining('already the pursuit you are following'),
+    });
+    await expect(
+      decide(state, {
+        type: 'pursue',
+        question: 'Does the heavier bob’s slower swing decay repeat in the matched pair at 60 cm?',
+        why: 'Once more.',
+      }),
+    ).rejects.toMatchObject({ message: expect.stringContaining('already following this') });
+  });
+  it('declines a pursuit whose question is an identifier', async () => {
+    const state = pursue(createInitialHubert(epoch), 'pursuit-a', epoch, SWING);
+    await expect(
+      decide(state, {
+        type: 'pursue',
+        question: 'pursuit-886fd4a7-4dc6-4034-9cb4-3cd8a944ebe8',
+        why: 'Two pairs are enough.',
+      }),
+    ).rejects.toMatchObject({ message: expect.stringContaining('written out in words') });
+  });
+  it('keeps a variation on the same pursuit and goes back to an earlier one for its near-copy', () => {
+    let state = pursue(createInitialHubert(epoch), 'pursuit-a', epoch, SWING);
+    state = pursue(state, 'pursuit-b', epoch + 1, SWING.replace('60 cm', '120 cm'));
+    expect(state.pursuits.items).toHaveLength(1);
+    expect(state.pursuits.items[0].questions).toEqual([SWING.replace('60 cm', '120 cm')]);
+    state = pursue(state, 'pursuit-c', epoch + 2, 'How fast do rings spread on the pond?');
+    state = pursue(state, 'pursuit-d', epoch + 3, SWING.replace('60 cm', '80 cm'));
+    expect(state.pursuits.items.map((item) => item.id)).toEqual(['pursuit-a', 'pursuit-c']);
+    expect(state.pursuits.activeId).toBe('pursuit-a');
+  });
+  it('declines a note that says again what the last one said', async () => {
+    const text =
+      'At 40 cm and a 2 degree release the 100 g bob took 62 swings to halve and the 200 g bob about 80.';
+    let state = pursue(createInitialHubert(epoch), 'pursuit-a', epoch, SWING);
+    state = applyNote(state, { type: 'note', text, surprised: false }, 'note-1', epoch + 1);
+    await expect(decide(state, { type: 'note', text, surprised: false })).rejects.toMatchObject({
+      message: expect.stringContaining('already noted this'),
+    });
+  });
+  it('gives a saved pursuit without a question one again', () => {
+    const state = pursue(createInitialHubert(epoch), 'pursuit-a', epoch, SWING);
+    state.pursuits.items[0].question = 'pursuit-886fd4a7-4dc6-4034-9cb4-3cd8a944ebe8';
+    state.pursuits.items[0].questions = [
+      'Would the mass difference persist at another cord length?',
+    ];
+    const upgraded = upgradeHubertState(state);
+    expect(upgraded.pursuits.items[0].question).toBe(
+      'Would the mass difference persist at another cord length?',
+    );
+  });
+  it('shows the wishes made so far, also when there are none', () => {
+    const state = createInitialHubert(epoch);
+    expect(workingContext(state, observation).state.wishes).toEqual([]);
+    state.wishes.push({
+      id: 'wish-1',
+      text: 'Bobs of one shape in different weights.',
+      createdAt: epoch,
+      status: 'pending',
+    });
+    expect(workingContext(state, observation).state.wishes).toEqual([
+      { text: 'Bobs of one shape in different weights.', status: 'pending', askedAt: epoch },
+    ]);
   });
 });
