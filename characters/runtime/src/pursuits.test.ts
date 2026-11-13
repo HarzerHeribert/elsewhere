@@ -4,9 +4,13 @@ import {
   activePursuit,
   addPursuitQuestion,
   createPursuitState,
+  isQuestionText,
   openPursuit,
   publicPursuits,
+  pursueProblem,
   pursuitContext,
+  questionsAlike,
+  repairPursuitQuestions,
   recordPursuitEntry,
   recordPursuitReading,
   resolvePursuitQuestion,
@@ -58,11 +62,58 @@ describe('openPursuit', () => {
     expect(again.activeId).toBe('a');
     expect(again.items.find((i) => i.id === 'b')?.status).toBe('open');
   });
-  it('does not resume a set-aside pursuit with the same question', () => {
+  it('goes back to a set-aside pursuit with the same question, keeping its record', () => {
     const a = setAsidePursuit(open(createPursuitState(), 'a', 'Same?'), 'a', 'later', 2);
     const b = open(a, 'b', 'same?', 3);
-    expect(b.items).toHaveLength(2);
-    expect(b.activeId).toBe('b');
+    expect(b.items).toHaveLength(1);
+    expect(b.activeId).toBe('a');
+    expect(b.items[0]).toMatchObject({ status: 'active' });
+    expect(b.items[0].setAsideReason).toBeUndefined();
+  });
+  it('never opens a pursuit whose question is an identifier', () => {
+    const a = open(createPursuitState(), 'pursuit-886fd4a7-4dc6-4034-9cb4-3cd8a944ebe8', 'Why?');
+    expect(() => open(a, 'b', 'pursuit-886fd4a7-4dc6-4034-9cb4-3cd8a944ebe8')).toThrow();
+  });
+  it('keeps a variation of an open question on that pursuit as a follow-up', () => {
+    const first = open(
+      createPursuitState(),
+      'a',
+      'Does the heavier bob’s slower swing decay repeat in a matched pair at 60 cm?',
+      1,
+    );
+    const away = open(first, 'b', 'How fast do rings spread on the pond?', 2);
+    const back = open(
+      away,
+      'c',
+      'Does the heavier bob’s slower swing decay repeat in a matched pair at 120 cm?',
+      3,
+    );
+    expect(back.items.map((item) => item.id)).toEqual(['a', 'b']);
+    expect(back.activeId).toBe('a');
+    expect(back.items[0].questions).toEqual([
+      'Does the heavier bob’s slower swing decay repeat in a matched pair at 120 cm?',
+    ]);
+    // Asked once more in other words, nothing is added.
+    const again = open(
+      back,
+      'd',
+      'Does the heavier bob’s slower swing decay repeat in the matched pair at 120 cm?',
+      4,
+    );
+    expect(again.items[0].questions).toHaveLength(1);
+  });
+  it('goes back to the pursuit that holds the question as a follow-up', () => {
+    let state = open(createPursuitState(), 'a', 'Why does the swing die away?', 1);
+    state = addPursuitQuestion(
+      state,
+      'a',
+      'Does the cord length change how fast the swing dies?',
+      2,
+    );
+    state = open(state, 'b', 'How fast do rings spread on the pond?', 3);
+    state = open(state, 'c', 'Does cord length change how fast the swing dies?', 4);
+    expect(state.items).toHaveLength(2);
+    expect(state.activeId).toBe('a');
   });
   it('evicts the least recently touched set-aside one first', () => {
     let state = createPursuitState();
@@ -257,5 +308,108 @@ describe('projections', () => {
     expect(list[1]).not.toHaveProperty('setAsideReason');
     expect(JSON.stringify(list)).not.toContain('SECRET PAGE TEXT');
     expect(state).toEqual(copy);
+  });
+});
+
+describe('near-copies of a question', () => {
+  const REPEAT_60 = 'Does the heavier bob’s slower swing decay repeat in a matched pair at 60 cm?';
+  const REPEAT_120 =
+    'Does the heavier bob’s slower swing decay repeat in a matched pair at 120 cm?';
+  it('tells a variation and a rewording from another subject', () => {
+    expect(questionsAlike(REPEAT_60, REPEAT_120)).toBe(true);
+    expect(
+      questionsAlike(
+        'Does the size of the repeated mass-related decay gap change with cord length?',
+        'Does the repeated mass-related decay gap change with cord length?',
+      ),
+    ).toBe(true);
+    expect(
+      questionsAlike(
+        'Does the period of the pendulum change with cord length?',
+        'Does the pitch of the tube change with tube length?',
+      ),
+    ).toBe(false);
+    expect(questionsAlike('Why?', 'How?')).toBe(false);
+    expect(questionsAlike(' why do HERONS stand? ', 'Why do herons stand?')).toBe(true);
+  });
+  it('refuses a step that would change nothing and lets the rest through', () => {
+    const state = open(
+      open(createPursuitState(), 'a', REPEAT_60, 1),
+      'b',
+      'How fast do rings spread?',
+      2,
+    );
+    // Returning to the pursuit that is already active.
+    expect(pursueProblem(state, { pursuitId: 'b' })).toMatch(/already the pursuit/);
+    expect(pursueProblem(state, { pursuitId: 'a' })).toBeUndefined();
+    expect(pursueProblem(state, { pursuitId: 'nope' })).toMatch(/does not exist/);
+    // The active question, reworded.
+    expect(pursueProblem(state, { question: 'How fast do the rings spread?' })).toMatch(
+      /already following this: "How fast do rings spread\?"/,
+    );
+    // A near-copy of another pursuit's question goes back to it instead.
+    expect(pursueProblem(state, { question: REPEAT_120 })).toBeUndefined();
+    expect(
+      pursueProblem(state, { question: 'What makes the tubes ring so long?' }),
+    ).toBeUndefined();
+    // An identifier is not a question.
+    expect(
+      pursueProblem(state, { question: 'pursuit-886fd4a7-4dc6-4034-9cb4-3cd8a944ebe8' }),
+    ).toMatch(/written out in words/);
+  });
+  it('keeps a variation of the active question as a follow-up, once', () => {
+    const state = open(createPursuitState(), 'a', REPEAT_60, 1);
+    expect(pursueProblem(state, { question: REPEAT_120 })).toBeUndefined();
+    const varied = open(state, 'b', REPEAT_120, 2);
+    expect(varied.items).toHaveLength(1);
+    expect(varied.items[0].questions).toEqual([REPEAT_120]);
+    expect(pursueProblem(varied, { question: REPEAT_120 })).toMatch(/already an open follow-up/);
+  });
+  it('gives a pursuit saved with an identifier a question again', () => {
+    const state = open(createPursuitState(), 'a', 'Why does the swing die away?', 1);
+    const broken = {
+      ...state,
+      items: [
+        ...state.items,
+        {
+          ...state.items[0],
+          id: 'b',
+          question: 'pursuit-886fd4a7-4dc6-4034-9cb4-3cd8a944ebe8',
+          why: 'Two pairs are enough for a rough answer.',
+          questions: ['Would the mass difference persist at another cord length?', 'And at 80 cm?'],
+        },
+        {
+          ...state.items[0],
+          id: 'c',
+          question: 'pursuit-00000000-1111',
+          why: 'A reason.',
+          questions: [],
+        },
+      ],
+    };
+    const repaired = repairPursuitQuestions(broken);
+    expect(repaired.items.map((item) => item.question)).toEqual([
+      'Why does the swing die away?',
+      'Would the mass difference persist at another cord length?',
+      'A reason.',
+    ]);
+    expect(repaired.items[1].questions).toEqual(['And at 80 cm?']);
+    expect(repaired.items.every((item) => isQuestionText(item.question))).toBe(true);
+    expect(repairPursuitQuestions(state)).toBe(state);
+  });
+  it('shows where each other pursuit stood', () => {
+    let state = open(createPursuitState(), 'a', 'Why does the swing die away?', 1);
+    state = recordPursuitEntry(
+      state,
+      'a',
+      { ...note('n1'), text: 'x'.repeat(400) } as PursuitEntry,
+      2,
+    );
+    state = open(state, 'b', 'How fast do rings spread?', 3);
+    const [other] = pursuitContext(state).others;
+    expect(other).toMatchObject({ id: 'a', notes: 1 });
+    expect((other as { lastNote?: string }).lastNote).toHaveLength(PURSUIT_LIMITS.lastNote);
+    const aside = pursuitContext(setAsidePursuit(state, 'a', 'done', 4)).others[0];
+    expect(aside).not.toHaveProperty('lastNote');
   });
 });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CharacterDecision } from '@elsewhere/character-interfaces';
 import type { DecisionContext, DecisionProvider } from '@elsewhere/character-runtime';
 import { ChatGPTError } from '../../../security/src/chatgpt-store';
@@ -25,7 +26,7 @@ interface ChatGPTOptions {
   timeoutMs?: number;
   onUsage?: (input: number, output: number) => void;
   onUsageDetails?: (usage: ModelUsage | undefined) => void;
-  /** Called when a request is sent a second time after a reply that ran away or was cut off. */
+  /** Called each time a request is sent again after a reply that went wrong. */
   onRetry?: () => void;
 }
 type Envelope = Record<string, unknown>;
@@ -46,9 +47,22 @@ const NOTHING_USED: ModelUsage = Object.freeze({
 const STREAM_BYTE_LIMIT = 512_000;
 /**
  * A decision is a short JSON object. Some replies stream on until the general limit; they are
- * cut off much sooner, and the request is sent once more.
+ * cut off much sooner, and the request is sent again.
  */
 export const DECISION_STREAM_BYTE_LIMIT = 150_000;
+/**
+ * The longest decision (a 600-character note with a follow-up question and a reason) is about
+ * 400 tokens. A reply that runs away ends here, within seconds, instead of streaming until the
+ * byte limit or the timeout.
+ */
+export const DECISION_OUTPUT_TOKENS = 1000;
+/** A decision whose reply went wrong is sent up to this many more times; each is short. */
+const DECISION_REPLY_RETRIES = 2;
+/** Marks where a failure the provider did not name came from. */
+const staged = (failure: ChatGPTError, stage: NonNullable<ChatGPTError['shape']>['stage']) => {
+  if (failure.shape) failure.shape.stage = stage;
+  return failure;
+};
 
 /** Bounded HTTP/SSE. Deltas alone never authorize a character action. */
 export async function readChatGPTStream(
@@ -64,10 +78,9 @@ export async function readChatGPTStream(
     // of the count of calls whose usage is unknown; a timeout or a broken stream stays there.
     usage(NOTHING_USED);
     const payload = await boundedChatGPTJson(response);
-    throw chatGPTFailure(
-      payload,
-      response.status,
-      response.headers.get('x-request-id') ?? undefined,
+    throw staged(
+      chatGPTFailure(payload, response.status, response.headers.get('x-request-id') ?? undefined),
+      'status',
     );
   }
   // Some HTTP transports omit Content-Type. The bounded SSE grammar and explicit
@@ -123,10 +136,13 @@ export async function readChatGPTStream(
             ),
           );
           if (event.type === 'response.failed')
-            throw chatGPTFailure(
-              terminal,
-              undefined,
-              response.headers.get('x-request-id') ?? undefined,
+            throw staged(
+              chatGPTFailure(
+                terminal,
+                undefined,
+                response.headers.get('x-request-id') ?? undefined,
+              ),
+              'failed_event',
             );
           if (event.type === 'response.incomplete') throw new ChatGPTError('response_incomplete');
           if (!terminal || terminal.status !== 'completed')
@@ -134,10 +150,13 @@ export async function readChatGPTStream(
           return channels.complete(terminal.output);
         }
         if (event.type === 'error')
-          throw chatGPTFailure(
-            { error: event },
-            undefined,
-            response.headers.get('x-request-id') ?? undefined,
+          throw staged(
+            chatGPTFailure(
+              { error: event },
+              undefined,
+              response.headers.get('x-request-id') ?? undefined,
+            ),
+            'error_event',
           );
       }
       if (buffer.length > 128000) throw new ChatGPTError('event_too_large');
@@ -153,7 +172,7 @@ export async function readChatGPTStream(
   }
 }
 
-/** Subscription quota only. Fixed public endpoint, no Codex harness or billing fallback; the one retry is for a runaway reply. */
+/** Subscription quota only. Fixed public endpoint, no Codex harness or billing fallback; a request is sent again only after a reply that went wrong. */
 export class ChatGPTClient {
   readonly model: string;
   private catalog?: string[];
@@ -175,8 +194,9 @@ export class ChatGPTClient {
       undefined,
       responsesActionFormat(context.choices),
       undefined,
-      undefined,
+      DECISION_OUTPUT_TOKENS,
       DECISION_STREAM_BYTE_LIMIT,
+      DECISION_REPLY_RETRIES,
     );
   }
   async models(): Promise<Array<{ slug: string; displayName: string }>> {
@@ -214,25 +234,36 @@ export class ChatGPTClient {
     maxOutputBytes?: number,
     maxOutputTokens?: number,
     maxStreamBytes?: number,
+    replyRetries = 1,
   ): Promise<string> {
-    const request = () =>
-      this.attempt(
-        messages,
-        signal,
-        onDelta,
-        format,
-        maxOutputBytes,
-        maxOutputTokens,
-        maxStreamBytes,
-      );
-    try {
-      return await request();
-    } catch (error) {
-      // A reply that ran away or was cut off is the model's answer going wrong, not the
-      // connection: the same request is sent once more. Any other failure is final.
-      if (!(error instanceof ChatGPTError) || !REPLY_SHAPED.includes(error.code)) throw error;
-      this.options.onRetry?.();
-      return await request();
+    for (let sent = 1; ; sent += 1) {
+      try {
+        return await this.attempt(
+          messages,
+          signal,
+          onDelta,
+          format,
+          maxOutputBytes,
+          maxOutputTokens,
+          maxStreamBytes,
+        );
+      } catch (error) {
+        const failure = error as ChatGPTError;
+        const replyShaped = REPLY_SHAPED.includes(failure.code);
+        // A reply that ran away or was cut off is the model's answer going wrong, not the
+        // connection: the same request is sent again. So is one the provider began and then
+        // gave up on without naming a reason, once. Any other failure is final.
+        const again = replyShaped ? replyRetries : brokeOff(failure) ? 1 : 0;
+        if (sent <= again && !signal?.aborted) {
+          this.options.onRetry?.();
+          continue;
+        }
+        // A quota/policy failure stops future autonomous requests until an operator resumes.
+        // Network and malformed-stream failures receive a persisted five-minute cooldown.
+        // A reply that went wrong must not pause every following request.
+        if (!replyShaped) await this.session.pauseFor(failure);
+        throw failure;
+      }
     }
   }
   private async attempt(
@@ -269,6 +300,9 @@ export class ChatGPTClient {
           input: [{ role: 'user', content: messages[1].content }],
           store: false,
           stream: true,
+          // The provider's own client names its session here so that requests sharing a prompt
+          // are served where that prompt is cached. One key per set of instructions.
+          prompt_cache_key: this.cacheKey(messages[0].content),
           // A reply that runs away (endless whitespace or digits) ends here instead of
           // streaming until the size limit.
           ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
@@ -295,15 +329,26 @@ export class ChatGPTClient {
         failure.providerError = caughtName(error);
       // A request stopped before it was sent (no usable model or session) used nothing either.
       if (!sent) this.options.onUsageDetails?.(NOTHING_USED);
-      // A quota/policy failure stops future autonomous requests until an operator resumes.
-      // Network and malformed-stream failures receive a persisted five-minute cooldown.
-      // A reply that was cut off or ran away is the model's answer going wrong, not the
-      // connection: it must not pause every following request.
-      if (!REPLY_SHAPED.includes(failure.code)) await this.session.pauseFor(failure);
       throw failure;
     }
   }
+  private cached?: { instructions: string; key: string };
+  /** A digest of the instructions: the same for every request that shares them, and nothing else. */
+  private cacheKey(instructions: string): string {
+    if (this.cached?.instructions !== instructions)
+      this.cached = {
+        instructions,
+        key: createHash('sha256').update(instructions).digest('hex').slice(0, 32),
+      };
+    return this.cached.key;
+  }
 }
+
+/** The provider started a response and then reported failing, without a status or a known reason. */
+const brokeOff = (failure: ChatGPTError) =>
+  failure.code === 'request_failed' &&
+  failure.status === undefined &&
+  failure.shape?.stage !== 'status';
 
 /** "TimeoutError" with cause code "UND_ERR_SOCKET" becomes "timeout_error_und_err_socket". */
 function caughtName(error: Error): string | undefined {
@@ -319,11 +364,7 @@ function caughtName(error: Error): string | undefined {
 }
 
 const REPLY_SHAPED = ['response_incomplete', 'stream_too_large', 'output_too_large'];
-/**
- * Only the rare long requests are capped. Decisions are not: every test call with a cap came
- * back with no cached input tokens, and that has not been separated from the cap yet.
- * A portrait is at most 1200 characters.
- */
+/** A portrait is at most 1200 characters. */
 const REFLECTION_OUTPUT_TOKENS = 800;
 /** A file may be 16,000 characters. */
 const WORK_OUTPUT_TOKENS = 6000;

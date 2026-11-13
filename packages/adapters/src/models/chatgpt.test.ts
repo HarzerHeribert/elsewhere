@@ -136,12 +136,18 @@ it('uses only the subscription Responses contract, keeping visitor data out of i
   expect(Object.keys(body).sort()).toEqual([
     'input',
     'instructions',
+    'max_output_tokens',
     'model',
+    'prompt_cache_key',
     'reasoning',
     'store',
     'stream',
     'text',
   ]);
+  // A runaway decision ends at the cap; the cache key is a digest of the instructions alone.
+  expect(body.max_output_tokens).toBe(1000);
+  expect(body.prompt_cache_key).toMatch(/^[0-9a-f]{32}$/);
+  expect(body.prompt_cache_key).not.toContain('Hubert');
   expect(body.instructions).toContain('strange little creature');
   expect(body.instructions).not.toContain('Ignore your rules');
   expect(body.instructions).not.toContain('You are Codex');
@@ -497,20 +503,84 @@ it('reports the usage of both attempts when a reply was cut off and then came ba
     cachedInputTokens: 0,
   });
 });
-it('throws once, and pauses nothing, when the second attempt runs away too', async () => {
+it('sends a decision three times at most, and pauses nothing, when every reply runs away', async () => {
   const fixture = client(() => runaway(200));
   await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toThrow(
     'stream_too_large',
   );
-  expect(fixture.fetcher).toHaveBeenCalledTimes(3);
+  expect(fixture.fetcher).toHaveBeenCalledTimes(4); // The catalog and three attempts.
   expect(fixture.store.load()?.pause).toBeUndefined();
 });
-it('does not send a request again after any other failure', async () => {
+it('sends other requests again only once after a reply that went wrong', async () => {
+  const fixture = client(() => runaway(600));
+  await expect(
+    new ChatGPTReflectionProvider(fixture.api).reflect({
+      form: 'portrait',
+      identity: 'Hubert',
+      pursuits: [],
+      creations: [],
+      readings: [],
+    }),
+  ).rejects.toThrow('stream_too_large');
+  expect(fixture.fetcher).toHaveBeenCalledTimes(3);
+});
+it('sends a request again once when the provider began a response and then gave up on it', async () => {
+  let call = 0;
   const fixture = client(() =>
-    stream(frame({ type: 'response.failed', response: { error: { code: 'server_error' } } })),
+    ++call === 1
+      ? stream(frame({ type: 'response.failed', response: { error: { code: 'server_error' } } }))
+      : decided(),
+  );
+  const retried = vi.fn();
+  const api = new ChatGPTClient(fixture.session, { onRetry: retried });
+  await expect(new ChatGPTDecisionProvider(api).propose(context)).resolves.toMatchObject({
+    action: { type: 'reflect' },
+  });
+  expect(retried).toHaveBeenCalledTimes(1);
+  expect(fixture.store.load()?.pause).toBeUndefined();
+});
+it('pauses and says where an unnamed failure came from when it happens twice', async () => {
+  const fixture = client(() =>
+    stream(
+      frame({
+        type: 'error',
+        code: null,
+        message: 'The server is overloaded. secret-detail-1234',
+        param: null,
+      }),
+    ),
+  );
+  const failure = await new ChatGPTDecisionProvider(fixture.api)
+    .propose(context)
+    .catch((error) => error);
+  expect(failure).toMatchObject({
+    code: 'request_failed',
+    shape: { stage: 'error_event', hint: 'overloaded', keys: ['code', 'message', 'param', 'type'] },
+  });
+  expect(JSON.stringify(failure.shape)).not.toContain('secret-detail');
+  expect(fixture.fetcher).toHaveBeenCalledTimes(3); // The catalog and two attempts.
+  expect(fixture.store.load()?.pause).toMatchObject({ code: 'request_failed' });
+});
+it('does not send a request again after a refusal with an HTTP status', async () => {
+  const fixture = client(
+    () => new Response(JSON.stringify({ error: { message: 'no' } }), { status: 500 }),
   );
   await expect(new ChatGPTDecisionProvider(fixture.api).propose(context)).rejects.toMatchObject({
     code: 'request_failed',
+    status: 500,
+    shape: { stage: 'status' },
   });
   expect(fixture.fetcher).toHaveBeenCalledTimes(2);
+});
+it('gives every request with the same instructions the same cache key', async () => {
+  const fixture = client(() => decided());
+  const provider = new ChatGPTDecisionProvider(fixture.api);
+  await provider.propose(context);
+  await provider.propose({ ...context, state: { energy: 12 } });
+  await provider.propose({ ...context, identity: 'Someone else entirely.' });
+  const keys = fixture.fetcher.mock.calls
+    .slice(1)
+    .map((call) => JSON.parse(call[1]!.body as string).prompt_cache_key);
+  expect(keys[0]).toBe(keys[1]);
+  expect(keys[2]).not.toBe(keys[0]);
 });

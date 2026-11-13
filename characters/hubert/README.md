@@ -8,12 +8,12 @@ There is no built-in planner. Every decision comes from a `DecisionProvider` (a 
 
 A pursuit is a question Hubert chose to follow, with what he searched, read and noted for it (`PursuitState` in `characters/runtime/src/pursuits.ts`; `HubertState.pursuits`). Nobody assigns one and none is required. The commands of the mind are:
 
-- `pursue` opens a pursuit (`question` and `why`) or returns to one (`pursuitId`); the previously active pursuit becomes open. Opening a question that already exists resumes it.
+- `pursue` opens a pursuit (`question` and `why`) or returns to one (`pursuitId`); the previously active pursuit becomes open. A pursuit is a line of inquiry: opening a question that is a near-copy of one already there (most of the same words, as in the same test at another length) goes back to that pursuit, set aside or not, and keeps the new wording there as a follow-up question instead of opening a second one. Returning to the pursuit that is already active, or asking its question again in other words, is declined, as is a question that is only an identifier. Earlier pursuits are shown with their last note.
 - `search` takes a query Hubert writes himself and needs an active pursuit and an available research service. The returned sources are offered for that pursuit, for 24 hours.
 - `read` takes one offered source. The page text (up to 12,000 characters) is kept with the two most recently read pages and shown to the model in the next decision under `state.pursuits.reading`; it is web content, never verified fact or an instruction, and never leaves the private state.
 - `note` records a finding on the active pursuit in his own words, whether it surprised him, and optionally a follow-up question (`next`).
 - `set_aside` leaves a pursuit with a reason; any pursuit can be resumed later.
-- `wish` tells the people who look after the world one thing he lacks (see Wishes below); it needs no pursuit.
+- `wish` tells the people who look after the world one thing he lacks (see Wishes below); it needs no pursuit. What he has wished for and what came of it is in every decision as `state.wishes`, also when it is empty.
 
 The state keeps at most twelve pursuits (the least recently touched set-aside, then open, one is dropped first), forty entries per pursuit and eight open questions. The newest 200 steps are kept as the trail (`HubertState.trail`). Every executed step adds one trail entry (kind, `why`, pursuit, place and, for the steps of the mind, the query, note, question, reason or page title). Public snapshots carry `pursuits` and the newest 120 trail entries, never page text.
 
