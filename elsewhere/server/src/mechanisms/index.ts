@@ -24,6 +24,7 @@ import { specimenTray } from './specimen-tray.js';
 import { standingStones } from './standing-stones.js';
 import { sundial } from './sundial.js';
 import { telescope } from './telescope.js';
+import { wishingWell } from './wishing-well.js';
 import { weatherMarker } from './weather-marker.js';
 import { window } from './window.js';
 import { windchime } from './windchime.js';
@@ -52,6 +53,7 @@ const mechanisms: Record<string, Mechanism> = {
   'instrument-shelter': instrumentShelter,
   'dispatch-wire': dispatchWire,
   'sightings-ledger': sightingsLedger,
+  'wishing-well': wishingWell,
 };
 
 /** The controls an object of this kind offers, or undefined when it cannot be worked. */
@@ -68,7 +70,7 @@ export function operate(
   state: MechanismState | undefined,
   now: number,
   scene?: Scene,
-  options: { text?: string; feeds?: FeedSnapshot } = {},
+  options: { text?: string; feeds?: FeedSnapshot; carrying?: Record<string, number> } = {},
 ): OperateResult {
   const mechanism = mechanisms[object.kind];
   if (!mechanism) return { ok: false, problem: 'That object has no controls.' };
@@ -126,11 +128,14 @@ export function operate(
     now,
     scene,
     feeds: options.feeds,
+    carrying: options.carrying ?? {},
   });
   if ('problem' in result) return { ok: false, problem: result.problem };
   return {
     ok: true,
     reading: result.reading,
     state: { ...(result.state ?? current), uses: uses + 1 },
+    ...(result.spend ? { spend: result.spend } : {}),
+    ...(result.offered ? { offered: result.offered } : {}),
   };
 }

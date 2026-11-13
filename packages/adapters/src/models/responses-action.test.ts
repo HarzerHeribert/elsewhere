@@ -44,7 +44,6 @@ describe('Responses decision generation boundary', () => {
       'note',
       'note',
       'note',
-      'wish',
       'reply',
     ]);
     for (const item of alternatives) {

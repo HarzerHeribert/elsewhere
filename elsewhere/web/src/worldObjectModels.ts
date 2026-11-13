@@ -671,6 +671,21 @@ function buildSightingsLedger({ root: g, craft: k }: WorldObjectBuildContext) {
     k.box(g, walnut, 0.02, 0.12, 0.02, x, 1.06, z, { grain: 'y' });
 }
 
+/** A low stone ring of a well with two posts, a crossbar, a windlass drum and a bucket. */
+function buildWishingWell({ root: g, craft: k }: WorldObjectBuildContext) {
+  const oak = k.wood('walnut');
+  k.rod(g, k.stone(), 0.8, 0.75, 0, 0, 0, { sides: 24 });
+  k.solid(g, k.stone(), new THREE.TorusGeometry(0.72, 0.1, 8, 24), 0, 0.75, 0).rotation.x =
+    Math.PI / 2;
+  k.rod(g, k.paint(P.forest, 0.2), 0.62, 0.02, 0, 0.74, 0, { sides: 24 });
+  for (const x of [-0.72, 0.72]) k.box(g, oak, 0.1, 1.6, 0.1, x, 0, 0, { grain: 'y' });
+  k.box(g, oak, 1.56, 0.1, 0.1, 0, 1.5, 0, { grain: 'x' });
+  // The windlass drum, 20 cm across, lies along the crossbar; the bucket hangs below it.
+  k.solid(g, oak, new THREE.CylinderGeometry(0.1, 0.1, 1.3, 12), 0, 1.25, 0).rotation.z =
+    Math.PI / 2;
+  k.rod(g, oak, 0.1, 0.18, 0.0, 0.8, 0, { sides: 12 });
+}
+
 function buildLaunchStand({ root: g, craft: k }: WorldObjectBuildContext) {
   const walnut = k.wood('walnut'),
     head = 0.62;
@@ -776,6 +791,11 @@ export const WORLD_OBJECT_MODEL_DEFINITIONS: readonly WorldObjectModelDefinition
     id: 'sightingsLedger',
     matches: ({ id, kind }) => id === 'sightings-ledger' || kind === 'sightings-ledger',
     build: buildSightingsLedger,
+  },
+  {
+    id: 'wishingWell',
+    matches: ({ id, kind }) => id === 'wishing-well' || kind === 'wishing-well',
+    build: buildWishingWell,
   },
   {
     id: 'launchStand',

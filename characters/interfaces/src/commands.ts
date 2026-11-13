@@ -224,7 +224,7 @@ function fieldFormat(schema: z.ZodTypeAny): JsonSchema {
 }
 
 /** Commands the model is never offered: disabled by policy, or retired in favour of another. */
-const MODEL_HIDDEN: readonly string[] = ['say', 'delegate', 'work', 'reflect'];
+const MODEL_HIDDEN: readonly string[] = ['say', 'delegate', 'work', 'reflect', 'wish'];
 
 export const MODEL_ACTION_FORMAT = {
   type: 'object',
@@ -253,7 +253,7 @@ export const MODEL_ACTION_FORMAT = {
     }),
 };
 export const MODEL_ACTION_INSTRUCTIONS = definitions
-  .filter((item) => !['work', 'reflect'].includes(item.schema.shape.type.value))
+  .filter((item) => !['work', 'reflect', 'wish'].includes(item.schema.shape.type.value))
   .map((item) => item.instruction)
   .join(' ');
 

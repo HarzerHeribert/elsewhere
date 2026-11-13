@@ -4,7 +4,7 @@ import type { SnapshotStore, StoredSnapshot } from '../packages/persistence/src/
 import type { ReflectionProvider } from '../packages/adapters/src/models/reflection';
 import type { CharacterCommand } from '@elsewhere/character-interfaces';
 import type { DecisionContext } from '@elsewhere/character-runtime';
-import { scriptedProvider, type ScriptedProvider } from './scripted-provider';
+import { scriptedProvider, tossingAtTheWell, type ScriptedProvider } from './scripted-provider';
 
 const start = Date.UTC(2026, 10, 9, 12, 10);
 const minute = 60_000;
@@ -175,60 +175,66 @@ describe('a saved life from before', () => {
   });
 });
 
-describe('the wish as the resident’s own action', () => {
-  const wish = (n: number) => ({
-    type: 'wish' as const,
-    text: `I would like a way to measure wind number ${n}.`,
-  });
-  it('adds a public ledger entry and a trail entry, up to three that are unresolved', async () => {
-    const provider = scriptedProvider([wish(1), wish(2), wish(3), wish(4)], {
-      fallback: { type: 'rest' },
+describe('the wish as a coin tossed into the well', () => {
+  const wish = (n: number) => `I would like a way to measure wind number ${n}.`;
+  const carried = (store: MemoryStore) =>
+    store.saved!.value.world.residents[0].carrying?.find((item) => item.kind === 'wishing-coin')
+      ?.count ?? 0;
+  const tossUntil = async (controller: ElsewhereController, done: () => boolean) => {
+    for (let step = 0; step < 300 && !done(); step++) await controller.step();
+  };
+
+  it('spends one coin per wish, lists it in the ledger, the context and the trail, and stops with the coins', async () => {
+    const provider = scriptedProvider([], {
+      fallback: tossingAtTheWell([wish(1), wish(2), wish(3), wish(4)], { type: 'rest' }),
     });
     const { controller, store } = await create(provider);
-    for (let step = 0; step < 3; step++) await controller.step();
+    await tossUntil(controller, () => (controller.getSnapshot().wishes?.length ?? 0) >= 3);
     const snapshot = controller.getSnapshot();
-    expect(snapshot.wishes?.map((item) => item.text)).toEqual([
-      wish(1).text,
-      wish(2).text,
-      wish(3).text,
-    ]);
+    expect(snapshot.wishes?.map((item) => item.text)).toEqual([wish(1), wish(2), wish(3)]);
     expect(snapshot.wishes!.every((item) => item.status === 'pending')).toBe(true);
     expect(
       snapshot.trail.filter((entry) => entry.kind === 'wish').map((entry) => entry.text),
-    ).toEqual([wish(1).text, wish(2).text, wish(3).text]);
-    // Three are waiting, so wishing is no longer a choice, and a further one is refused with a reason.
+    ).toEqual([wish(1), wish(2), wish(3)]);
+    expect(snapshot.trail.filter((entry) => entry.kind === 'use')).toHaveLength(3);
+    expect(carried(store)).toBe(0);
+    expect(snapshot.world.residents[0].carrying).toEqual([]);
+    // The next decision sees what is carried and what was asked for.
     await controller.step();
-    expect(provider.contexts[3].choices?.map((choice) => choice.type)).not.toContain('wish');
-    expect(provider.contexts[0].choices?.map((choice) => choice.type)).toContain('wish');
-    const saved = store.saved!.value.hubert;
-    expect(saved.wishes).toHaveLength(3);
-    expect(saved.lastDecisionProblem?.message).toMatch(/nobody has answered/);
-    expect(saved.lastOutcome).toMatchObject({ action: 'wish', status: 'rejected' });
-    expect(controller.getSnapshot().trail.filter((entry) => entry.kind === 'wish')).toHaveLength(3);
+    const state = provider.contexts.at(-1)!.state as unknown as {
+      carrying: Array<{ kind: string; count: number }>;
+      wishes: Array<{ text: string }>;
+    };
+    expect(state.carrying).toEqual([]);
+    expect(state.wishes.map((item) => item.text)).toEqual([wish(1), wish(2), wish(3)]);
+    expect(provider.contexts[0].state).toHaveProperty('carrying');
+    // The fourth toss finds no coin: nothing is recorded and nothing is spent.
+    await tossUntil(controller, () => store.saved!.value.hubert.lastOutcome?.status === 'rejected');
+    expect(store.saved!.value.hubert.lastOutcome?.summary).toMatch(/no wishing coin/);
+    expect(controller.getSnapshot().wishes).toHaveLength(3);
   });
 
-  it('can be resolved by the owner, which makes room for another', async () => {
-    const provider = scriptedProvider([wish(1), wish(2), wish(3)], { fallback: wish(4) });
+  it('can be answered by the owner', async () => {
+    const provider = scriptedProvider([], {
+      fallback: tossingAtTheWell([wish(1)], { type: 'rest' }),
+    });
     const { controller } = await create(provider);
-    for (let step = 0; step < 3; step++) await controller.step();
+    await tossUntil(controller, () => (controller.getSnapshot().wishes?.length ?? 0) >= 1);
     const [first] = controller.getSnapshot().wishes!;
     const answered = await controller.resolveWish(first.id, 'fulfill');
     expect(answered.wishes![0]).toMatchObject({ status: 'fulfilled' });
-    await controller.step();
-    const statuses = controller.getSnapshot().wishes!.map((item) => item.status);
-    expect(statuses.filter((status) => status === 'fulfilled')).toHaveLength(1);
-    expect(statuses.filter((status) => status === 'pending')).toHaveLength(3);
-    expect(provider.contexts.at(-1)!.choices?.map((choice) => choice.type)).toContain('wish');
   });
 
-  it('does not accept a wish that repeats an outside message', async () => {
-    const provider = scriptedProvider([{ type: 'wish', text: OUTSIDE }], {
-      fallback: { type: 'rest' },
-    });
-    const { controller } = await create(provider);
+  it('refuses written input that repeats an outside message, and spends no coin', async () => {
+    const provider = scriptedProvider(
+      [{ type: 'use', targetId: 'wishing-well', control: 'toss', text: OUTSIDE }],
+      { fallback: { type: 'rest' } },
+    );
+    const { controller, store } = await create(provider);
     await controller.submitMessage(OUTSIDE);
     await controller.step();
     expect(controller.getSnapshot().wishes).toEqual([]);
+    expect(carried(store)).toBe(3);
   });
 });
 

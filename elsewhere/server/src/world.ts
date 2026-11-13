@@ -19,6 +19,7 @@ import {
   type WorldState,
 } from '@elsewhere/character-interfaces';
 import { mechanismFor, operate } from './mechanisms/index.js';
+import { COIN_KIND } from './mechanisms/wishing-well.js';
 import type { FeedSnapshot } from './feeds/types.js';
 import { advanceEntities, createInitialEntities, publicEntity } from './entities.js';
 
@@ -91,6 +92,8 @@ const TEXT = {
     'A ticker-tape telegraph under a glass dome in the library; the river gauge, the earthquakes and the sun can be read off the tape.',
   'sightings-ledger':
     'A weatherproof ledger on a post in the orchard; the birds, insects, mammals and plants that observers have recorded nearby can be read.',
+  'wishing-well':
+    'A round stone well in the meadow with a wooden windlass and an oak bucket; a pebble can be dropped, the bucket lowered and a coin tossed in with a wish.',
 } as const;
 const PREVIOUS_OBJECT_TEXT: Record<string, string[]> = {
   artifact: ['Something small rests beside the workbench.'],
@@ -241,6 +244,11 @@ const PLATE: Record<string, { detail: string; previous: string[] }> = {
   'sightings-ledger': {
     detail:
       'A weatherproof ledger on a post, ruled in four columns: birds, insects, mammals and plants. It records what observers have reported within about 30 km in this calendar month over the years, as occurrence records of species under their scientific names. The data come from GBIF, the Global Biodiversity Information Facility.',
+    previous: [],
+  },
+  'wishing-well': {
+    detail:
+      'A round well of dressed sandstone with a wooden windlass and an oak bucket on a rope; the windlass drum is 20 cm across. Coins glint far down in the water. A worn line cut into the rim says that a coin with a wish goes to those who keep this place. Dropping a stone and timing the splash, or counting the turns of the windlass, are the old ways of sounding a well.',
     previous: [],
   },
   'launch-stand': {
@@ -558,6 +566,19 @@ function craftObjects(): WorldObject[] {
       tags: ['nature', 'records', 'orchard'],
       affordances: ['inspect', 'interact'],
       detail: PLATE['sightings-ledger'].detail,
+    },
+    {
+      id: 'wishing-well',
+      name: 'The wishing well',
+      kind: 'wishing-well',
+      description: TEXT['wishing-well'],
+      position: { x: 0, z: 13 },
+      radius: 0.9,
+      height: 1.6,
+      color: '#b8a888',
+      tags: ['water', 'wishes'],
+      affordances: ['inspect', 'interact'],
+      detail: PLATE['wishing-well'].detail,
     },
   ];
 }
@@ -1333,6 +1354,7 @@ export function observeWorld(
     observedAt: now,
     knownPlaces,
     visibleEntities,
+    carrying: copy(resident.carrying ?? []),
   };
 }
 
@@ -1402,6 +1424,71 @@ function approachPoint(
       .find((position) => findPath(world, resident.position, position) !== null) ?? null
   );
 }
+
+/** Most coins a resident's purse holds, how many come each week and how long a week is. */
+export const COIN_NAME = 'wishing coin';
+export const COINS_PER_WEEK = 3;
+export const COIN_PURSE = 6;
+export const COIN_INTERVAL_MS = 7 * 24 * 3_600_000;
+
+/** Adds up to `cap` of an item (counting what is already carried); the world is not changed in place. */
+export function giveItem(
+  world: WorldState,
+  residentId: string,
+  kind: string,
+  name: string,
+  count: number,
+  cap: number,
+): WorldState {
+  const next = copy(world);
+  const resident = next.residents.find((item) => item.id === residentId);
+  if (!resident) return next;
+  const carrying = resident.carrying ?? [];
+  const held = carrying.find((item) => item.kind === kind);
+  const room = Math.max(0, cap - (held?.count ?? 0));
+  const added = Math.max(0, Math.min(Math.floor(count), room));
+  if (held) held.count += added;
+  else if (added > 0) carrying.push({ kind, name, count: added });
+  resident.carrying = carrying;
+  return next;
+}
+
+/** Uses one piece up in place; false when there is none. */
+function drawItem(resident: WorldResident, kind: string): boolean {
+  const held = resident.carrying?.find((item) => item.kind === kind);
+  if (!held || held.count < 1) return false;
+  held.count--;
+  resident.carrying = resident.carrying!.filter((item) => item.count > 0);
+  return true;
+}
+
+/** One piece of an item is removed; undefined when there is none. */
+export function takeItem(
+  world: WorldState,
+  residentId: string,
+  kind: string,
+): WorldState | undefined {
+  const next = copy(world);
+  const resident = next.residents.find((item) => item.id === residentId);
+  return resident && drawItem(resident, kind) ? next : undefined;
+}
+
+/** Three wishing coins when none was granted yet or the last grant is a week old; the purse holds six. */
+export function grantWeeklyCoins(
+  world: WorldState,
+  residentId: string,
+  wallNow: number,
+): WorldState {
+  const last = world.coinGrants?.[residentId];
+  if (last !== undefined && wallNow - last < COIN_INTERVAL_MS) return world;
+  if (!world.residents.some((item) => item.id === residentId)) return world;
+  const next = giveItem(world, residentId, COIN_KIND, COIN_NAME, COINS_PER_WEEK, COIN_PURSE);
+  next.coinGrants = { ...next.coinGrants, [residentId]: wallNow };
+  return next;
+}
+
+const carriedCounts = (resident: WorldResident): Record<string, number> =>
+  Object.fromEntries((resident.carrying ?? []).map((item) => [item.kind, item.count]));
 
 export function executeWorldCommand(
   input: WorldState,
@@ -1599,12 +1686,18 @@ export function executeWorldCommand(
             objects: world.objects,
             places: world.places,
           },
-          { text: command.text, feeds },
+          { text: command.text, feeds, carrying: carriedCounts(resident) },
         );
         if (!used.ok) {
           outcome.summary = used.problem;
           return { world, outcome };
         }
+        const spend = used.spend;
+        if (spend && !drawItem(resident, spend)) {
+          outcome.summary = `You carry no ${spend.replace(/-/g, ' ')}.`;
+          return { world, outcome };
+        }
+        if (used.offered) outcome.offered = used.offered;
         world.mechanisms = { ...world.mechanisms, [object.id]: used.state };
       }
       resident.facing = Math.atan2(
@@ -1785,6 +1878,7 @@ export function publicWorld(world: WorldState): PublicWorldState {
         activity,
         gazeTargetId,
         eyeHeight,
+        carrying,
       }) => ({
         id,
         ownerId,
@@ -1796,6 +1890,7 @@ export function publicWorld(world: WorldState): PublicWorldState {
         activity,
         gazeTargetId,
         eyeHeight,
+        carrying: copy(carrying ?? []),
       }),
     ),
     events: world.events.map(

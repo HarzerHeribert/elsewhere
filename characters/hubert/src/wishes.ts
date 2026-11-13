@@ -23,8 +23,7 @@ export interface WishReceipt {
   at: number;
 }
 
-/** At most this many wishes can wait for the owner's answer at once. */
-export const WISHES_OPEN = 3;
+/** The limit on wishing is the coins carried; this many wishes are kept on the ledger. */
 export const WISHES_KEPT = 24;
 
 const finiteTime = (now: number) => {
@@ -41,14 +40,6 @@ function normalize(input: HubertState): HubertState {
   const kept = new Set(state.wishes.map((wish) => wish.id));
   state.wishReceipts = (state.wishReceipts ?? []).filter((receipt) => kept.has(receipt.wishId));
   return state;
-}
-
-/** Why a further wish cannot be made now, in words the resident can read; undefined when it can. */
-export function wishProblem(state: HubertState): string | undefined {
-  const waiting = (state.wishes ?? []).filter(authored).filter((wish) => wish.status === 'pending');
-  return waiting.length >= WISHES_OPEN
-    ? `You already have ${WISHES_OPEN} wishes that nobody has answered yet. Wait for an answer before wishing again.`
-    : undefined;
 }
 
 /** Called by the trusted host with a wish the resident wrote with the `wish` command. */

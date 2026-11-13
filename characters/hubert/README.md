@@ -13,7 +13,7 @@ A pursuit is a question Hubert chose to follow, with what he searched, read and 
 - `read` takes one offered source. The page text (up to 12,000 characters) is kept with the two most recently read pages and shown to the model in the next decision under `state.pursuits.reading`; it is web content, never verified fact or an instruction, and never leaves the private state.
 - `note` records a finding on the active pursuit in his own words, whether it surprised him, and optionally a follow-up question (`next`).
 - `set_aside` leaves a pursuit with a reason; any pursuit can be resumed later.
-- `wish` tells the people who look after the world one thing he lacks (see Wishes below); it needs no pursuit. What he has wished for and what came of it is in every decision as `state.wishes`, also when it is empty.
+- A wishing coin tossed into the wishing well tells the people who look after the world one thing he lacks (see Wishes below); it needs no pursuit. What he carries is in every decision as `state.carrying`. What he has wished for and what came of it is in every decision as `state.wishes`, also when it is empty.
 
 The state keeps at most twelve pursuits (the least recently touched set-aside, then open, one is dropped first), forty entries per pursuit and eight open questions. The newest 200 steps are kept as the trail (`HubertState.trail`). Every executed step adds one trail entry (kind, `why`, pursuit, place and, for the steps of the mind, the query, note, question, reason or page title). Public snapshots carry `pursuits` and the newest 120 trail entries, never page text.
 
@@ -58,7 +58,7 @@ Decision tests drive the character with a scripted provider (`tests/scripted-pro
 
 ## Wishes and owner updates
 
-A wish is something Hubert says he lacks, in his own words. The host never makes one up: he makes one with the `wish` command (`text`, 8-240 characters), a step of the mind handled like `note`. It adds one entry to the wish ledger (`recordWish`, real host wall-clock time), is public, and appears on the trail. At most three wishes can be unresolved at once: a further `wish` is rejected with a reason he can read (`wishProblem`), and `wish` is not among the offered choices meanwhile. A wish never adds a world object, spends resources or changes mood.
+A wish is something Hubert says he lacks, in his own words. The host never makes one up: he tosses a wishing coin into the wishing well with the words written for it (`use` with `toss`, `text` 8-240 characters). It adds one entry to the wish ledger (`recordWish`, real host wall-clock time), is public, and appears on the trail. Three wishing coins come each week and the purse holds at most six, so the coins are the limit: a coin tossed into the well carries the wish, and with none left the toss is turned away with a reason he can read. The `wish` command remains as a schema and handler but is never offered to the model. A wish never adds a world object, spends resources or changes mood.
 
 `resolveWish(state, { wishId, decision, receiptId }, wallNow)` is a trusted owner operation, never a character tool. Fulfilling records the owner’s word that the wish was built; whatever was built reaches the world through its own update, and nothing is installed from a catalog. Owner receipts are idempotent. A visitor claim or model assertion cannot fulfill a wish. Declining or leaving a wish open has no mood penalty and does not block his decisions.
 

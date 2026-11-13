@@ -98,6 +98,8 @@ export interface WorldResident {
   activity: string;
   gazeTargetId?: string;
   eyeHeight?: number;
+  /** What the resident carries: public, and kept by the world. */
+  carrying?: Array<{ kind: string; name: string; count: number }>;
 }
 export interface WorldVisitor {
   id: string;
@@ -155,6 +157,8 @@ export interface WorldState {
   entities?: WorldEntity[];
   /** Hidden per-object mechanism state. Never projected publicly or to a model. */
   mechanisms?: Record<string, Record<string, number | number[]>>;
+  /** Wall-clock time of each resident's last weekly grant of coins. */
+  coinGrants?: Record<string, number>;
 }
 /** Public objects intentionally omit inspection-only/private detail. */
 export type PublicWorldObject = Omit<WorldObject, 'detail'>;
@@ -216,6 +220,8 @@ export interface Observation {
   observedAt: number;
   knownPlaces?: Array<{ id: string; name: string; position: Position }>;
   visibleEntities?: WorldEntity[];
+  /** What the resident carries. */
+  carrying?: Array<{ kind: string; name: string; count: number }>;
 }
 /** Evidence supplied by the authoritative world after a successful entity observation. */
 export interface EntityEncounter {
@@ -239,6 +245,8 @@ export interface WorldOutcome {
   moodDelta?: number;
   entityId?: string;
   encounter?: EntityEncounter;
+  /** Words handed over with the action (for example a wish put into a well). */
+  offered?: string;
 }
 export interface PublicMemory {
   id: string;

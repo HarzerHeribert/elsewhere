@@ -48,3 +48,27 @@ export function scriptedProvider(
     },
   };
 }
+
+/**
+ * Walks to the wishing well and tosses a coin there with each of `wishes` in turn (a toss the
+ * well turns away is not retried), then answers as `otherwise` does.
+ */
+export function tossingAtTheWell(
+  wishes: readonly string[],
+  otherwise: ScriptedDecision,
+): (context: DecisionContext) => Promise<CharacterDecision | CharacterCommand> {
+  const waiting = [...wishes];
+  return async (context) => {
+    if (!waiting.length) return typeof otherwise === 'function' ? otherwise(context) : otherwise;
+    const offers = (
+      context.state as unknown as { actionOffers: Array<{ id: string; ready: string[] }> }
+    ).actionOffers;
+    if (offers.find((item) => item.id === 'wishing-well')?.ready.includes('use'))
+      return { type: 'use', targetId: 'wishing-well', control: 'toss', text: waiting.shift()! };
+    // The well is out of sight from the start, so walk to a spot beside it.
+    const seen = offers.some((item) => item.id === 'wishing-well');
+    return seen
+      ? { type: 'move', targetId: 'wishing-well' }
+      : { type: 'move', position: { x: 0, z: 11 } };
+  };
+}

@@ -19,7 +19,7 @@ export interface Conditions {
 export type StateValue = number | number[];
 export type MechanismState = Record<string, StateValue>;
 export type OperateResult =
-  | { ok: true; reading: string; state: MechanismState }
+  | { ok: true; reading: string; state: MechanismState; spend?: string; offered?: string }
   | { ok: false; problem: string };
 /** What an object may be able to see of the rest of the world (public facts only). */
 export interface Scene {
@@ -137,8 +137,19 @@ export interface RunInput {
   scene: Scene | undefined;
   /** Real data from outside; undefined when there is none. */
   feeds: FeedSnapshot | undefined;
+  /** What the actor carries, as a count by kind. */
+  carrying: Record<string, number>;
 }
-export type RunResult = { reading: string; state?: MechanismState } | { problem: string };
+export type RunResult =
+  | {
+      reading: string;
+      state?: MechanismState;
+      /** An item kind of which one piece is used up. */
+      spend?: string;
+      /** Words handed over with the action. */
+      offered?: string;
+    }
+  | { problem: string };
 export interface Mechanism {
   controls: WorldControl[];
   run: (input: RunInput) => RunResult;
