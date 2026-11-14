@@ -1,3 +1,4 @@
+import { useId, useState, type ReactNode } from 'react';
 import type { PublicMemory } from '@elsewhere/character-interfaces';
 import { calendarDay, formatDay, formatTime } from '../formatTime';
 import { useWallTime } from '../worldClock';
@@ -8,7 +9,6 @@ type Sort = 'place' | 'time' | 'source';
 interface Group {
   id: string;
   title: string;
-  note?: string;
   placeId?: string;
   memories: PublicMemory[];
 }
@@ -30,18 +30,10 @@ function groups(
     if (sort === 'time') {
       const day = dayOf(memory.at);
       add('day:' + day, { title: formatDay(day) }, memory);
-    } else if (memory.sourceUrl)
-      add(
-        'reading',
-        {
-          title: 'From my reading',
-          note: 'Things I learned outside the world, each with its source',
-        },
-        memory,
-      );
-    else if (sort === 'source')
-      add('seen', { title: 'From what I saw', note: 'Things I noticed in Elsewhere' }, memory);
-    else if (memory.placeId)
+    } else if (sort === 'source') {
+      if (memory.sourceUrl) add('reading', { title: 'From my reading' }, memory);
+      else add('seen', { title: 'From what I saw' }, memory);
+    } else if (memory.placeId)
       add(
         'place:' + memory.placeId,
         { title: placeName(memory.placeId), placeId: memory.placeId },
@@ -50,6 +42,54 @@ function groups(
     else add('nowhere', { title: 'Along the way' }, memory);
   }
   return [...result.values()];
+}
+
+function MemoryGroup({
+  group,
+  initiallyOpen,
+  onLocate,
+  children,
+}: {
+  group: Group;
+  initiallyOpen: boolean;
+  onLocate?: () => void;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const id = useId();
+  return (
+    <section className="memory-group">
+      <div className="memory-group-head">
+        <h4>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={id}
+            onClick={() => setOpen(!open)}
+          >
+            <Icon name="chevron-down" />
+            <span>{group.title}</span>
+            <span className="memory-count" aria-label={group.memories.length + ' memories'}>
+              {group.memories.length}
+            </span>
+          </button>
+        </h4>
+        {onLocate && (
+          <button
+            className="show-place"
+            aria-label={'Show ' + group.title + ' in the world'}
+            onClick={onLocate}
+          >
+            <Icon name="pin" />
+            <span>View in world</span>
+          </button>
+        )}
+      </div>
+      <div id={id} hidden={!open}>
+        {children}
+      </div>
+    </section>
+  );
 }
 
 export function MemoriesPanel({
@@ -70,7 +110,6 @@ export function MemoriesPanel({
   return (
     <div className="memories">
       <div className="sort-row">
-        <span>What I keep, sorted by</span>
         <div className="ew-segments" role="group" aria-label="Sort memories">
           {(['place', 'time', 'source'] as const).map((value) => (
             <button
@@ -85,28 +124,22 @@ export function MemoriesPanel({
         </div>
       </div>
       {list.map((group, index) => (
-        <details className="memory-group" key={sort + group.id} open={index === 0}>
-          <summary>
-            <span className="memory-count">{group.memories.length}</span>
-            <span className="memory-group-title">
-              <strong>{group.title}</strong>
-              {group.note && <small>{group.note}</small>}
-            </span>
-            <Icon name="chevron-down" />
-          </summary>
-          {group.placeId && onShowPlace && places.some((place) => place.id === group.placeId) && (
-            <button className="show-place" onClick={() => onShowPlace(group.placeId!)}>
-              <Icon name="pin" />
-              Show this place in the world
-            </button>
-          )}
+        <MemoryGroup
+          key={sort + group.id}
+          group={group}
+          initiallyOpen={index === 0}
+          onLocate={
+            group.placeId && onShowPlace && places.some((place) => place.id === group.placeId)
+              ? () => onShowPlace(group.placeId!)
+              : undefined
+          }
+        >
           {group.memories.map((memory) => (
             <article className="memory-row" key={memory.id}>
-              <time>
+              <time dateTime={new Date(toWall(memory.at)).toISOString()}>
                 {sort !== 'time' && (
                   <>
-                    {formatDay(dayOf(memory.at), 'short')}
-                    <br />
+                    <span>{formatDay(dayOf(memory.at), 'short')}</span>
                   </>
                 )}
                 {formatTime(toWall(memory.at))}
@@ -125,7 +158,7 @@ export function MemoriesPanel({
               )}
             </article>
           ))}
-        </details>
+        </MemoryGroup>
       ))}
       {!memories.length && (
         <p className="empty-state">Memories appear as I experience the world.</p>

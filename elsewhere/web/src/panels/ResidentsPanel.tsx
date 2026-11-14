@@ -17,7 +17,6 @@ export function ResidentsPanel({
 }) {
   return (
     <>
-      <p className="panel-intro">Meet the digital characters who inhabit this world.</p>
       {awaitingLiveState && (
         <>
           <div className="resident-row" role="group" aria-label="About Hubert">
@@ -27,10 +26,7 @@ export function ResidentsPanel({
               <small>Elsewhere’s first resident</small>
             </span>
           </div>
-          <p className="quiet-note">
-            Hubert is Elsewhere’s first resident. His current activity will appear when the world
-            connects.
-          </p>
+          <p className="quiet-note">Waiting for the village to connect.</p>
         </>
       )}
       {residents.map((r) => (
@@ -45,13 +41,15 @@ export function ResidentsPanel({
             <strong>{r.name}</strong>
             <small>{r.id === 'hubert' ? characterActivity : r.activity}</small>
           </span>
-          <i className="presence" />
+
           <Icon name="arrow" />
         </button>
       ))}
       {!awaitingLiveState && !residents.length && <p>No residents are here yet.</p>}
       {visitorCount !== undefined && (
-        <p className="quiet-note">{visitorCount} visitors exploring</p>
+        <p className="quiet-note">
+          {visitorCount} {visitorCount === 1 ? 'visitor' : 'visitors'} exploring
+        </p>
       )}
     </>
   );

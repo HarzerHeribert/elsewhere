@@ -247,7 +247,7 @@ export function CharacterPanel({
             <HubertPortrait />
             <div>
               <span className="tag">Founding resident</span>
-              <p>Follow what I decide, look through what I remember, or leave me a note.</p>
+              <h3>About {character.name}</h3>
             </div>
           </div>
           {character.portrait && (

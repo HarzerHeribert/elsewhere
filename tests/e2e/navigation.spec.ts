@@ -406,3 +406,49 @@ test('on a phone every page is in reach and Account links lead back to Account',
   await settings(page).getByRole('button', { name: 'Account', exact: true }).click();
   await expect(title(page)).toHaveText('Account');
 });
+
+test('resident navigation centers each label and memory pages share one reading edge', async ({
+  page,
+}) => {
+  await mount(page);
+  await openHubert(page);
+  await panel(page).getByRole('button', { name: 'Memories', exact: true }).click();
+  for (const width of [320, 390, 800, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => document.fonts.ready);
+    const metrics = await panel(page).evaluate((root) => {
+      const tabs = [...root.querySelectorAll('.page-tabs button')];
+      const boxes = tabs.map((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const text = range.getBoundingClientRect(),
+          box = el.getBoundingClientRect();
+        return { left: text.left - box.left, right: box.right - text.right, height: box.height };
+      });
+      const sort = root.querySelector('.sort-row')!.getBoundingClientRect();
+      const heading = root.querySelector('.reading-heading')!.getBoundingClientRect();
+      const article = root.querySelector<HTMLElement>('.memory-row p')!;
+      return {
+        boxes,
+        edge: Math.abs(sort.x - heading.x),
+        font: parseFloat(getComputedStyle(article).fontSize),
+        outerOverflow: document.documentElement.scrollWidth - innerWidth,
+        readingOverflow: article.scrollWidth - article.clientWidth,
+      };
+    });
+    expect(metrics.edge).toBeLessThanOrEqual(1);
+    expect(metrics.font).toBeGreaterThanOrEqual(16);
+    expect(metrics.outerOverflow).toBeLessThanOrEqual(1);
+    expect(metrics.readingOverflow).toBeLessThanOrEqual(1);
+    for (const box of metrics.boxes) {
+      expect(Math.abs(box.left - box.right)).toBeLessThanOrEqual(1);
+      expect(box.left).toBeGreaterThanOrEqual(4);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+  }
+  const disclosure = panel(page).locator('.memory-group-head h4 button').first();
+  await disclosure.click();
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+  await disclosure.click();
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+});

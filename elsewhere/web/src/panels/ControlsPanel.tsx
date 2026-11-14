@@ -14,7 +14,6 @@ export function ControlsPanel({
 }) {
   return (
     <>
-      <p className="panel-intro">Move through the world independently of its residents.</p>
       <div className="key-guide">
         <span>
           <kbd>W</kbd>

@@ -40,34 +40,34 @@ export function MapPanel({
   const places = world.places.filter((place) => place.id !== 'meadow');
   return (
     <>
-      <p className="panel-intro">Explore the places and objects that residents interact with.</p>
-      <WorldMap
-        snapshot={snapshot}
-        visitor={visitor}
-        onFocus={onFocusPlace}
-        onMove={(p) => void onWalk(p)}
-      />
-      <div className="exploration-count">
-        <span>Your field journal</span>
-        <strong>
-          {places.filter((place) => discovered.includes(place.id)).length} / {places.length}
-        </strong>
-      </div>
-      <div className="place-list">
-        {places.map((p, i) => (
-          <button key={p.id} onClick={() => onFocusPlace(placeCenter(p), p.id)}>
-            <span className="place-number">
-              {discovered.includes(p.id) ? '✓' : String(i + 1).padStart(2, '0')}
-            </span>
-            <span>
-              {p.name}
-              <small>
-                {discovered.includes(p.id) ? 'Visited on this walk' : 'Waiting to be explored'}
-              </small>
-            </span>
-            <Icon name="arrow" />
-          </button>
-        ))}
+      <div className="map-spread">
+        <WorldMap
+          snapshot={snapshot}
+          visitor={visitor}
+          onFocus={onFocusPlace}
+          onMove={(p) => void onWalk(p)}
+        />
+        <div className="place-index">
+          <div className="exploration-count">
+            <span>Places</span>
+            <strong>
+              {places.filter((place) => discovered.includes(place.id)).length} / {places.length}{' '}
+              visited
+            </strong>
+          </div>
+          <div className="place-list">
+            {places.map((p, i) => (
+              <button key={p.id} onClick={() => onFocusPlace(placeCenter(p), p.id)}>
+                <span className="place-number">{i + 1}</span>
+                <span>
+                  {p.name}
+                  {discovered.includes(p.id) && <small>Visited on this walk</small>}
+                </span>
+                <Icon name="arrow" />
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <WildlifeDirectory entities={snapshot?.world.entities ?? []} onSelect={onSelectObject} />
       <details className="object-directory">

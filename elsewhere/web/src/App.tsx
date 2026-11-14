@@ -571,16 +571,6 @@ export function App() {
             aria-label="World panel"
             key={panel}
           >
-            {back && (
-              <button
-                className="back-link panel-back"
-                aria-label={'Back to ' + back.label}
-                onClick={back.go}
-              >
-                <Icon name="chevron-left" />
-                {back.label}
-              </button>
-            )}
             <div
               className={
                 panel === 'character' && hasCharacter && characterTab === 'profile'
@@ -588,6 +578,16 @@ export function App() {
                   : 'panel-header'
               }
             >
+              {back && (
+                <button
+                  className="back-link panel-back"
+                  aria-label={'Back to ' + back.label}
+                  onClick={back.go}
+                >
+                  <Icon name="chevron-left" />
+                  {back.label}
+                </button>
+              )}
               <div>
                 <h2 ref={panelHeading} tabIndex={-1}>
                   {titles[panel]}
@@ -788,7 +788,7 @@ export function App() {
           <div className="view-controls glass">
             <button className="world-map-control" onClick={() => openPanel('map')}>
               <Icon name="map" />
-              Map
+              <span>Map</span>
             </button>
             <div className="camera-switch" role="group" aria-label="Camera perspective">
               <button onClick={() => camera('overview')} aria-pressed={mode === 'overview'}>

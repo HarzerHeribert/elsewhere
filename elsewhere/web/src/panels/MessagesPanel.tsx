@@ -43,11 +43,12 @@ export function MessagesPanel({
         </div>
         {connected && <i className="presence" />}
       </div>
-      <p className="panel-intro">
-        {connected
-          ? 'Share an observation or ask a question. Hubert can encounter your note as part of his day.'
-          : 'You can leave Hubert a note when the live world reconnects. Your draft stays in this window.'}
-      </p>
+      {!connected && (
+        <p className="panel-intro">
+          You can leave Hubert a note when the live world reconnects. Your draft stays in this
+          window.
+        </p>
+      )}
       <div className="delivery-history">
         {own
           ? own.map((m) => (
