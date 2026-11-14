@@ -17,29 +17,29 @@ export function WorldMap({
   const b = world.bounds,
     width = b.maxX - b.minX,
     height = b.maxZ - b.minZ;
+  const places = world.places.filter((place) => place.id !== 'meadow');
   return (
     <div className="world-map" aria-label="Map of Elsewhere">
       <div className="map-title">
         <span>ELSEWHERE</span>
         <span>N ↑</span>
       </div>
-      <svg
-        viewBox={`${b.minX} ${b.minZ} ${width} ${height}`}
-        role="img"
-        aria-label="Places, Hubert and your position in Elsewhere"
-        onClick={(event) => {
-          if (!visitor || !snapshot) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          onMove({
-            x: b.minX + ((event.clientX - rect.left) / rect.width) * width,
-            z: b.minZ + ((event.clientY - rect.top) / rect.height) * height,
-          });
-        }}
-      >
-        <rect x={b.minX} y={b.minZ} width={width} height={height} fill="var(--ew-paper)" />
-        {world.places
-          .filter((p) => p.id !== 'meadow')
-          .map((p) => (
+      <div className="map-plot">
+        <svg
+          viewBox={`${b.minX} ${b.minZ} ${width} ${height}`}
+          role="img"
+          aria-label="Places, Hubert and your position in Elsewhere"
+          onClick={(event) => {
+            if (!visitor || !snapshot) return;
+            const rect = event.currentTarget.getBoundingClientRect();
+            onMove({
+              x: b.minX + ((event.clientX - rect.left) / rect.width) * width,
+              z: b.minZ + ((event.clientY - rect.top) / rect.height) * height,
+            });
+          }}
+        >
+          <rect x={b.minX} y={b.minZ} width={width} height={height} fill="var(--ew-paper)" />
+          {places.map((p) => (
             <g
               key={p.id}
               onClick={(event) => {
@@ -62,63 +62,80 @@ export function WorldMap({
                 rx="1.5"
                 fill={
                   p.id === 'pond'
-                    ? 'var(--ew-surface-muted)'
+                    ? '#acd0ce'
                     : p.id === 'workshop' || p.id === 'library'
-                      ? 'var(--ew-line)'
-                      : 'var(--ew-surface)'
+                      ? '#dec49e'
+                      : '#d4dfb6'
                 }
                 stroke="var(--ew-line-strong)"
                 strokeWidth=".3"
               />
-              <text
-                x={(p.bounds.minX + p.bounds.maxX) / 2}
-                y={(p.bounds.minZ + p.bounds.maxZ) / 2}
-                fontSize="2.5"
-                fill="var(--ew-text)"
-                textAnchor="middle"
-                dominantBaseline="central"
-              >
-                {p.name.replace(/^The /, '')}
-              </text>
+              <title>{p.name}</title>
             </g>
           ))}
-        {snapshot?.world.entities?.map((entity) => (
-          <g key={entity.id} aria-label={entity.name} style={{ pointerEvents: 'none' }}>
-            <title>
-              {entity.species ?? entity.name} · {entity.behavior}
-            </title>
+          {snapshot?.world.entities?.map((entity) => (
+            <g key={entity.id} aria-label={entity.name} style={{ pointerEvents: 'none' }}>
+              <title>
+                {entity.species ?? entity.name} · {entity.behavior}
+              </title>
+              <circle
+                cx={entity.position.x}
+                cy={entity.position.z}
+                r={entity.kind === 'butterfly' ? 0.6 : 0.75}
+                fill="var(--ew-text-muted)"
+                stroke="var(--ew-surface)"
+                strokeWidth=".25"
+              />
+            </g>
+          ))}
+          {snapshot?.world.residents.map((r) => (
             <circle
-              cx={entity.position.x}
-              cy={entity.position.z}
-              r={entity.kind === 'butterfly' ? 0.6 : 0.75}
-              fill="var(--ew-text-muted)"
+              key={r.id}
+              cx={r.position.x}
+              cy={r.position.z}
+              r="1.2"
+              fill="var(--ew-accent)"
               stroke="var(--ew-surface)"
-              strokeWidth=".25"
+              strokeWidth=".5"
             />
-          </g>
-        ))}
-        {snapshot?.world.residents.map((r) => (
-          <circle
-            key={r.id}
-            cx={r.position.x}
-            cy={r.position.z}
-            r="1.2"
-            fill="var(--ew-accent)"
-            stroke="var(--ew-surface)"
-            strokeWidth=".5"
-          />
-        ))}
-        {visitor && snapshot && (
-          <circle
-            cx={visitor.position.x}
-            cy={visitor.position.z}
-            r="1.25"
-            fill="var(--ew-surface)"
-            stroke="var(--ew-ink)"
-            strokeWidth=".5"
-          />
-        )}
-      </svg>
+          ))}
+          {visitor && snapshot && (
+            <circle
+              cx={visitor.position.x}
+              cy={visitor.position.z}
+              r="1.25"
+              fill="var(--ew-surface)"
+              stroke="var(--ew-ink)"
+              strokeWidth=".5"
+            />
+          )}
+        </svg>
+        {places.map((place, i) => {
+          const position = {
+            x: (place.bounds.minX + place.bounds.maxX) / 2,
+            z: (place.bounds.minZ + place.bounds.maxZ) / 2,
+          };
+          return (
+            <button
+              className="map-marker"
+              key={place.id}
+              aria-label={place.name}
+              title={place.name}
+              style={{
+                left: ((position.x - b.minX) / width) * 100 + '%',
+                top:
+                  ((place.bounds.minZ + (place.bounds.maxZ - place.bounds.minZ) * 0.24 - b.minZ) /
+                    height) *
+                    100 +
+                  '%',
+              }}
+              onClick={() => onFocus(position, place.id)}
+            >
+              {i + 1}
+            </button>
+          );
+        })}
+      </div>
       <div className="map-key">
         <span>
           <i className="map-resident" />

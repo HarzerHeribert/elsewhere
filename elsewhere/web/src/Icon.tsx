@@ -15,6 +15,8 @@ export function Icon({ name }: { name: string }) {
     expand: 'M8 3H3v5m13-5h5v5m0 8v5h-5M8 21H3v-5',
     close: 'm6 6 12 12M6 18 18 6',
     arrow: 'M4 12h16m-6-6 6 6-6 6',
+    key: 'M14 3a6 6 0 1 1-4 10l-2 2v3H5v3H2v-5l8-8a6 6 0 0 1 4-5Zm3 5h.01',
+    info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 8v6m0-10v.1',
     compass: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm4 5-3 5-5 3 3-5Z',
     sidebar: 'M4 4h16v16H4ZM9 4v16',
     'chevron-right': 'm9 6 6 6-6 6',

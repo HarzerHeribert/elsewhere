@@ -1,6 +1,16 @@
 import { Icon } from '../Icon';
 import type { SettingsEntry, SettingsSection } from '../SettingsScreen';
 
+const sectionIcon: Record<SettingsSection, string> = {
+  account: 'user',
+  security: 'key',
+  mail: 'mail',
+  creations: 'book',
+  controls: 'game',
+  world: 'compass',
+  about: 'info',
+};
+
 /** Account, world history, wishes and settings available to this visitor. */
 export function MorePanel({
   accountName,
@@ -61,6 +71,7 @@ export function MorePanel({
           .filter((entry) => entry.id !== 'account')
           .map((entry) => (
             <button key={entry.id} onClick={() => onSettings(entry.id)}>
+              <Icon name={sectionIcon[entry.id]} />
               <span>{entry.label}</span>
               {entry.badge && <span className="settings-badge">{entry.badge}</span>}
               <Icon name="chevron-right" />

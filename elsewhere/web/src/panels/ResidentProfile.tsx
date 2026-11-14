@@ -45,7 +45,12 @@ export function ResidentProfile({
         <div className="resident-intro-text">
           <span>{placeName ? 'Resident · ' + placeName : 'Resident'}</span>
           <h3>{character.name}</h3>
-          {character.portrait?.text && <p>{character.portrait.text}</p>}
+          {character.portrait?.text && (
+            <p>
+              {character.portrait.text.match(/^[^.!?]+[.!?](?=\s|$)/)?.[0] ??
+                character.portrait.text}
+            </p>
+          )}
         </div>
         {character.id === 'hubert' && (
           <div className="resident-workshop">

@@ -24,10 +24,6 @@ export function WishesPanel({
 }) {
   return (
     <>
-      <p className="panel-intro">
-        Things a resident has said they would like in Elsewhere, in their own words. Nothing is
-        added automatically: the owner decides whether to have a wish built.
-      </p>
       <div className="wish-list">
         {wishes?.map((w) => (
           <article className="wish-card" key={w.id}>
@@ -53,11 +49,7 @@ export function WishesPanel({
           </article>
         ))}
       </div>
-      {!wishes?.length && (
-        <p className="empty-state">
-          No wishes yet. When a resident wishes for something, it will appear here.
-        </p>
-      )}
+      {!wishes?.length && <p className="empty-state">No resident has made a wish yet.</p>}
       <p role="status" className="control-status">
         {status}
       </p>
