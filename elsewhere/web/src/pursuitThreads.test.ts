@@ -214,6 +214,8 @@ describe('a resident’s page, in order', () => {
       'Timing the pendulum',
       'I want to record the gap.',
       'Message Hubert',
+      'Recent activity',
+      'See my whole day',
       'The question I’m on',
       live[0]!.question,
       'One of 5 questions at the pendulum stand',
@@ -222,8 +224,6 @@ describe('a resident’s page, in order', () => {
       'Still to find out',
       'Other questions',
       'Why does the robin keep to the orchard wall?',
-      'My last steps',
-      'See my whole day',
     ].map(at);
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });

@@ -176,6 +176,27 @@ export function CharacterPanel({
               See through my eyes
             </Button>
           </div>
+          {lastSteps.length > 0 && (
+            <section className="record" aria-label="Recent activity">
+              <SectionHead label="Recent activity" />
+              <ol className="step-list">
+                {lastSteps.map((step) => (
+                  <li key={step.id}>
+                    <When at={step.at} />
+                    <p>
+                      <b>{trailLabel(step)}</b>
+                      {step.kind !== 'portrait' && step.text && <span>{step.text}</span>}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+              {onDay && (
+                <button className="follow-link" onClick={onDay}>
+                  See my whole day <Icon name="arrow" />
+                </button>
+              )}
+            </section>
+          )}
           {main ? (
             <section className="record" aria-label={mainLabel}>
               <SectionHead label={mainLabel} />
@@ -212,27 +233,6 @@ export function CharacterPanel({
                   <ThreadRecord thread={thread} all={pursuits} readingLimit={3} noteLimit={1} />
                 </details>
               ))}
-            </section>
-          )}
-          {lastSteps.length > 0 && (
-            <section className="record" aria-label="My last steps">
-              <SectionHead label="My last steps" />
-              <ol className="step-list">
-                {lastSteps.map((step) => (
-                  <li key={step.id}>
-                    <When at={step.at} />
-                    <p>
-                      <b>{trailLabel(step)}</b>
-                      {step.kind !== 'portrait' && step.text && <span>{step.text}</span>}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-              {onDay && (
-                <button className="follow-link" onClick={onDay}>
-                  See my whole day <Icon name="arrow" />
-                </button>
-              )}
             </section>
           )}
         </div>

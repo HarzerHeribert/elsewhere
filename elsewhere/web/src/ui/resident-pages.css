@@ -530,3 +530,118 @@
   color: var(--forest);
   text-underline-offset: 4px;
 }
+
+.edition-page .profile-header h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.game-shell .edition-page:has(.profile-header) {
+  position: absolute;
+}
+.game-shell .edition-page .profile-header {
+  min-height: 0;
+  padding-block: 0;
+  border: 0;
+}
+.profile-header .square-button {
+  position: absolute;
+  top: 0;
+  right: var(--page-pad);
+  z-index: 1;
+}
+.day-band {
+  margin-block: 16px;
+}
+.day-band-strip {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding-block: 4px;
+}
+.day-band-strip button {
+  min-width: 80px;
+  min-height: 44px;
+  flex: 1 0 auto;
+  padding: 4px 12px;
+  background: #d9c5ed;
+  color: #23382e;
+  font-size: 16px;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 4px solid transparent;
+}
+.day-band-strip button:nth-child(4n + 2) {
+  background: #f7c0a4;
+}
+.day-band-strip button:nth-child(4n + 3) {
+  background: #b2d6be;
+}
+.day-band-strip button:nth-child(4n) {
+  background: #d8e993;
+}
+.day-band-strip button[aria-pressed='true'] {
+  border-color: #23382e;
+}
+.day-band p,
+.trial-figure p {
+  font-size: 17px;
+  line-height: 1.5;
+  margin: 8px 0;
+}
+.day-band p strong {
+  margin-right: 8px;
+}
+.inquiry-heading,
+.trial-figure h4 {
+  margin-block: 16px 4px;
+  font-family: var(--ew-font-display);
+}
+.trial-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  max-height: 132px;
+  overflow-y: auto;
+}
+.trial-marks button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.trial-marks span {
+  width: 12px;
+  height: 12px;
+  background: #866341;
+  border-radius: 50%;
+}
+.trial-marks [aria-pressed='true'] span {
+  background: #244936;
+  outline: 2px solid #244936;
+  outline-offset: 3px;
+}
+.inquiry-record {
+  margin-block: 12px;
+}
+.inquiry-record > summary {
+  padding-block: 12px;
+  cursor: pointer;
+}
+.phone .resident-index button {
+  grid-template-columns: minmax(108px, 30%) minmax(0, 1fr) 18px;
+}
+@media (max-width: 420px) {
+  .village-masthead .world-day {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    line-height: 1.1;
+  }
+}

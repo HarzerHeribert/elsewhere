@@ -1,16 +1,17 @@
 import type { PublicPursuit } from '@elsewhere/character-interfaces';
 import { pursuitThreads, questionText, threadHasRecord } from '../pursuitThreads';
-import { QuestionKin, StatusTag, ThreadRecord, threadCounts } from './Record';
+import { TrialMarks } from './TrialMarks';
+import { NoteList, QuestionKin, StatusTag, ThreadRecord, threadCounts } from './Record';
 
 /** Per line of questions: what was tried, what came of it, what was made, what is still open. */
 export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPursuit[] }) {
   // A line of questions with nothing written under it has no page yet.
   const threads = pursuitThreads(pursuits).filter(threadHasRecord);
+  const notes = threads.flatMap((thread) => thread.notes).sort((a, b) => b.at - a.at);
   return (
     <div className="journal">
-      <p className="panel-intro">
-        What I tried, what I found out, and what I still want to know, in my own words.
-      </p>
+      {notes[0] && <NoteList notes={notes} all={pursuits} limit={5} days />}
+      {threads.length > 0 && <h3 className="inquiry-heading">Lines of inquiry</h3>}
       {threads.map((thread) => (
         <section
           className="record notebook-thread"
@@ -24,7 +25,11 @@ export function NotebookPanel({ pursuits = [] }: { pursuits?: readonly PublicPur
             <small className="question-counts">{threadCounts(thread)}</small>
           </header>
           <QuestionKin thread={thread} all={pursuits} />
-          <ThreadRecord thread={thread} all={pursuits} readingLimit={5} noteLimit={6} days />
+          <TrialMarks readings={thread.readings} />
+          <details className="inquiry-record">
+            <summary>Read the full record</summary>
+            <ThreadRecord thread={thread} all={pursuits} readingLimit={5} noteLimit={6} />
+          </details>
         </section>
       ))}
       {!threads.length && (

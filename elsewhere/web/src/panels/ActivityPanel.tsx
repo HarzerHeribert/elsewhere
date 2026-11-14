@@ -11,6 +11,7 @@ import { trailLabel } from '../trailLabels';
 import { calendarDay, formatDay, formatTime } from '../formatTime';
 import { useWallTime } from '../worldClock';
 import { useRemembered } from '../useRemembered';
+import { DayBand } from './DayBand';
 import { Icon } from '../Icon';
 import { questionText } from '../pursuitThreads';
 import { MadeLink, Measured, NoteCard } from './Record';
@@ -145,6 +146,7 @@ export function ActivityPanel({
           <Icon name="chevron-right" />
         </button>
       </div>
+      <DayBand key={day} entries={trail.filter((step) => dayOf(step.at) === day)} />
       <div className="story-filters" role="group" aria-label="Show from this day">
         {filters.map((item) => {
           const count = item.kind ? filterStory(story, item.id).length : 0;

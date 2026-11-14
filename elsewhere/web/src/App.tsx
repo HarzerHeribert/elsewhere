@@ -530,7 +530,7 @@ export function App() {
             <span>{lifeLabel}</span>
             {shownNow !== null && (
               <span className="world-day">
-                {dayLabel} <small>{timeLabel}</small>
+                <span>{dayLabel}</span> <small>{timeLabel}</small>
               </span>
             )}
           </div>
@@ -552,9 +552,11 @@ export function App() {
               </button>
             ))}
           </nav>
-          {panel !== 'more' && !accountOpen && !settingsSection && (
+          {panel !== 'more' && !settingsSection && (
             <button
               className="account-shortcut"
+              aria-hidden={accountOpen || undefined}
+              tabIndex={accountOpen ? -1 : undefined}
               aria-label={account || privateLocalAccess ? 'Your account' : 'Sign in'}
               onClick={openAccount}
             >
@@ -579,7 +581,13 @@ export function App() {
                 {back.label}
               </button>
             )}
-            <div className="panel-header">
+            <div
+              className={
+                panel === 'character' && hasCharacter && characterTab === 'profile'
+                  ? 'panel-header profile-header'
+                  : 'panel-header'
+              }
+            >
               <div>
                 <h2 ref={panelHeading} tabIndex={-1}>
                   {titles[panel]}

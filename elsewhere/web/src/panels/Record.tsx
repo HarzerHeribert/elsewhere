@@ -159,14 +159,14 @@ export function NoteList({
   days = false,
 }: {
   notes: readonly Filed<'note'>[];
-  lead: PublicPursuit;
+  lead?: PublicPursuit;
   all: readonly PublicPursuit[];
   limit: number;
   days?: boolean;
 }) {
   const toWall = useWallTime();
   let lastDay: number | undefined;
-  let last = lead.id;
+  let last = lead?.id;
   const cards = notes.map((note) => {
     const day = calendarDay(toWall(note.at));
     const heading = days && day !== lastDay;
