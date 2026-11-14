@@ -1,7 +1,7 @@
 import { Icon } from '../Icon';
 import type { SettingsEntry, SettingsSection } from '../SettingsScreen';
 
-/** Everything that does not fit the phone’s tab bar: the account, two panels and the settings. */
+/** Account, world history, wishes and settings available to this visitor. */
 export function MorePanel({
   accountName,
   needsAttention,
@@ -24,7 +24,11 @@ export function MorePanel({
   return (
     <div className="more-list">
       <div className="more-group">
-        <button className="more-account" onClick={onAccount}>
+        <button
+          className="more-account"
+          aria-label={accountName ? 'Your account' : 'Sign in'}
+          onClick={onAccount}
+        >
           <span className="account-avatar">
             <Icon name="user" />
           </span>
@@ -41,7 +45,7 @@ export function MorePanel({
       <div className="more-group">
         <button onClick={onActivity}>
           <Icon name="activity" />
-          <span>Activity</span>
+          <span>Days</span>
           <Icon name="chevron-right" />
         </button>
         <button onClick={onWishes}>

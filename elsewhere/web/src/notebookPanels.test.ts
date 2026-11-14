@@ -109,6 +109,7 @@ describe('authored notebook presentation', () => {
     const html = renderToStaticMarkup(
       createElement(CharacterPanel, {
         character,
+        tab: 'now',
         pursuits: [pursuit('p', [], { status: 'active' })],
         trail: [{ id: 't', at: 1, kind: 'search', why: 'The exception is out there.' }],
         onMessage: noop,
@@ -119,8 +120,32 @@ describe('authored notebook presentation', () => {
     expect(html).toContain('Listening to the wind chime');
     expect(html).toContain('Why do herons stand so still?');
     expect(html).toContain('The exception is out there.');
-    expect(html).toContain('My notebook');
+    expect(html).toContain('Notebook');
     expect(html).not.toMatch(/TEMPLATE-THOUGHT-CANARY|TEMPLATE-REFLECTION-CANARY/);
+  });
+  it('opens on the live portrait and latest public excerpts, including when the latest note belongs to an older question', () => {
+    const html = renderToStaticMarkup(
+      createElement(CharacterPanel, {
+        character,
+        pursuits: [
+          pursuit('a', [{ id: 'late', at: 4_000, text: 'Latest written entry.' }]),
+          pursuit('b', [{ id: 'early', at: 3_000, text: 'Previous written entry.' }], {
+            status: 'active',
+          }),
+        ],
+        memories: [
+          { id: 'late', at: 4_000, summary: 'Latest kept memory.', cues: [] },
+          { id: 'early', at: 1_000, summary: 'Previous kept memory.', cues: [] },
+        ],
+        onMessage: noop,
+        onViewpoint: noop,
+        onWishes: noop,
+      }),
+    );
+    expect(html).toContain('Latest written entry.');
+    expect(html).toContain('Latest kept memory.');
+    expect(html).toContain('Listening to the wind chime');
+    expect(html).not.toMatch(/Previous written|Previous kept|TEMPLATE-THOUGHT/);
   });
   it('keeps the trail distinct from routine events and from the memory page', () => {
     const props = {

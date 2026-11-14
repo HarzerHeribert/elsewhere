@@ -40,7 +40,7 @@ export function ResidentsPanel({
           aria-label={'Select ' + r.name}
           onClick={() => onSelect(r.id)}
         >
-          <HubertPortrait />
+          {r.id === 'hubert' ? <HubertPortrait /> : <Icon name="people" />}
           <span>
             <strong>{r.name}</strong>
             <small>{r.id === 'hubert' ? characterActivity : r.activity}</small>
@@ -49,6 +49,7 @@ export function ResidentsPanel({
           <Icon name="arrow" />
         </button>
       ))}
+      {!awaitingLiveState && !residents.length && <p>No residents are here yet.</p>}
       {visitorCount !== undefined && (
         <p className="quiet-note">{visitorCount} visitors exploring</p>
       )}

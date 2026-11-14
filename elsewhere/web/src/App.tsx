@@ -1,17 +1,7 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type PointerEvent,
-} from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { villageScenery } from './scenery';
 import { Scene, type CameraMode, type SceneControls } from './Scene';
 import { HubertPortrait } from './HubertPortrait';
-import { ElsewhereBrand } from './ElsewhereBrand';
-import { StatusBadge } from './ui/StatusBadge';
 import { useMediaQuery } from './useMediaQuery';
 import { useVisitor } from './useVisitor';
 import { AccountDialog } from './AccountDialog';
@@ -44,13 +34,6 @@ type Panel =
   | 'activity'
   | 'wishes'
   | 'more';
-const nav: Array<{ id: Panel; label: string; icon: string }> = [
-  { id: 'residents', label: 'Residents', icon: 'people' },
-  { id: 'map', label: 'Map', icon: 'map' },
-  { id: 'messages', label: 'Messages', icon: 'mail' },
-  { id: 'activity', label: 'Activity', icon: 'activity' },
-  { id: 'wishes', label: 'Wishes', icon: 'star' },
-];
 /** A spot inside the panels, with enough to return to it exactly as it was left. */
 interface PanelStop {
   panel: Panel;
@@ -60,10 +43,6 @@ interface PanelStop {
   selected: string | null;
   scroll: number;
 }
-/** Phones keep four destinations in reach; the rest sits behind More. */
-const phoneTabs = ['residents', 'map', 'messages'] as const;
-const sidebarPreference = 'elsewhere.sidebar';
-
 const walkingControls: ReadonlyArray<{
   action: WorldControlAction;
   label: string;
@@ -96,7 +75,7 @@ export function App() {
     [placeId, setPlaceId] = useState<string | null>(null),
     [focus, setFocus] = useState<Position | null>(null),
     [resetKey, setResetKey] = useState(0);
-  const [characterTab, setCharacterTab] = useState<CharacterTab>('now'),
+  const [characterTab, setCharacterTab] = useState<CharacterTab>('profile'),
     // Where the visitor came from, so every jump from one panel to another has a way back.
     [trail, setTrail] = useState<PanelStop[]>([]),
     [message, setMessage] = useState(''),
@@ -110,17 +89,8 @@ export function App() {
     [locked, setLocked] = useState(false),
     [discovered, setDiscovered] = useState<string[]>([]);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(sidebarPreference) === 'collapsed';
-    } catch {
-      return false;
-    }
-  });
-  const [sheetFull, setSheetFull] = useState(false);
   const panelScroll = useRef<HTMLDivElement>(null),
     scrollNext = useRef<number | null>(null),
-    scrollBeforeStory = useRef(0),
     panelBeforeSettings = useRef<Panel | null>(null);
   // Going back lands where the visitor was reading, not at the top.
   useLayoutEffect(() => {
@@ -128,9 +98,7 @@ export function App() {
     panelScroll.current.scrollTop = scrollNext.current;
     scrollNext.current = null;
   });
-  const phone = useMediaQuery('(max-width: 800px)'),
-    narrow = useMediaQuery('(max-width: 1100px)');
-  const collapsed = !phone && (sidebarCollapsed || narrow);
+  const phone = useMediaQuery('(max-width: 800px)');
   useEffect(() => {
     if (accountSession.operatorSignInToken || accountSession.returnedFromSocial)
       setAccountOpen(true);
@@ -179,8 +147,6 @@ export function App() {
         visitor.visitor.position.z - resident.position.z,
       ) <= 5,
   );
-  const activeSection =
-    panel === 'character' ? 'residents' : panel === 'place' || panel === 'object' ? 'map' : panel;
   const panelHeading = useRef<HTMLHeadingElement>(null);
   const panelTrigger = useRef<HTMLElement | null>(null);
   const previousPanel = useRef<Panel | null>(null);
@@ -200,16 +166,18 @@ export function App() {
     hadSettings.current = Boolean(settings);
   }, [settings, panel]);
   const inputPaused = Boolean(panel || settings || accountOpen);
+  const viewedResident = snapshot?.world.residents.find((r) => r.id === selected);
+  const hasCharacter = selected === null || selected === character?.id;
   const titles: Record<Panel, string> = {
     residents: 'Residents',
-    character: character?.name ?? 'Resident',
+    character: viewedResident?.name ?? (hasCharacter ? character?.name : null) ?? 'Resident',
     map: 'Map',
     place: place?.name ?? 'A place',
     object: entity?.name ?? object?.name ?? 'An object',
     messages: 'Messages',
-    activity: 'Activity',
+    activity: 'Days',
     wishes: 'Wishes',
-    more: 'More',
+    more: 'Account',
   };
   useEffect(() => {
     if (!snapshot) return;
@@ -311,10 +279,11 @@ export function App() {
         : [],
     );
     scrollNext.current = 0;
-    scrollBeforeStory.current = 0;
     setSettings(null);
-    setSheetFull(false);
-    if (p === 'character' && panel !== 'character') setCharacterTab('now');
+    if (p === 'character' && panel !== 'character') {
+      setCharacterTab('profile');
+      setSelected(character?.id ?? null);
+    }
     setPanel(p);
   }
   function goBack() {
@@ -355,21 +324,14 @@ export function App() {
       setAccountOpen(true);
     else openSettings('account');
   }
-  function toggleSidebar() {
-    const next = !sidebarCollapsed;
-    setSidebarCollapsed(next);
-    try {
-      localStorage.setItem(sidebarPreference, next ? 'collapsed' : 'open');
-    } catch {
-      // The preference simply lasts for this visit.
-    }
-  }
   function pickObject(id: string, via: 'menu' | 'link' = 'menu') {
     openPanel('object', via);
     setSelected(id);
   }
   function pickCharacter(id: string, via: 'menu' | 'link' = 'menu') {
-    if (id === character?.id) openPanel('character', via);
+    openPanel('character', via);
+    setSelected(id);
+    setCharacterTab('profile');
   }
   function focusPlace(p: Position, id: string, via: 'menu' | 'link' = 'menu') {
     release();
@@ -390,7 +352,7 @@ export function App() {
     release();
     setMode('overview');
     setFocus(placeCenter(target));
-    setSheetFull(false);
+    setPanel(null);
   }
   async function enterWorld() {
     if (!snapshot) return;
@@ -472,17 +434,6 @@ export function App() {
       setSending(false);
     }
   }
-  // The sheet follows a drag on its handle: up for the full page, down to shrink or dismiss.
-  const sheetDrag = useRef<number | null>(null);
-  function endSheetDrag(e: PointerEvent<HTMLButtonElement>) {
-    const moved = e.clientY - (sheetDrag.current ?? e.clientY);
-    sheetDrag.current = null;
-    if (moved < -24) setSheetFull(true);
-    else if (moved > 24) {
-      if (sheetFull) setSheetFull(false);
-      else setPanel(null);
-    } else setSheetFull((full) => !full);
-  }
   // The world keeps its own clock, which stands still while it is paused. Everything shown to
   // a visitor is the real time it happened, in their timezone.
   const clockKey = JSON.stringify({
@@ -507,7 +458,6 @@ export function App() {
           : 'World preview'
         : 'Arriving';
   const pendingWishes = snapshot?.wishes?.filter((w) => w.status === 'pending').length ?? 0;
-  const accountLabel = account || privateLocalAccess ? 'Your account' : 'Sign in';
   const entries = settingsEntries({
     signedIn: !!account,
     privateLocalAccess,
@@ -519,41 +469,33 @@ export function App() {
       ? settings
       : 'account'
     : null;
-  const attention = accountSession.hasCharacterIssue && (
-    <span className="attention-mark" role="status" aria-label="Character needs attention">
-      !
-    </span>
-  );
-  const railButton = (n: (typeof nav)[number]) => (
-    <button
-      key={n.id}
-      className={activeSection === n.id && !settingsSection ? 'active' : ''}
-      aria-label={n.label}
-      aria-pressed={activeSection === n.id && !settingsSection}
-      aria-expanded={activeSection === n.id && !settingsSection}
-      aria-controls={panel ? 'world-panel' : undefined}
-      onClick={() => togglePanel(n.id)}
-      title={n.label}
-    >
-      <Icon name={n.icon} />
-      <span className="rail-label">{n.label}</span>
-      {n.id === 'wishes' && pendingWishes > 0 && (
-        <b className="nav-count" aria-label="Pending requests">
-          {pendingWishes}
-        </b>
-      )}
-    </button>
-  );
-  const wide = panel === 'character' || panel === 'activity';
+  const section =
+    settingsSection || accountOpen || panel === 'more'
+      ? 'Account'
+      : panel === 'activity'
+        ? 'Days'
+        : panel && ['residents', 'character', 'messages', 'wishes'].includes(panel)
+          ? 'Residents'
+          : 'World';
+  function worldPage() {
+    release();
+    setPanel(null);
+    setSettings(null);
+    setAccountOpen(false);
+  }
+  const destinations = [
+    { label: 'World', icon: 'compass', go: worldPage },
+    { label: 'Residents', icon: 'people', go: () => openPanel('residents') },
+    { label: 'Days', icon: 'activity', go: () => openPanel('activity') },
+    { label: 'Account', icon: 'user', go: () => openPanel('more') },
+  ];
   // One way back from every panel: to the panel a link was followed from, or up to its list.
   const parent: Panel | undefined =
     panel === 'character'
       ? 'residents'
       : panel === 'place' || panel === 'object'
         ? 'map'
-        : phone && (panel === 'activity' || panel === 'wishes')
-          ? 'more'
-          : undefined;
+        : undefined;
   const back = !panel
     ? null
     : trail.length
@@ -569,7 +511,6 @@ export function App() {
           'game-shell ' +
           (panel ? 'panel-open ' : '') +
           (settingsSection ? 'settings-open ' : '') +
-          (collapsed ? 'sidebar-collapsed ' : '') +
           (phone ? 'phone ' : '') +
           'mode-' +
           mode
@@ -577,104 +518,59 @@ export function App() {
         aria-label="Elsewhere game"
         ref={main}
       >
-        {!phone && (
-          <nav className="world-sidebar" aria-label="World navigation">
-            <div className="sidebar-top">
-              <button
-                className="sidebar-brand"
-                aria-label="About Elsewhere"
-                onClick={() => openSettings('about')}
-              >
-                <ElsewhereBrand />
-              </button>
-              {!narrow && (
-                <button
-                  className="square-button subtle"
-                  aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                  title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                  onClick={toggleSidebar}
-                >
-                  <Icon name="sidebar" />
-                </button>
-              )}
-            </div>
-            <div className="world-clock" title={lifeLabel + ' · ' + dayLabel + ' ' + timeLabel}>
-              <StatusBadge
-                className={'connection ' + connection}
-                tone={connection === 'live' ? 'live' : 'waiting'}
-              >
-                {lifeLabel}
-              </StatusBadge>
+        <header className="village-masthead">
+          <button
+            className="village-logo"
+            aria-label="About Elsewhere"
+            onClick={() => openSettings('about')}
+          >
+            <img src="/brand/elsewhere-lockup-light.svg" alt="Elsewhere" />
+          </button>
+          <div className="world-clock" title={lifeLabel}>
+            <span>{lifeLabel}</span>
+            {shownNow !== null && (
               <span className="world-day">
-                {dayLabel}
-                <small>{timeLabel}</small>
+                <span>{dayLabel}</span> <small>{timeLabel}</small>
               </span>
-            </div>
-            <div className="sidebar-nav">{nav.map(railButton)}</div>
-            <div className="sidebar-foot">
+            )}
+          </div>
+          <nav className="village-nav" aria-label="World navigation">
+            {destinations.map(({ label, icon, go }) => (
               <button
-                className={settingsSection ? 'active' : ''}
-                aria-label="Settings"
-                aria-pressed={!!settingsSection}
-                title="Settings"
-                onClick={() =>
-                  settingsSection
-                    ? closeSettings(true)
-                    : openSettings(account || privateLocalAccess ? 'account' : 'controls')
-                }
+                key={label}
+                aria-controls={label === 'World' ? undefined : 'world-panel'}
+                aria-current={section === label ? 'page' : undefined}
+                onClick={go}
               >
-                <Icon name="gear" />
-                <span className="rail-label">Settings</span>
+                <Icon name={icon} />
+                <span>{label}</span>
+                {label === 'Account' && accountSession.hasCharacterIssue && (
+                  <span role="status" aria-label="Character needs attention">
+                    !
+                  </span>
+                )}
               </button>
-              <button
-                className="account-button"
-                aria-label={accountLabel}
-                title={accountLabel}
-                onClick={openAccount}
-              >
-                <span className="account-avatar">
-                  <Icon name="user" />
-                </span>
-                <span className="rail-label">
-                  <strong>{account ? account.name : accountLabel}</strong>
-                  <small>
-                    {account ? 'Signed in' : privateLocalAccess ? 'Local session' : 'Guest'}
-                  </small>
-                </span>
-                {attention}
-              </button>
-            </div>
+            ))}
           </nav>
-        )}
+          {panel !== 'more' && !settingsSection && (
+            <button
+              className="account-shortcut"
+              aria-hidden={accountOpen || undefined}
+              tabIndex={accountOpen ? -1 : undefined}
+              aria-label={account || privateLocalAccess ? 'Your account' : 'Sign in'}
+              onClick={openAccount}
+            >
+              <Icon name="user" />
+            </button>
+          )}
+        </header>
         {panel && (
           <aside
             id="world-panel"
-            className={
-              'world-panel' + (wide ? ' wide' : '') + (phone && sheetFull ? ' sheet-full' : '')
-            }
+            className={'world-panel edition-page page-' + panel}
             aria-label="World panel"
             key={panel}
           >
-            {phone && (
-              <button
-                className="sheet-handle"
-                aria-label={sheetFull ? 'Shrink panel' : 'Expand panel'}
-                aria-expanded={sheetFull}
-                onPointerDown={(e) => {
-                  sheetDrag.current = e.clientY;
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                }}
-                onPointerUp={endSheetDrag}
-                onPointerCancel={() => {
-                  sheetDrag.current = null;
-                }}
-                onClick={(e) => {
-                  if (e.detail === 0) setSheetFull((full) => !full);
-                }}
-              >
-                <i />
-              </button>
-            )}
             {back && (
               <button
                 className="back-link panel-back"
@@ -685,25 +581,36 @@ export function App() {
                 {back.label}
               </button>
             )}
-            <div className="panel-header">
-              {panel === 'character' && <HubertPortrait />}
+            <div
+              className={
+                panel === 'character' && hasCharacter && characterTab === 'profile'
+                  ? 'panel-header profile-header'
+                  : 'panel-header'
+              }
+            >
               <div>
                 <h2 ref={panelHeading} tabIndex={-1}>
                   {titles[panel]}
                 </h2>
-                {panel === 'character' && character && (
-                  <p className="panel-subtitle">
-                    {residentPlace && (
-                      <>
-                        <button className="inline-link" onClick={() => openPlace(residentPlace.id)}>
-                          {residentPlace.name}
-                        </button>
-                        {' · '}
-                      </>
-                    )}
-                    {character.activity}
-                  </p>
-                )}
+                {panel === 'character' &&
+                  hasCharacter &&
+                  character &&
+                  characterTab !== 'profile' && (
+                    <p className="panel-subtitle">
+                      {residentPlace && (
+                        <>
+                          <button
+                            className="inline-link"
+                            onClick={() => openPlace(residentPlace.id)}
+                          >
+                            {residentPlace.name}
+                          </button>
+                          {' · '}
+                        </>
+                      )}
+                      {character.activity}
+                    </p>
+                  )}
               </div>
               <button
                 className="square-button subtle"
@@ -723,9 +630,15 @@ export function App() {
                   onSelect={(id) => pickCharacter(id, 'link')}
                 />
               )}
-              {panel === 'character' && character && (
+              {panel === 'character' && !hasCharacter && (
+                <p className="panel-intro">
+                  {viewedResident?.activity || 'No recent observations for this resident.'}
+                </p>
+              )}
+              {panel === 'character' && hasCharacter && character && (
                 <CharacterPanel
                   character={character}
+                  placeName={residentPlace?.name}
                   carrying={
                     snapshot?.world.residents.find((resident) => resident.id === character.id)
                       ?.carrying
@@ -837,15 +750,15 @@ export function App() {
                   pendingWishes={pendingWishes}
                   entries={entries}
                   onAccount={openAccount}
-                  onActivity={() => openPanel('activity')}
-                  onWishes={() => openPanel('wishes')}
+                  onActivity={() => openPanel('activity', 'link')}
+                  onWishes={() => openPanel('wishes', 'link')}
                   onSettings={openSettings}
                 />
               )}
             </div>
           </aside>
         )}
-        <div className="world-stage">
+        <div className="world-stage" inert={!!panel} aria-hidden={panel ? true : undefined}>
           <div className="game-scene">
             <Scene
               snapshot={snapshot}
@@ -866,32 +779,17 @@ export function App() {
             />
           </div>
           <div className="world-vignette" aria-hidden="true" />
-          {phone && (
-            <header className="phone-top">
-              <div className="world-clock glass" title={lifeLabel}>
-                <StatusBadge
-                  className={'connection ' + connection}
-                  tone={connection === 'live' ? 'live' : 'waiting'}
-                >
-                  <span className="sr-only">{lifeLabel}</span>
-                </StatusBadge>
-                <span className="world-day">
-                  {dayLabel}
-                  <small>{timeLabel}</small>
-                </span>
-                <span className="phone-place">{currentPlace?.name ?? 'The meadow paths'}</span>
-              </div>
-              <button
-                className="account-button glass"
-                aria-label={accountLabel}
-                onClick={openAccount}
-              >
-                <Icon name="user" />
-                {attention}
-              </button>
-            </header>
+          {character?.activity && !settingsSection && (
+            <div className="world-observation">
+              <button onClick={() => pickCharacter(character.id)}>{character.name}</button>
+              <p>{character.activity}</p>
+            </div>
           )}
           <div className="view-controls glass">
+            <button className="world-map-control" onClick={() => openPanel('map')}>
+              <Icon name="map" />
+              Map
+            </button>
             <div className="camera-switch" role="group" aria-label="Camera perspective">
               <button onClick={() => camera('overview')} aria-pressed={mode === 'overview'}>
                 <Icon name="map" />
@@ -1044,44 +942,6 @@ export function App() {
             />
           )}
         </div>
-        {phone && (
-          <nav className="world-tabbar" aria-label="World navigation">
-            <button
-              className={!panel && !settingsSection ? 'active' : ''}
-              aria-label="World"
-              aria-pressed={!panel && !settingsSection}
-              onClick={() => {
-                setPanel(null);
-                closeSettings();
-              }}
-            >
-              <Icon name="compass" />
-              <span className="rail-label">World</span>
-            </button>
-            {nav.filter((n) => phoneTabs.some((id) => id === n.id)).map(railButton)}
-            <button
-              className={
-                settingsSection || panel === 'more' || panel === 'activity' || panel === 'wishes'
-                  ? 'active'
-                  : ''
-              }
-              aria-label="More"
-              aria-pressed={Boolean(settingsSection) || panel === 'more'}
-              aria-controls={panel ? 'world-panel' : undefined}
-              onClick={() =>
-                panel === 'more' && !settingsSection ? setPanel(null) : openPanel('more')
-              }
-            >
-              <Icon name="more" />
-              <span className="rail-label">More</span>
-              {pendingWishes > 0 && (
-                <b className="nav-count" aria-label="Pending requests">
-                  {pendingWishes}
-                </b>
-              )}
-            </button>
-          </nav>
-        )}
         {visitor.status && (
           <p className="sr-only" role="status">
             {visitor.status}

@@ -157,7 +157,7 @@ export function SettingsScreen({
           <header className="settings-head">
             <button className="back-link settings-back" onClick={onBack}>
               <Icon name="chevron-left" />
-              More
+              Account
             </button>
             <h2 ref={heading} tabIndex={-1}>
               {headings[section].title}
